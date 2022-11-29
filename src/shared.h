@@ -140,15 +140,13 @@ internal type MakeMemberType(type_id TypeID, u32 Offset, u32 Size) {
     #include <renderer/opengl/mesh.h>
 #endif
 
-#define MODULES \
-    MODULE(Assembler, assembler) \
+#define MODULES
+#include <modules.h>
 
 #define MODULE(Name, name, ...) \
-    typedef struct name##_module name##_module;
+   typedef struct name##_module name##_module;
 MODULES
 #undef MODULE
-
-#include <assembler/module.h>
 
 #include <platform/platform.h>
 

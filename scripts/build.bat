@@ -19,7 +19,7 @@ set DLLLinkerSwitches=%DLLLinkerSwitches% /noimplib /noentry
 if exist *.pdb del *.pdb > NUL 2> NUL
 echo WAITING FOR PDB > lock.tmp
 
-cl %CompilerSwitches% %DLLCompilerSwitches% /D_ASSEMBLER_MODULE /I ..\src\ ..\src\assembler\main.c /link %LinkerSwitches% %DLLLinkerSwitches% /pdb:Assembler_%random%.pdb /out:Assembler.dll
+@REM cl %CompilerSwitches% %DLLCompilerSwitches% /D_ASSEMBLER_MODULE /I ..\src\ ..\src\assembler\main.c /link %LinkerSwitches% %DLLLinkerSwitches% /pdb:Assembler_%random%.pdb /out:Assembler.dll
 
 del lock.tmp
 cl %CompilerSwitches% /D_PLATFORM_MODULE /I ..\src ..\src\platform\win32\entry.c /link %LinkerSwitches% /entry:Platform_Entry /out:Platform.exe
