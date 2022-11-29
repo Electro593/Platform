@@ -1,7 +1,12 @@
-pushd ..
+@echo off
 
+attrib -s -h .git
 ren .git P.git
-ren .gitignore P.gitignore
+attrib +s +h P.git
 
-popd
+ren .gitignore P.gitignore
+ren M.gitignore .gitignore
+
+git init
+
 exit /b 0
