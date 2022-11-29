@@ -1,0 +1,9 @@
+build/
+.vscode/
+
+scripts/
+src/platform
+src/util
+
+src/shared.h
+src/x.h
