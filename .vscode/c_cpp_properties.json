@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/src/**"
+            ],
+            "defines": [
+                "_MSVC=1",
+                "_X64=1",
+                "_DEBUG=1",
+                "_GAME_MODULE",
+                "_PLATFORM_MODULE",
+                "_RENDERER_MODULE",
+                "INCLUDE_HEADER",
+                "INCLUDE_SOURCE"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}
