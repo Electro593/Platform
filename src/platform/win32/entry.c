@@ -15,6 +15,8 @@ global platform_state *Platform;
 #include <util/memory.c>
 #include <util/string.c>
 
+internal void Platform_Stub(void) { };
+
 internal void
 Platform_LoadWin32(void)
 {
@@ -409,36 +411,64 @@ Platform_CmpFileTime(datetime A,
     return EQUAL;
 }
 
-#define MODULE(Name, name, ...) \
-    internal void                                                                                      \
-    Platform_LoadModule_##Name(name##_module *Module)                                                         \
-    {                                                                                                  \
-        datetime LastWriteTime;                                                                        \
-        Platform_GetFileTime("build\\" #Name ".dll", 0, 0, &LastWriteTime);                     \
-        if(Module->DLL) {                                                                              \
-            if(Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS)                     \
-                return;                                                                                \
-                                                                                                       \
-            Name##_Unload();                                                              \
-            Win32_FreeLibrary(Module->DLL);                                                            \
-        }                                                                                              \
-        Module->LastWriteTime = LastWriteTime;                                                         \
-                                                                                                       \
-        Win32_CopyFileA("build\\" #Name ".dll", "build\\" #Name "_Locked.dll", FALSE);   \
-        Module->DLL = Win32_LoadLibraryA("build\\" #Name "_Locked.dll");                        \
-                                                                                                       \
-        Name##_Unload = (func_##Name##_Unload*)Win32_GetProcAddress(Module->DLL, #Name "_Unload");     \
-                                                                                                       \
-        Name##_Load = (func_##Name##_Load*)Win32_GetProcAddress(Module->DLL, #Name "_Load");           \
-        Name##_Load(Platform, Module);                                                                 \
-                                                                                                       \
-        if(Module->ShouldBeInitialized)                                                                \
-            Name##_Init = (func_##Name##_Init*)Win32_GetProcAddress(Module->DLL, #Name "_Init");       \
-        if(Module->ShouldBeUpdated)                                                                    \
-            Name##_Update = (func_##Name##_Update*)Win32_GetProcAddress(Module->DLL, #Name "_Update"); \
+internal void
+Platform_LoadModule(platform_module *Module)
+{
+    datetime LastWriteTime;
+    Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
+    if(Module->DLL) {
+        if(Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS)
+            return;
+        
+        Module->Unload(Platform);
+        Win32_FreeLibrary(Module->DLL);
     }
-MODULES
-#undef MODULE
+    Module->LastWriteTime = LastWriteTime;
+    
+    Module->DLL = Win32_LoadLibraryA(Module->FileName);
+    
+    Module->Load   = (func_Module_Load  *)Win32_GetProcAddress(Module->DLL, "Load");
+    Module->Init   = (func_Module_Init  *)Win32_GetProcAddress(Module->DLL, "Init");
+    Module->Update = (func_Module_Update*)Win32_GetProcAddress(Module->DLL, "Update");
+    Module->Unload = (func_Module_Unload*)Win32_GetProcAddress(Module->DLL, "Unload");
+    
+    if(!Module->Load)   Module->Load   = (vptr)Platform_Stub;
+    if(!Module->Init)   Module->Init   = (vptr)Platform_Stub;
+    if(!Module->Update) Module->Update = (vptr)Platform_Stub;
+    if(!Module->Unload) Module->Unload = (vptr)Platform_Stub;
+    
+    Module->Load(Platform, Module);
+}
+
+internal void
+Platform_LoadModules(void)
+{
+    Platform->ExecutionState = EXECUTION_ENDED;
+    Platform->ModuleCount = 0;
+    Platform->Modules = Stack_GetCursor();
+    platform_module *Module = Platform->Modules;
+    
+    win32_find_data_a DLLData;
+    win32_handle FindHandle = Win32_FindFirstFileA("build\\*.dll", &DLLData);
+    
+    if(FindHandle != INVALID_HANDLE_VALUE) {
+        do {
+            Mem_Set(Module, 0, sizeof(platform_module));
+            Module->FileName = DLLData.FileName;
+            
+            Platform_LoadModule(Module);
+            if((vptr)Module->Update != (vptr)Platform_Stub)
+                Platform->ExecutionState = EXECUTION_RUNNING;
+            
+            Module++;
+            Platform->ModuleCount++;
+        } while(Win32_FindNextFileA(FindHandle, &DLLData));
+        
+        Win32_FindClose(FindHandle);
+    }
+    
+    Stack_SetCursor(Module);
+}
 
 internal void
 Platform_HideCursor(win32_window Window)
@@ -604,75 +634,63 @@ Platform_Entry(void)
     u32 Size = 16*1024*1024;
     vptr Mem = Platform_AllocateMemory(Size);
     Stack = Platform->Stack = Stack_Init(Mem, Size);
+    Stack_Push();
     
-    b08 ShouldInitialize = FALSE;
-    #define MODULE(Name, name, ...)                            \
-        name##_module Name##Module = {0};                      \
-        Platform_LoadModule_##Name(&Name##Module);             \
-        ShouldInitialize |= Name##Module.ShouldBeInitialized;
-    MODULES
-    #undef MODULE
+    Platform_LoadModules();
     
-    if(!ShouldInitialize) Win32_ExitProcess(0);
+    win32_window Window;
+    win32_device_context DeviceContext;
+    if(Platform->WindowedApp) {
+        #ifdef _OPENGL
+        Platform_LoadWGL();
+        #endif
+        
+        win32_window_class_a WindowClass = {0};
+        WindowClass.Callback = Platform_WindowCallback;
+        WindowClass.Instance = Win32_GetModuleHandleA(NULL);
+        WindowClass.Icon = Win32_LoadIconA(NULL, IDI_APPLICATION);
+        WindowClass.Cursor = Win32_LoadCursorA(NULL, IDC_ARROW);
+        WindowClass.Background = (win32_brush)Win32_GetStockObject(BRUSH_BLACK);
+        WindowClass.ClassName = "VoxarcWindowClass";
+        Win32_RegisterClassA(&WindowClass);
+        
+        Window = Win32_CreateWindowExA(
+            0, WindowClass.ClassName, "Voxarc",
+            WS_OVERLAPPED|WS_SYSMENU|WS_CAPTION|WS_VISIBLE|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            NULL, NULL, WindowClass.Instance, NULL
+        );
+        Assert(Window);
+        
+        DeviceContext = Win32_GetDC(Window);
+        
+        #ifdef _OPENGL
+        opengl_funcs OpenGLFuncs = Platform_LoadOpenGL(DeviceContext);
+        #endif
+        
+        win32_raw_input_device RawInputDevice;
+        RawInputDevice.UsagePage = HID_USAGE_PAGE_GENERIC;
+        RawInputDevice.Usage     = HID_USAGE_GENERIC_MOUSE;
+        RawInputDevice.Flags     = 0;
+        RawInputDevice.Target    = Window;
+        b32 Res = Win32_RegisterRawInputDevices(&RawInputDevice, 1, sizeof(win32_raw_input_device));
+        Assert(Res == TRUE);
+    }
     
-    #ifdef _OPENGL
-    Platform_LoadWGL();
-    #endif
-    
-    #ifdef _GRAPHICS
-    win32_window_class_a WindowClass = {0};
-    WindowClass.Callback = Platform_WindowCallback;
-    WindowClass.Instance = Win32_GetModuleHandleA(NULL);
-    WindowClass.Icon = Win32_LoadIconA(NULL, IDI_APPLICATION);
-    WindowClass.Cursor = Win32_LoadCursorA(NULL, IDC_ARROW);
-    WindowClass.Background = (win32_brush)Win32_GetStockObject(BRUSH_BLACK);
-    WindowClass.ClassName = "VoxarcWindowClass";
-    Win32_RegisterClassA(&WindowClass);
-    
-    win32_window Window = Win32_CreateWindowExA(
-        0, WindowClass.ClassName, "Voxarc",
-        WS_OVERLAPPED|WS_SYSMENU|WS_CAPTION|WS_VISIBLE|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        NULL, NULL, WindowClass.Instance, NULL
-    );
-    Assert(Window);
-    
-    win32_device_context DeviceContext = Win32_GetDC(Window);
-    #endif
-    
-    #ifdef _OPENGL
-    opengl_funcs OpenGLFuncs = Platform_LoadOpenGL(DeviceContext);
-    #endif
-    
-    win32_raw_input_device RawInputDevice;
-    RawInputDevice.UsagePage = HID_USAGE_PAGE_GENERIC;
-    RawInputDevice.Usage     = HID_USAGE_GENERIC_MOUSE;
-    RawInputDevice.Flags     = 0;
-    RawInputDevice.Target    = Window;
-    b32 Res = Win32_RegisterRawInputDevices(&RawInputDevice, 1, sizeof(win32_raw_input_device));
-    Assert(Res == TRUE);
-    
-    b08 ShouldUpdate = FALSE;
-    #define MODULE(Name, ...)                         \
-        if(Name##Module.ShouldBeInitialized)          \
-            Name##_Init();                            \
-        ShouldUpdate |= Name##Module.ShouldBeUpdated;
-    MODULES
-    #undef MODULE
+    for(u32 I = 0; I < Platform->ModuleCount; I++)
+        Platform->Modules[I].Init(Platform);
     
     s64 CountsPerSecond;
     Win32_QueryPerformanceFrequency(&CountsPerSecond);
     
     s64 StartTime;
     Win32_QueryPerformanceCounter(&StartTime);
-    Platform->ExecutionState = ShouldUpdate ? EXECUTION_RUNNING : EXECUTION_ENDED;
+    
     while(Platform->ExecutionState == EXECUTION_RUNNING) {
         // Will reload the modules if necessary
-        #define MODULE(Name, ...) \
-            Platform_LoadModule_##Name(&Name##Module);
-        MODULES
-        #undef MODULE
+        for(u32 I = 0; I < Platform->ModuleCount; I++)
+            Platform_LoadModule(Platform->Modules + I);
         
         win32_message Message;
         while(Win32_PeekMessageA(&Message, Window, 0, 0, PM_REMOVE)) {
@@ -685,33 +703,30 @@ Platform_Entry(void)
             Win32_DispatchMessageA(&Message);
         }
         
-        #ifdef _GRAPHICS
-        if(Platform->CursorIsDisabled) {
-            // HACK: Not sure why, but the cursor keeps reappearing
-            // otherwise
-            Win32_SetCursor(NULL);
+        if(Platform->WindowedApp) {
+            if(Platform->CursorIsDisabled) {
+                // HACK: Not sure why, but the cursor keeps reappearing
+                // otherwise
+                Win32_SetCursor(NULL);
+            }
+            
+            if(Platform->FocusState == FOCUS_CLIENT && !Platform->CursorIsDisabled && Platform->Buttons[Button_Left] == PRESSED) {
+                Platform_HideCursor(Window);
+                Platform->Updates |= CURSOR_DISABLED;
+                Platform->CursorIsDisabled = TRUE;
+            }
+            if(Platform->CursorIsDisabled && Platform->Keys[ScanCode_Escape] == PRESSED) {
+                Platform_ShowCursor(Window);
+                Platform->CursorIsDisabled = FALSE;
+            }
         }
         
-        if(Platform->FocusState == FOCUS_CLIENT && !Platform->CursorIsDisabled && Platform->Buttons[Button_Left] == PRESSED) {
-            Platform_HideCursor(Window);
-            Platform->Updates |= CURSOR_DISABLED;
-            Platform->CursorIsDisabled = TRUE;
-        }
-        if(Platform->CursorIsDisabled && Platform->Keys[ScanCode_Escape] == PRESSED) {
-            Platform_ShowCursor(Window);
-            Platform->CursorIsDisabled = FALSE;
-        }
-        #endif
+        for(u32 I = 0; I < Platform->ModuleCount; I++)
+            Platform->Modules[I].Update(Platform);
         
-        #define MODULE(Name, ...)            \
-            if(Name##Module.ShouldBeUpdated) \
-                Name##_Update();
-        MODULES
-        #undef MODULE
-        
-        #ifdef _GRAPHICS
-        Win32_SwapBuffers(DeviceContext);
-        #endif
+        if(Platform->WindowedApp) {
+            Win32_SwapBuffers(DeviceContext);
+        }
         
         s64 EndTime;
         Win32_QueryPerformanceCounter(&EndTime);
@@ -722,12 +737,11 @@ Platform_Entry(void)
         Platform->FPS = CountsPerSecond / (r64)ElapsedTime;
     }
     
-    #define MODULE(Name, ...) \
-        Name##_Unload();
-    MODULES
-    #undef MODULE
+    for(u32 I = 0; I < Platform->ModuleCount; I++)
+        Platform->Modules[I].Unload(Platform);
     
     // Heap_Dump(Renderer.Heap);
     
+    Stack_Pop();
     Win32_ExitProcess(0);
 }

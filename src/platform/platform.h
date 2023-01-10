@@ -18,6 +18,13 @@ typedef struct datetime {
     u16 Millisecond;
 } datetime;
 
+typedef struct platform_module platform_module;
+
+typedef void func_Module_Load  (platform_state *State, platform_module *Module);
+typedef void func_Module_Init  (platform_state *State);
+typedef void func_Module_Update(platform_state *State);
+typedef void func_Module_Unload(platform_state *State);
+
 #if defined(_WIN32)
     #include <platform/win32/win32.h>
     #include <platform/win32/entry.h>
@@ -269,10 +276,16 @@ struct platform_exports {
 #endif
 
 struct platform_state {
-    b08 CursorIsDisabled;
+    b08 CursorIsDisabled : 1;
+    b08 WindowedApp : 1;
+    b08 _Unused : 6;
+    
     v2s32 RestoreCursorPos;
     v2s32 CursorPos;
     stack *Stack;
+    
+    u32 ModuleCount;
+    platform_module *Modules;
     
     v2u32 WindowSize; 
     platform_exports Functions;

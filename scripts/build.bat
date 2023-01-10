@@ -9,7 +9,7 @@ if not exist build mkdir build
 pushd build
 
 set CompilerSwitches=%CompilerSwitches% /nologo /std:c17 /fp:fast /EHa- /FAs /FC /GF /GR- /GS- /Gs0x100000 /J /WX /Wall /X
-set CompilerSwitches=%CompilerSwitches% /wd4702 /wd4101 /wd5045 /wd4820 /wd4701 /wd4213 /wd4242 /wd4244 /wd4201 /wd4061 /wd4062 /wd4127 /wd4214 /wd4189 /wd4100 /wd4094 /wd4200 /wd4018 /wd4710 /wd4706 /wd4703
+set CompilerSwitches=%CompilerSwitches% /wd4702 /wd4101 /wd5045 /wd4820 /wd4701 /wd4213 /wd4242 /wd4244 /wd4201 /wd4061 /wd4062 /wd4127 /wd4214 /wd4189 /wd4100 /wd4094 /wd4200 /wd4018 /wd4710 /wd4706 /wd4703 /wd4152
 set CompilerSwitches=%CompilerSwitches% /D_MSVC /D_X64 /D_DEBUG
 set CompilerSwitches=%CompilerSwitches% /Od /Z7 /Oi
 set LinkerSwitches=%LinkerSwitches% /wx /incremental:no /opt:ref /opt:icf /nodefaultlib /subsystem:console /stack:0x100000,0x100000 /machine:x64
@@ -20,7 +20,7 @@ if exist *.pdb del *.pdb > nul 2> nul
 
 for /F "delims=" %%A in ('dir /b ..\src') do call :build_module %%A
 
-cl %CompilerSwitches% /D_PLATFORM_MODULE /I ..\src /I ..\Platform\src ..\Platform\src\platform\win32\entry.c /link %LinkerSwitches% /entry:Platform_Entry /out:Platform.exe
+cl %CompilerSwitches% /D "_PLATFORM_MODULE" /I ..\src /I ..\Platform\src ..\Platform\src\platform\win32\entry.c /link %LinkerSwitches% /entry:Platform_Entry /out:Platform.exe
 
 if exist *.obj del *.obj
 if exist *.exp del *.exp
@@ -29,9 +29,8 @@ exit /b 0
 
 :build_module
    set CapitalName=
-   for /F "skip=2 tokens=1* delims=\" %%I in ('tree "\%1"') do if not defined CapitalName set "CapitalName=%%J"
+   for /F "skip=2 delims=" %%I in ('tree "\%1"') do if not defined CapitalName set "CapitalName=%%~I"
    set "CapitalName=%CapitalName:~3%"
-   echo %CapitalName%
    
-   cl %CompilerSwitches% %DLLCompilerSwitches% /D_%CapitalName%_MODULE /I ..\src\ ..\src\%1\main.c /link %LinkerSwitches% %DLLLinkerSwitches% /pdb:%1_%random%.pdb /out:%1.dll
+   cl %CompilerSwitches% %DLLCompilerSwitches% /D "_MODULE_NAMEC=%1" /D "_%CapitalName%_MODULE" /I ..\src\ /I ..\Platform\src ..\src\%1\main.c /link %LinkerSwitches% %DLLLinkerSwitches% /pdb:%1_%random%.pdb /out:%1.dll
 exit /b 0

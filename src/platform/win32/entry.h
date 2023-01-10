@@ -13,14 +13,15 @@
 #define SHADERS_DIR  "assets\\shaders\\"
 #define TEXTURES_DIR "assets\\textures\\"
 
-#define MODULE(Name, name, ...)    \
-    struct name##_module {         \
-        datetime LastWriteTime;    \
-        win32_module DLL;          \
-        b08 ShouldBeInitialized;   \
-        b08 ShouldBeUpdated;       \
-        b08 RequiresGraphics;      \
-        name##_state State;        \
-    };
-MODULES
-#undef MODULE
+struct platform_module {
+    c08 *FileName;
+    win32_module DLL;
+    datetime LastWriteTime;
+    
+    func_Module_Load   *Load;
+    func_Module_Init   *Init;
+    func_Module_Update *Update;
+    func_Module_Unload *Unload;
+    
+    vptr ModuleData;
+};

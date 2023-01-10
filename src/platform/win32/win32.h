@@ -1110,6 +1110,19 @@ typedef struct win32_raw_input {
     };
 } win32_raw_input;
 
+typedef struct win32_find_data_a {
+    u32 FileAttributes;
+    win32_file_time CreationTime;
+    win32_file_time LastAccessTime;
+    win32_file_time LastWriteTime;
+    u32 FileSizeHigh;
+    u32 FileSizeLow;
+    u32 Reserved0;
+    u32 Reserved1;
+    c08 FileName[260];
+    c08 AlternateFileName[14];
+} win32_find_data_a;
+
 
 
 
@@ -1137,6 +1150,9 @@ typedef struct win32_raw_input {
     IMPORT(Kernel32, u32,                  GetLastError,              void) \
     IMPORT(Kernel32, win32_handle,         GetStdHandle,              u32 ID) \
     IMPORT(Kernel32, b32,                  FileTimeToSystemTime,      win32_file_time *FileTime, win32_system_time *SystemTime) \
+    IMPORT(Kernel32, b08,                  FindClose,                 win32_handle FindHandle) \
+    IMPORT(Kernel32, win32_handle,         FindFirstFileA,            c08 *FileName, win32_find_data_a *FindData) \
+    IMPORT(Kernel32, b08,                  FindNextFileA,             win32_handle FindHandle, win32_find_data_a *FindData) \
     IMPORT(Kernel32, b32,                  GetFileTime,               win32_handle File, win32_file_time *CreationTime, win32_file_time *LastAccessTime, win32_file_time *LastWriteTime) \
     IMPORT(User32,   b32,                  GetMessageA,               win32_message *Msg, win32_window Window, u32 MessageFilterMin, u32 MessageFilterMax) \
     IMPORT(Kernel32, win32_module,         GetModuleHandleA,          c08 *ModuleName) \
