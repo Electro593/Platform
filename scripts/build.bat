@@ -1,4 +1,4 @@
-@echo off
+@echo off & setlocal
 if exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" (
    call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 ) else (
@@ -16,15 +16,22 @@ set LinkerSwitches=%LinkerSwitches% /wx /incremental:no /opt:ref /opt:icf /nodef
 set DLLCompilerSwitches=%DLLCompilerSwitches% /LD
 set DLLLinkerSwitches=%DLLLinkerSwitches% /noimplib /noentry
 
-if exist *.pdb del *.pdb > NUL 2> NUL
-echo WAITING FOR PDB > lock.tmp
+if exist *.pdb del *.pdb > nul 2> nul
 
-@REM cl %CompilerSwitches% %DLLCompilerSwitches% /D_ASSEMBLER_MODULE /I ..\src\ ..\src\assembler\main.c /link %LinkerSwitches% %DLLLinkerSwitches% /pdb:Assembler_%random%.pdb /out:Assembler.dll
+for /F "delims=" %%A in ('dir /b ..\src') do call :build_module %%A
 
-del lock.tmp
-cl %CompilerSwitches% /D_PLATFORM_MODULE /I ..\src ..\src\platform\win32\entry.c /link %LinkerSwitches% /entry:Platform_Entry /out:Platform.exe
+cl %CompilerSwitches% /D_PLATFORM_MODULE /I ..\src /I ..\Platform\src ..\Platform\src\platform\win32\entry.c /link %LinkerSwitches% /entry:Platform_Entry /out:Platform.exe
 
 if exist *.obj del *.obj
 if exist *.exp del *.exp
 popd
+exit /b 0
+
+:build_module
+   set CapitalName=
+   for /F "skip=2 tokens=1* delims=\" %%I in ('tree "\%1"') do if not defined CapitalName set "CapitalName=%%J"
+   set "CapitalName=%CapitalName:~3%"
+   echo %CapitalName%
+   
+   cl %CompilerSwitches% %DLLCompilerSwitches% /D_%CapitalName%_MODULE /I ..\src\ ..\src\%1\main.c /link %LinkerSwitches% %DLLLinkerSwitches% /pdb:%1_%random%.pdb /out:%1.dll
 exit /b 0
