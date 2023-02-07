@@ -541,6 +541,7 @@ Platform_LoadModule(c08 *Name)
          Platform->Modules = NewModules;
       }
       
+      //TODO: Use the binary search to get an index
       platform_module *Next = Platform->Modules;
       u32 I;
       for(I = 0; I < Platform->ModuleCount; I++) {
