@@ -7,6 +7,37 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
+#define CLStringL(Literal) CLString(Literal, sizeof(Literal)-1)
+#define CFStringL(Literal, ...) FString(CLStringL(Literal), __VA_ARGS__)
+
+typedef struct string {
+    u64 Length;
+    u64 Capacity;
+    
+    b08 Resizable;
+    
+    c08 *Text;
+} string;
+
+#define STRING_FUNCS \
+    EXPORT(string, U64_ToString, u64 N, u08 Radix) \
+    EXPORT(string, U32_ToString, u32 N, u08 Radix) \
+    EXPORT(string, U16_ToString, u16 N, u08 Radix) \
+    EXPORT(string, U08_ToString, u08 N, u08 Radix) \
+    \
+    EXPORT(string, CString,      c08 *Chars) \
+    EXPORT(string, LString,      u64 Length) \
+    EXPORT(string, CNString,     c08 *Chars) \
+    EXPORT(string, CLString,     c08 *Chars, u64 Length) \
+    EXPORT(string, FString,      string Format, ...) \
+    EXPORT(string, CFString,     c08 *Format, ...) \
+
+#endif
+
+#ifdef INCLUDE_SOURCE
+
 internal string
 CLString(c08 *Chars,
          u64 Length)
@@ -949,3 +980,5 @@ R32_ToString(r32 N, u32 DigitsAfterDecimal)
     
     return Str;
 }
+
+#endif

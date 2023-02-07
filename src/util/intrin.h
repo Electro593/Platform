@@ -7,6 +7,8 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
 #if defined(_X64) && defined(_MSVC)
 
 typedef union __declspec(intrin_type) __declspec(align(16)) __m128 {
@@ -44,5 +46,7 @@ void __va_start(va_list *Args, ...);
     ((sizeof(Type) > 8 || (sizeof(Type) & (sizeof(Type) - 1)) != 0) /*Pointer or not a power of 2*/ \
         ? **(Type**)((Args += 8) - 8) \
         :  *(Type* )((Args += 8) - 8))
+
+#endif
 
 #endif

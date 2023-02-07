@@ -129,17 +129,15 @@ internal type MakeMemberType(type_id TypeID, u32 Offset, u32 Size) {
     return (type){TYPEID_MEMBER | ((Offset<<TYPEID_EXTRA_EXP)&TYPEID_MOD_MASK) | TypeID, Size};
 }
 
-#include <util/intrin.h>
-#include <util/scalar.h>
-#include <util/vector.h>
-#include <util/memory.h>
-#include <util/string.h>
-#include <util/set.h>
-#ifdef _OPENGL
-    #include <renderer/opengl/opengl.h>
-    #include <renderer/opengl/mesh.h>
-#endif
-
-#include <platform/platform.h>
+// #define INCLUDE_HEADER
+// #include <util/main.c>
+// #undef INCLUDE_HEADER
+// 
+// #ifdef _OPENGL
+//     #include <renderer/opengl/opengl.h>
+//     #include <renderer/opengl/mesh.h>
+// #endif
+// 
+// #include <platform/platform.h>
 
 s32 _fltused;

@@ -53,6 +53,8 @@
 #define RI_MOUSE_BUTTON_5_DOWN      0x0100
 #define RI_MOUSE_BUTTON_5_UP        0x0200
 
+#define CP_UTF8 65001
+
 #define HTCLIENT 1
 
 #define MA_ACTIVATE         1
@@ -66,6 +68,7 @@
 
 typedef u16 win32_atom;
 typedef vptr win32_handle;
+typedef win32_handle win32_hlocal;
 typedef win32_handle win32_brush;
 typedef win32_handle win32_cursor;
 typedef win32_handle win32_device_context;
@@ -1132,6 +1135,7 @@ typedef struct win32_find_data_a {
     IMPORT(User32,   b32,                  ClientToScreen,            win32_window Window, v2s32 *Point) \
     IMPORT(User32,   b32,                  ClipCursor,                win32_rect *ClipRect) \
     IMPORT(Kernel32, b08,                  CloseHandle,               win32_handle Object) \
+    IMPORT(Shell32,  c16**,                CommandLineToArgvW,        c16 *CommandLineString, s32 *ArgCount) \
     IMPORT(Kernel32, s32,                  CompareFileTime,           win32_file_time *FileTime1, win32_file_time *FileTime2) \
     IMPORT(Kernel32, b32,                  CopyFileA,                 c08 *ExistingFileName, c08 *NewFileName, b32 FailIfExists) \
     IMPORT(Kernel32, win32_handle,         CreateFileA,               c08 *FileName, u32 DesiredAccess, u32 ShareMode, win32_security_attributes *SecurityAttributes, u32 CreationDisposition, u32 FlagsAndAttributes, win32_handle TemplateFile) \
@@ -1143,7 +1147,7 @@ typedef struct win32_find_data_a {
     IMPORT(Kernel32, void,                 ExitProcess,               u32 ExitCode) \
     IMPORT(Kernel32, b32,                  FreeLibrary,               win32_module Library) \
     IMPORT(User32,   b32,                  GetClientRect,             win32_window Window, win32_rect *RectOut) \
-    IMPORT(Kernel32, c08*,                 GetCommandLineA,           void) \
+    IMPORT(Kernel32, c16*,                 GetCommandLineW,           void) \
     IMPORT(User32,   b32,                  GetCursorPos,              v2s32 *Point) \
     IMPORT(User32,   win32_device_context, GetDC,                     win32_window Window) \
     IMPORT(Kernel32, b08,                  GetFileSizeEx,             win32_handle File, win32_large_integer *FileSize) \
@@ -1163,6 +1167,7 @@ typedef struct win32_find_data_a {
     IMPORT(User32,   win32_cursor,         LoadCursorA,               win32_instance Instance, c08 *CursorName) \
     IMPORT(User32,   win32_icon,           LoadIconA,                 win32_instance Instance, c08 *IconName) \
     IMPORT(Kernel32, win32_module,         LoadLibraryA,              c08 *Name) \
+    IMPORT(Kernel32, win32_hlocal,         LocalFree,                 win32_hlocal Mem) \
     IMPORT(Kernel32, void,                 OutputDebugStringA,        c08 *String) \
     IMPORT(User32,   b32,                  PeekMessageA,              win32_message *Message, win32_window Window, u32 MessageFilterMin, u32 MessageFilterMax, u32 RemoveMessage) \
     IMPORT(Kernel32, b32,                  QueryPerformanceCounter,   s64 *Time) \
@@ -1182,6 +1187,7 @@ typedef struct win32_find_data_a {
     IMPORT(Kernel32, vptr,                 VirtualAlloc,              vptr Address, u64 Size, u32 AllocationType, u32 Protect) \
     IMPORT(Kernel32, b08,                  VirtualFree,               vptr Address, u64 Size, u32 FreeType) \
     IMPORT(User32,   b08,                  WaitMessage,               void) \
+    IMPORT(Kernel32, s32,                  WideCharToMultiByte,       u32 CodePage, u32 Flags, c16 *Src, s32 SrcLen, c08 *Dest, s32 DestLen, c08 *DefaultChar, b32 *UsedDefaultChar) \
     IMPORT(Kernel32, b32,                  WriteConsoleA,             win32_handle Handle, vptr Buffer, u32 Count, u32 *NumWritten, vptr Reserved) \
     IMPORT(Kernel32, b08,                  WriteFile,                 win32_handle File, vptr Buffer, u32 NumberOfBytesToWrite, u32 *NumberOfBytesWritten, win32_overlapped *Overlapped) \
 
