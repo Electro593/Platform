@@ -517,6 +517,7 @@ Platform_GetModule(c08 *Name)
    return NULL;
 }
 
+
 internal platform_module *
 Platform_LoadModule(c08 *Name)
 {
