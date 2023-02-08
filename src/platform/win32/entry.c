@@ -13,12 +13,14 @@
 #include <util/main.c>
 #undef INCLUDE_HEADER
 
-#ifdef _OPENGL
-   #include <renderer/opengl/opengl.h>
-   #include <renderer/opengl/mesh.h>
-#endif
-
 #include <platform/platform.h>
+
+#ifdef _OPENGL
+#define INCLUDE_HEADER
+   #include <renderer_opengl/opengl.h>
+   // #include <renderer/opengl/mesh.h>
+#undef INCLUDE_HEADER
+#endif
 
 global platform_state *Platform;
 
@@ -765,7 +767,7 @@ Platform_Entry(void)
    Stack_Init(Mem, Size);
    Stack_Push();
    
-   Platform_LoadModule("main");
+   Platform_LoadModule("base");
    
    win32_window Window;
    win32_device_context DeviceContext;

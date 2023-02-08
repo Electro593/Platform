@@ -45,7 +45,7 @@
          b08 __unused__;
       } _F = {
          #define EXPORT(R, N, ...) \
-            N;
+            N,
          #define X FUNCS
          #include <x.h>
          0

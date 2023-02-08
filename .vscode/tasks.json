@@ -4,14 +4,14 @@
         {
             "label": "Build Program (MS)",
             "type": "shell",
-            "command": "./Platform/scripts/build",
+            "command": ".\\Platform\\scripts\\build.bat",
             "group": "build",
             "problemMatcher": "$msCompile"
         },
         {
             "type": "shell",
             "label": "Run Program (MS)",
-            "command": "./build/Platform.exe",
+            "command": ".\\build\\Platform.exe",
             "group": "test"
         },
     ]

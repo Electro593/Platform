@@ -7,6 +7,8 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+// #define _OPENGL
+
 #if defined(_MSVC)
     #define API_ENTRY  __stdcall
     #define API_IMPORT __declspec(dllimport)
@@ -32,6 +34,7 @@
 #define SWAP(A, B, Type) do { Type _A = A; A = B; B = _A; } while(0)
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
+#define FLAG_SET(Value, Flag) (((Value) & (Flag)) == (Flag))
 
 #define _STRINGIFY(X) #X
 #define STRINGIFY(X) _STRINGIFY(X)
@@ -128,16 +131,5 @@ TYPES
 internal type MakeMemberType(type_id TypeID, u32 Offset, u32 Size) {
     return (type){TYPEID_MEMBER | ((Offset<<TYPEID_EXTRA_EXP)&TYPEID_MOD_MASK) | TypeID, Size};
 }
-
-// #define INCLUDE_HEADER
-// #include <util/main.c>
-// #undef INCLUDE_HEADER
-// 
-// #ifdef _OPENGL
-//     #include <renderer/opengl/opengl.h>
-//     #include <renderer/opengl/mesh.h>
-// #endif
-// 
-// #include <platform/platform.h>
 
 s32 _fltused;

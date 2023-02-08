@@ -13,7 +13,7 @@ set CompilerSwitches=%CompilerSwitches% /nologo /std:c17 /fp:fast /EHa- /FC /GF 
 set CompilerSwitches=%CompilerSwitches% /wd4702 /wd4101 /wd5045 /wd4820 /wd4701 /wd4213 /wd4242 /wd4244 /wd4201 /wd4061 /wd4062 /wd4127 /wd4214 /wd4189 /wd4100 /wd4094 /wd4200 /wd4018 /wd4710 /wd4706 /wd4703 /wd4152 /wd4010
 set CompilerSwitches=%CompilerSwitches% /D_MSVC /D_X64 /D_DEBUG
 set CompilerSwitches=%CompilerSwitches% /Od /Z7 /Oi
-set LinkerSwitches=%LinkerSwitches% /wx /incremental:no /opt:ref /opt:icf /nodefaultlib /subsystem:console /stack:0x100000,0x100000 /machine:x64
+set LinkerSwitches=%LinkerSwitches% /wx /incremental:no /opt:ref /opt:icf /nodefaultlib /subsystem:windows /stack:0x100000,0x100000 /machine:x64
 set DLLCompilerSwitches=%DLLCompilerSwitches% /LD
 set DLLLinkerSwitches=%DLLLinkerSwitches% /noimplib /noentry
 

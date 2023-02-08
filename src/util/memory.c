@@ -34,22 +34,32 @@ typedef struct stack {
 } stack;
 
 #define MEMORY_FUNCS \
-   EXPORT(vptr,         Mem_Set,         vptr Dest, s32 Data, u64 Size) \
-   EXPORT(vptr,         Mem_Cpy,         vptr Dest, vptr Src, u64 Size) \
-   EXPORT(u64,          Mem_BytesUntil,  u08 *Data, u08 Byte) \
+   EXPORT(vptr,         Mem_Set,            vptr Dest, s32 Data, u64 Size) \
+   EXPORT(vptr,         Mem_Cpy,            vptr Dest, vptr Src, u64 Size) \
+   EXPORT(s32,          Mem_Cmp,            vptr A, vptr B, u64 Size) \
+   EXPORT(u64,          Mem_BytesUntil,     u08 *Data, u08 Byte) \
    \
-   EXPORT(heap*,        Heap_Init,       vptr MemBase, u64 Size) \
-   EXPORT(void,         Heap_Defragment, heap *Heap) \
-   EXPORT(heap_handle*, Heap_Allocate,   heap *Heap, u64 Size) \
-   EXPORT(vptr,         Heap_AllocateA,  heap *Heap, u64 Size) \
-   EXPORT(void,         Heap_Free,       heap_handle *Handle) \
+   EXPORT(heap*,        Heap_GetHeap,       heap_handle *Handle) \
+   EXPORT(heap_handle*, Heap_GetHandleA,    vptr Data) \
+   EXPORT(heap*,        Heap_Init,          vptr MemBase, u64 Size) \
+   EXPORT(void,         Heap_Defragment,    heap *Heap) \
+   EXPORT(void,         Heap_AllocateBlock, heap *Heap, heap_handle *Handle, u32 Size) \
+   EXPORT(void,         Heap_FreeBlock,     heap *Heap, heap_handle *Handle) \
+   EXPORT(heap_handle*, _Heap_Allocate,     heap *Heap, u32 Size, b08 Anchored) \
+   EXPORT(heap_handle*, Heap_Allocate,      heap *Heap, u64 Size) \
+   EXPORT(vptr,         Heap_AllocateA,     heap *Heap, u64 Size) \
+   EXPORT(void,         Heap_Resize,        heap_handle *Handle, u32 NewSize) \
+   EXPORT(void,         Heap_ResizeA,       vptr *Data, u32 NewSize) \
+   EXPORT(void,         Heap_Free,          heap_handle *Handle) \
+   EXPORT(void,         Heap_FreeA,         vptr Data) \
+   EXPORT(void,         Heap_Dump,          heap *Heap) \
    \
-   EXPORT(stack*,       Stack_Init,      vptr Mem, u64 Size) \
-   EXPORT(vptr,         Stack_GetCursor, void) \
-   EXPORT(void,         Stack_SetCursor, vptr Cursor) \
-   EXPORT(void,         Stack_Push,      void) \
-   EXPORT(vptr,         Stack_Allocate,  u64 Size) \
-   EXPORT(void,         Stack_Pop,       void) \
+   EXPORT(stack*,       Stack_Init,         vptr Mem, u64 Size) \
+   EXPORT(void,         Stack_Push,         void) \
+   EXPORT(vptr,         Stack_GetCursor,    void) \
+   EXPORT(void,         Stack_SetCursor,    vptr Cursor) \
+   EXPORT(vptr,         Stack_Allocate,     u64 Size) \
+   EXPORT(void,         Stack_Pop,          void) \
 
 #endif
 
@@ -58,9 +68,7 @@ typedef struct stack {
 #ifdef INCLUDE_SOURCE
 
 internal vptr
-Mem_Set(vptr Dest,
-        s32 Data,
-        u64 Size)
+Mem_Set(vptr Dest, s32 Data, u64 Size)
 {
    u08 *Dest08 = (u08*)Dest;
    u08 Data08 = (u08)Data;
@@ -71,9 +79,7 @@ Mem_Set(vptr Dest,
 }
 
 internal vptr
-Mem_Cpy(vptr Dest,
-        vptr Src,
-        u64 Size)
+Mem_Cpy(vptr Dest, vptr Src, u64 Size)
 {
    if(Size == 0)   return Dest;
    if(Dest == Src) return Dest;
@@ -98,9 +104,7 @@ Mem_Cpy(vptr Dest,
 }
 
 internal s32
-Mem_Cmp(vptr A,
-        vptr B,
-        u32 Size)
+Mem_Cmp(vptr A, vptr B, u64 Size)
 {
    while(Size && *(((u08*)A)++) == *(((u08*)B)++)) Size--;
    if(!Size) return EQUAL;
@@ -109,8 +113,7 @@ Mem_Cmp(vptr A,
 }
 
 internal u64
-Mem_BytesUntil(u08 *Data,
-               u08 Byte)
+Mem_BytesUntil(u08 *Data, u08 Byte)
 {
    u64 Length = 0;
    while(*Data++ != Byte) Length++;
@@ -134,8 +137,7 @@ Heap_GetHandleA(vptr Data)
 }
 
 internal heap *
-Heap_Init(vptr MemBase,
-          u64 Size)
+Heap_Init(vptr MemBase, u64 Size)
 {
    Assert(MemBase);
    Assert(Size > sizeof(heap_handle));
@@ -189,9 +191,7 @@ Heap_Defragment(heap *Heap)
 }
 
 internal void
-Heap_AllocateBlock(heap *Heap,
-                   heap_handle *Handle,
-                   u32 Size)
+Heap_AllocateBlock(heap *Heap, heap_handle *Handle, u32 Size)
 {
    heap_handle *Handles = (vptr)Heap;
    heap_handle *PrevBlock = Handles + Handles[0].PrevBlock;
@@ -212,8 +212,7 @@ Heap_AllocateBlock(heap *Heap,
 }
 
 internal void
-Heap_FreeBlock(heap *Heap,
-               heap_handle *Handle)
+Heap_FreeBlock(heap *Heap, heap_handle *Handle)
 {
    heap_handle *Handles = (vptr)Heap;
    Handles[Handle->PrevBlock].Offset += Handle->Size + Handle->Offset;
@@ -222,9 +221,7 @@ Heap_FreeBlock(heap *Heap,
 }
 
 internal heap_handle *
-_Heap_Allocate(heap *Heap,
-               u32 Size,
-               b08 Anchored)
+_Heap_Allocate(heap *Heap, u32 Size, b08 Anchored)
 {
    Assert(Heap);
    
@@ -285,8 +282,7 @@ Heap_AllocateA(heap *Heap, u64 Size)
 }
 
 internal void
-Heap_Resize(heap_handle *Handle,
-            u32 NewSize)
+Heap_Resize(heap_handle *Handle, u32 NewSize)
 {
    Assert(Handle);
    
@@ -304,8 +300,7 @@ Heap_Resize(heap_handle *Handle,
 }
 
 internal void
-Heap_ResizeA(vptr *Data,
-             u32 NewSize)
+Heap_ResizeA(vptr *Data, u32 NewSize)
 {
    heap_handle *Handle = Heap_GetHandleA(*Data);
    Heap_Resize(Handle, NewSize + sizeof(heap_handle*));

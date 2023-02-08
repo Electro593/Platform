@@ -20,20 +20,34 @@
    #include "main.c"
    #undef INCLUDE_SOURCE
 #else
-   #ifdef INCLUDE_HEADER
-      #include <util/intrin.h>
-      #include <util/scalar.c>
-      #include <util/vector.c>
-      #include <util/memory.c>
-      #include <util/string.c>
-      #include <util/set.c>
+   #ifdef INCLUDE_SOURCE
+      global struct module_state {
+         stack *Stack;
+      } _G;
       
+      global util_funcs _F;
+   #endif
+   
+   #include <util/intrin.h>
+   #include <util/scalar.c>
+   #include <util/vector.c>
+   #include <util/memory.c>
+   #include <util/string.c>
+   #include <util/set.c>
+   #include <util/msdf.c>
+   #include <util/font.c>
+   #include <util/file.c>
+   
+   #ifdef INCLUDE_HEADER
       #define UTIL_FUNCS \
          SCALAR_FUNCS \
          VECTOR_FUNCS \
          MEMORY_FUNCS \
          STRING_FUNCS \
          SET_FUNCS \
+         MSDF_FUNCS \
+         FONT_FUNCS \
+         FILE_FUNCS \
 
       typedef struct util_funcs {
          #define EXPORT(R, N, ...) \
@@ -56,19 +70,6 @@
    #endif
    
    #ifdef INCLUDE_SOURCE
-      global struct module_state {
-         stack *Stack;
-      } _G;
-      
-      global util_funcs _F;
-      
-      #include <util/intrin.h>
-      #include <util/scalar.c>
-      #include <util/vector.c>
-      #include <util/memory.c>
-      #include <util/string.c>
-      #include <util/set.c>
-      
       external API_EXPORT void
       Load(platform_state *Platform, platform_module *Module)
       {

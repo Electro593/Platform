@@ -39,11 +39,6 @@
 #define U32_MAX 0xFFFFFFFF
 #define U64_MAX 0xFFFFFFFFFFFFFFFF
 
-internal r32 R32_Floor(r32 N);
-internal r32 R32_Ceil(r32 N);
-internal r32 R32_sqrt(r32 N);
-internal r32 R32_Abs(r32 N);
-
 global r32 SinLookupTable[] = {
     0.00000000000, 0.01745240644, 0.03489949670, 0.05233595626, 0.06975647374,
     0.08715574277, 0.1045284632,  0.1218693435,  0.1391731010,  0.1564344651,
@@ -119,6 +114,41 @@ typedef struct random {
 } random;
 
 #define SCALAR_FUNCS \
+    EXPORT(r32, R32_Floor, r32 N) \
+    EXPORT(r32, R32_Ceil, r32 N) \
+    EXPORT(r32, R32_Abs, r32 N) \
+    EXPORT(r32, R32_Sign, r32 N) \
+    EXPORT(r32, R32_Round, r32 N) \
+    EXPORT(s32, R32_Exponent, r32 N) \
+    EXPORT(r32, R32_Max, r32 A, r32 B) \
+    EXPORT(r32, R32_Min, r32 A, r32 B) \
+    EXPORT(r32, R32_Median, r32 A, r32 B, r32 C) \
+    EXPORT(r32, R32_Lerp, r32 S, r32 E, r32 t) \
+    EXPORT(r32, R32_Remainder, r32 Dividend, r32 Divisor) \
+    EXPORT(b08, R32_Within, r32 Num, r32 Start, r32 End, r32 Epsilon) \
+    EXPORT(r32, R32_Clamp, r32 N, r32 S, r32 E) \
+    EXPORT(r32, R32_sqrt, r32 N) \
+    EXPORT(r32, R32_cbrt, r32 N) \
+    EXPORT(r32, R32_sin, r32 R) \
+    EXPORT(r32, R32_cos, r32 R) \
+    EXPORT(r32, R32_tan, r32 R) \
+    EXPORT(r32, R32_arccos, r32 N) \
+    EXPORT(u32, R32_SolveLinear, r32 C1, r32 C0, r32 *Roots) \
+    EXPORT(u32, R32_SolveQuadratic, r32 C2, r32 C1, r32 C0, r32 *Roots) \
+    EXPORT(u32, R32_SolveCubic, r32 C3, r32 C2, r32 C1, r32 C0, r32 *Roots) \
+    EXPORT(s32, S32_Sign, s32 N) \
+    EXPORT(s32, S32_Abs, s32 N) \
+    EXPORT(s32, S32_Clamp, s32 N, s32 S, s32 E) \
+    EXPORT(u08, U08_Max, u08 A, u08 B) \
+    EXPORT(u08, U08_Min, u08 A, u08 B) \
+    EXPORT(u08, U08_Median, u08 A, u08 B, u08 C) \
+    EXPORT(u08, U08_Lerp, u08 A, u08 B, r32 T) \
+    EXPORT(u32, U32_Min, u32 A, u32 B) \
+    EXPORT(random, Rand_Init, u32 Seed) \
+    EXPORT(u32, Rand_Next, random *Random) \
+    EXPORT(s32, S32_RandRange, random *Random, s32 Min, s32 Max) \
+    EXPORT(r32, R32_Random, random *Random) \
+    EXPORT(r32, R32_RandRange, random *Random, r32 Min, r32 Max) \
 
 #endif
 
@@ -477,8 +507,10 @@ Rand_Init(u32 Seed)
 
 //TODO: Rework this
 
+#define RAND_MAX 0xFFFF
+
 internal u32
-Rand_Int(random *Random)
+Rand_Next(random *Random)
 {
     s32 FeedBack;
     u32 LFSR32 = Random->LFSR32;
@@ -505,11 +537,25 @@ Rand_Int(random *Random)
 
 //NOTE: Max is exclusive, so Min <= Result < Max
 internal s32
-Rand_IntRange(random *Random, s32 Min, s32 Max)
+S32_RandRange(random *Random, s32 Min, s32 Max)
 {
-    Assert(Min != Max);
-    s32 Result = Rand_Int(Random) % (Max - Min) + Min;
-    return Result;
+    Assert(Min < Max);
+    return Rand_Next(Random) % (Max - Min) + Min;
+}
+
+internal r32
+R32_Random(random *Random)
+{
+    u32 Value = Rand_Next(Random);
+    return (r32)Value / RAND_MAX;
+}
+
+//NOTE: Max is exclusive, so Min <= Result < Max
+internal r32
+R32_RandRange(random *Random, r32 Min, r32 Max)
+{
+    Assert(Min < Max);
+    return R32_Random(Random)*(Max - Min) + Min;
 }
 
 #endif

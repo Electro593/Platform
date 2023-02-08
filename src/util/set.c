@@ -46,6 +46,14 @@ typedef struct hashmap {
 } hashmap;
 
 #define SET_FUNCS \
+   EXPORT(vptr,    BinarySearchArray,    vptr *Array, u32 Start, u32 End, vptr Target, type Type, cmp_func *Func, vptr Param, u32 *IndexOut) \
+   EXPORT(u64,     HashMap_GetNextPrime, u64 Size) \
+   EXPORT(hashmap, HashMap_Init,         heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCount, r32 ResizeRate, r32 ResizeThresh, hash_func *HashFunc, cmp_func *CmpFunc, vptr CmpParam) \
+   EXPORT(vptr,    HashMap_Get,          hashmap *Map, vptr Key) \
+   EXPORT(vptr,    HashMap_Remove,       hashmap *Map, vptr Key) \
+   EXPORT(s64,     HashMap_AddWithHash,  hashmap *Map, u64 Hash, vptr Key, vptr Value) \
+   EXPORT(s64,     HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
+   EXPORT(void,    HashMap_Grow,         hashmap *Map) \
 
 #endif
 

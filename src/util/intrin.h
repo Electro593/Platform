@@ -18,6 +18,7 @@ typedef union __declspec(intrin_type) __declspec(align(16)) __m128 {
 
 void __debugbreak(void);
 void __nop(void);
+u64  __rdtsc(void);
 u64  __readgsqword(u32 Offset);
 u64 __popcnt64(u64 Value);
 u08 _BitScanForward64(u32 *Index, u64 Mask);
@@ -30,6 +31,7 @@ r128 _mm_set_ps(r32, r32, r32, r32);
 #define Intrin_DebugBreak()                             RETURNS(void) __debugbreak();
 #define Intrin_Nop()                                    RETURNS(void) __nop();
 #define Intrin_Popcount64(u64_Value)                    RETURNS(u64)  __popcnt64(u64_Value);
+#define Asm_ReadTimeStampCounter()                      RETURNS(u64)  __rdtsc();
 #define Intrin_BitScanForward64(u32_p_Index, u64_Value) RETURNS(b08)  _BitScanForward64(u32_p_Index, u64_Value);
 #define Intrin_BitScanReverse(u32_p_Index, u32_Value)   RETURNS(b08)  _BitScanReverse(u32_p_Index, u32_Value);
 #define Intrin_BitScanReverse64(u32_p_Index, u64_Value) RETURNS(b08)  _BitScanReverse(u32_p_Index, u64_Value);

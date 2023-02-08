@@ -153,12 +153,13 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    DEFINE_VECTOR_VOLUME(u32) \
    \
    DEFINE_VECTOR_CROSS(2, r32) \
+   DEFINE_VECTOR_CROSS(3, r32) \
    DEFINE_VECTOR_CROSS(2, s16) \
    \
    DEFINE_VECTOR_CAST(2, r32, r32) \
    DEFINE_VECTOR_CAST(2, s16, r32) \
-   DEFINE_VECTOR_CAST(3, r32, s32) \
    DEFINE_VECTOR_CAST(3, r32, r32) \
+   DEFINE_VECTOR_CAST(3, r32, s32) \
    DEFINE_VECTOR_CAST(3, r32, u32) \
    DEFINE_VECTOR_CAST(3, s32, r32) \
    DEFINE_VECTOR_CAST(3, u32, r32) \
@@ -180,6 +181,15 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    DEFINE_VECTOR_NORM(2, r32) \
    DEFINE_VECTOR_NORM(2, s16) \
    DEFINE_VECTOR_NORM(3, r32) \
+   \
+   EXPORT(m4x4r32, M4x4r32_Translation,  r32 X, r32 Y, r32 Z) \
+   EXPORT(m4x4r32, M4x4r32_Scaling,      r32 X, r32 Y, r32 Z) \
+   EXPORT(m4x4r32, M4x4r32_Rotation,     r32 Theta, v3r32 Axis) \
+   EXPORT(m4x4r32, M4x4r32_Transpose,    m4x4r32 M) \
+   EXPORT(v4r32,   M4x4r32_MulMV,        m4x4r32 M, v4r32 V) \
+   EXPORT(m4x4r32, M4x4r32_Mul,          m4x4r32 A, m4x4r32 B) \
+   EXPORT(b08,     RayPlaneIntersection, v3r32 PlanePoint, v3r32 PlaneNormal, v3r32 RayPoint, v3r32 RayDir, r32 *T) \
+   EXPORT(b08,     RayRectIntersectionA, v3r32 RectStart, v3r32 RectEnd, v3r32 RectNormal, v3r32 RayPoint, v3r32 RayDir, r32 *T, v3r32 *Intersection) \
 
 #endif
 
@@ -390,6 +400,8 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
       return V##Count##r32_DivS(CV, L);                       \
    }
 
+#define EXPORT(...)
+
 VECTOR_FUNCS
 
 #undef DEFINE_VECTOR_INIT
@@ -411,11 +423,10 @@ VECTOR_FUNCS
 #undef DEFINE_VECTOR_EQUAL
 #undef DEFINE_VECTOR_LEN
 #undef DEFINE_VECTOR_NORM
+#undef EXPORT
 
 internal m4x4r32
-M4x4r32_Translation(r32 X,
-                    r32 Y,
-                    r32 Z)
+M4x4r32_Translation(r32 X, r32 Y, r32 Z)
 {
    m4x4r32 Result = M4x4r32_I;
    Result.V[0].E[3] = X;
@@ -425,9 +436,7 @@ M4x4r32_Translation(r32 X,
 }
 
 internal m4x4r32
-M4x4r32_Scaling(r32 X,
-                r32 Y,
-                r32 Z)
+M4x4r32_Scaling(r32 X, r32 Y, r32 Z)
 {
    m4x4r32 Result = M4x4r32_I;
    Result.V[0].E[0] = X;
@@ -437,8 +446,7 @@ M4x4r32_Scaling(r32 X,
 }
 
 internal m4x4r32
-M4x4r32_Rotation(r32 Theta,
-                 v3r32 Axis)
+M4x4r32_Rotation(r32 Theta, v3r32 Axis)
 {
    r32 X,Y,Z, C,S;
    
@@ -467,8 +475,7 @@ M4x4r32_Transpose(m4x4r32 M)
 }
 
 internal v4r32
-M4x4r32_MulMV(m4x4r32 M,
-              v4r32 V)
+M4x4r32_MulMV(m4x4r32 M, v4r32 V)
 {
    v4r32 Result;
    Result.X = V4r32_Dot(M.V[0], V);
@@ -479,8 +486,7 @@ M4x4r32_MulMV(m4x4r32 M,
 }
 
 internal m4x4r32
-M4x4r32_Mul(m4x4r32 A,
-            m4x4r32 B)
+M4x4r32_Mul(m4x4r32 A, m4x4r32 B)
 {
    B = M4x4r32_Transpose(B);
    
