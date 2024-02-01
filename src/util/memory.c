@@ -55,6 +55,8 @@ typedef struct stack {
    EXPORT(void,         Heap_Dump,          heap *Heap) \
    \
    EXPORT(stack*,       Stack_Init,         vptr Mem, u64 Size) \
+   EXPORT(stack,        Stack_Get,          void) \
+   EXPORT(void,         Stack_Set,          stack Stack) \
    EXPORT(void,         Stack_Push,         void) \
    EXPORT(vptr,         Stack_GetCursor,    void) \
    EXPORT(void,         Stack_SetCursor,    vptr Cursor) \
@@ -524,6 +526,9 @@ Stack_SetCursor(vptr Cursor)
    Assert((u08*)Cursor <= (u08*)(_G.Stack+1)+_G.Stack->Size);
    _G.Stack->Cursor = Cursor;
 }
+
+internal stack Stack_Get(void) { return *_G.Stack; }
+internal void Stack_Set(stack Stack) { *_G.Stack = Stack; }
 
 internal vptr
 Stack_Allocate(u64 Size)

@@ -22,7 +22,9 @@
 #undef INCLUDE_HEADER
 #endif
 
+global win32_window PrimaryWindow;
 global platform_state *Platform;
+global win32_device_context DeviceContext;
 
 internal void Platform_Stub(void) { };
 
@@ -171,9 +173,13 @@ Platform_LoadWGL(void)
    Win32_DestroyWindow(DummyWindow);
 }
 
-internal opengl_funcs
-Platform_LoadOpenGL(win32_device_context DeviceContext)
+opengl_funcs OpenGLFuncs;
+
+internal opengl_funcs *
+Platform_LoadOpenGL(void)
 {
+   if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
+   
    s32 PixelFormatAttribs[] = {
       WGL_DRAW_TO_WINDOW_ARB, TRUE,
       WGL_SUPPORT_OPENGL_ARB, TRUE,
@@ -215,23 +221,60 @@ Platform_LoadOpenGL(win32_device_context DeviceContext)
    win32_handle OpenGL32 = Win32_GetModuleHandleA("opengl32.dll");
    Assert(OpenGL32);
    
-   opengl_funcs Funcs;
-   
    #define IMPORT(ReturnType, Name, ...) \
-      Funcs.OpenGL_##Name = (func_OpenGL_##Name*)Win32_GetProcAddress(OpenGL32, "gl" #Name); \
-      Assert(Funcs.OpenGL_##Name);
+      OpenGLFuncs.OpenGL_##Name = (func_OpenGL_##Name*)Win32_GetProcAddress(OpenGL32, "gl" #Name); \
+      Assert(OpenGLFuncs.OpenGL_##Name);
    #define X OPENGL_FUNCS_TYPE_1
    #include <x.h>
    
    #define IMPORT(ReturnType, Name, ...) \
-      Funcs.OpenGL_##Name = (func_OpenGL_##Name*)WGL_GetProcAddress("gl" #Name); \
-      Assert(Funcs.OpenGL_##Name);
+      OpenGLFuncs.OpenGL_##Name = (func_OpenGL_##Name*)WGL_GetProcAddress("gl" #Name); \
+      Assert(OpenGLFuncs.OpenGL_##Name);
    #define X OPENGL_FUNCS_TYPE_2
    #include <x.h>
    
-   return Funcs;
+   OpenGLFuncs.Initialized = TRUE;
+   
+   return &OpenGLFuncs;
 }
 #endif
+
+internal void
+Platform_CreateWindow(void) {
+   #ifdef _OPENGL
+   Platform_LoadWGL();
+   #endif
+   
+   win32_window_class_a WindowClass = {0};
+   WindowClass.Callback = Platform_WindowCallback;
+   WindowClass.Instance = Win32_GetModuleHandleA(NULL);
+   WindowClass.Icon = Win32_LoadIconA(NULL, IDI_APPLICATION);
+   WindowClass.Cursor = Win32_LoadCursorA(NULL, IDC_ARROW);
+   WindowClass.Background = (win32_brush)Win32_GetStockObject(BRUSH_BLACK);
+   WindowClass.ClassName = "VoxarcWindowClass";
+   Win32_RegisterClassA(&WindowClass);
+   
+   PrimaryWindow = Win32_CreateWindowExA(
+      0, WindowClass.ClassName, "Voxarc",
+      WS_OVERLAPPED|WS_SYSMENU|WS_CAPTION|WS_VISIBLE|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX,
+      CW_USEDEFAULT, CW_USEDEFAULT,
+      CW_USEDEFAULT, CW_USEDEFAULT,
+      NULL, NULL, WindowClass.Instance, NULL
+   );
+   Assert(PrimaryWindow);
+   
+   DeviceContext = Win32_GetDC(PrimaryWindow);
+   
+   win32_raw_input_device RawInputDevice;
+   RawInputDevice.UsagePage = HID_USAGE_PAGE_GENERIC;
+   RawInputDevice.Usage     = HID_USAGE_GENERIC_MOUSE;
+   RawInputDevice.Flags     = 0;
+   RawInputDevice.Target    = PrimaryWindow;
+   b32 Res = Win32_RegisterRawInputDevices(&RawInputDevice, 1, sizeof(win32_raw_input_device));
+   Assert(Res == TRUE);
+   
+   Platform->WindowedApp = TRUE;
+}
 
 internal void
 Platform_Assert(c08 *File,
@@ -519,11 +562,42 @@ Platform_GetModule(c08 *Name)
    return NULL;
 }
 
-
 internal platform_module *
 Platform_LoadModule(c08 *Name)
 {
    u32 NameLen = _Mem_BytesUntil(Name, 0);
+   platform_module *Module = Platform_GetModule(Name);
+   if (Module) return Module;
+   
+   u32 DesiredSize = (Platform->ModuleCount+1) * sizeof(platform_module);
+   
+   if(Platform->ModulesSize < DesiredSize) {
+      vptr NewModules = Platform_AllocateMemory(DesiredSize*2);
+      _Mem_Cpy(NewModules, (vptr)Platform->Modules, Platform->ModulesSize);
+      Platform_FreeMemory(Platform->Modules);
+      Platform->ModulesSize = DesiredSize*2;
+      Platform->Modules = NewModules;
+   }
+   
+   //TODO: Use the binary search to get an index
+   platform_module *Next = Platform->Modules;
+   u32 I;
+   for(I = 0; I < Platform->ModuleCount; I++) {
+      s08 Cmp = _Mem_Cmp(Next->Name, Name, NameLen+1);
+      if(Cmp == LESS) {
+         Next++;
+         continue;
+      }
+      Assert(Cmp == GREATER, "Encountered a module that wasn't returned by Platform_GetModule");
+      break;
+   }
+   
+   u32 Delta = (Platform->ModuleCount-I)*sizeof(platform_module);
+   _Mem_CpyRev((vptr)(Next+1), (vptr)Next, Delta);
+   
+   Module = Next;
+   Platform->ModuleCount++;
+   
    c08 *Path = Platform_AllocateMemory(NameLen+5);
    _Mem_Cpy(Path, Name, NameLen);
    Path[NameLen+0] = '.';
@@ -531,35 +605,6 @@ Platform_LoadModule(c08 *Name)
    Path[NameLen+2] = 'l';
    Path[NameLen+3] = 'l';
    Path[NameLen+4] = '\0';
-   
-   platform_module *Module = Platform_GetModule(Name);
-   if(!Module) {
-      u32 DesiredSize = (Platform->ModuleCount+1) * sizeof(platform_module);
-      
-      if(Platform->ModulesSize < DesiredSize) {
-         vptr NewModules = Platform_AllocateMemory(DesiredSize*2);
-         _Mem_Cpy(NewModules, (vptr)Platform->Modules, Platform->ModulesSize);
-         Platform_FreeMemory(Platform->Modules);
-         Platform->ModulesSize = DesiredSize*2;
-         Platform->Modules = NewModules;
-      }
-      
-      //TODO: Use the binary search to get an index
-      platform_module *Next = Platform->Modules;
-      u32 I;
-      for(I = 0; I < Platform->ModuleCount; I++) {
-         s08 Cmp = _Mem_Cmp(Next->Name, Name, NameLen+1);
-         if(Cmp == LESS) continue;
-         Assert(Cmp == GREATER, "Encountered a module that wasn't returned by Platform_GetModule");
-         break;
-      }
-      
-      u32 Delta = (Platform->ModuleCount-I)*sizeof(platform_module);
-      _Mem_CpyRev((vptr)(Next+1), (vptr)Next, Delta);
-      
-      Module = Next;
-      Platform->ModuleCount++;
-   }
    
    _Mem_Set((vptr)Module, 0, sizeof(platform_module));
    Module->Name = Name;
@@ -769,50 +814,10 @@ Platform_Entry(void)
    
    Platform_LoadModule("base");
    
-   win32_window Window;
-   win32_device_context DeviceContext;
-   if(Platform->WindowedApp) {
-      #ifdef _OPENGL
-      Platform_LoadWGL();
-      #endif
-      
-      win32_window_class_a WindowClass = {0};
-      WindowClass.Callback = Platform_WindowCallback;
-      WindowClass.Instance = Win32_GetModuleHandleA(NULL);
-      WindowClass.Icon = Win32_LoadIconA(NULL, IDI_APPLICATION);
-      WindowClass.Cursor = Win32_LoadCursorA(NULL, IDC_ARROW);
-      WindowClass.Background = (win32_brush)Win32_GetStockObject(BRUSH_BLACK);
-      WindowClass.ClassName = "VoxarcWindowClass";
-      Win32_RegisterClassA(&WindowClass);
-      
-      Window = Win32_CreateWindowExA(
-         0, WindowClass.ClassName, "Voxarc",
-         WS_OVERLAPPED|WS_SYSMENU|WS_CAPTION|WS_VISIBLE|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX,
-         CW_USEDEFAULT, CW_USEDEFAULT,
-         CW_USEDEFAULT, CW_USEDEFAULT,
-         NULL, NULL, WindowClass.Instance, NULL
-      );
-      Assert(Window);
-      
-      DeviceContext = Win32_GetDC(Window);
-      
-      #ifdef _OPENGL
-      opengl_funcs OpenGLFuncs = Platform_LoadOpenGL(DeviceContext);
-      #endif
-      
-      win32_raw_input_device RawInputDevice;
-      RawInputDevice.UsagePage = HID_USAGE_PAGE_GENERIC;
-      RawInputDevice.Usage     = HID_USAGE_GENERIC_MOUSE;
-      RawInputDevice.Flags     = 0;
-      RawInputDevice.Target    = Window;
-      b32 Res = Win32_RegisterRawInputDevices(&RawInputDevice, 1, sizeof(win32_raw_input_device));
-      Assert(Res == TRUE);
-   }
-   
    for(u32 I = 0; I < Platform->ModuleCount; I++) {
-      vptr Cursor = Stack_GetCursor();
+      stack Stack = Stack_Get();
       Platform->Modules[I].Init(Platform);
-      Stack_SetCursor(Cursor);
+      Stack_Set(Stack);
    }
    
    s64 CountsPerSecond;
@@ -832,7 +837,7 @@ Platform_Entry(void)
       }
       
       win32_message Message;
-      while(Win32_PeekMessageA(&Message, Window, 0, 0, PM_REMOVE)) {
+      while(Win32_PeekMessageA(&Message, PrimaryWindow, 0, 0, PM_REMOVE)) {
          if(Message.Message == WM_QUIT) {
             Platform->ExecutionState = EXECUTION_ENDED;
             break;
@@ -850,20 +855,20 @@ Platform_Entry(void)
          }
          
          if(Platform->FocusState == FOCUS_CLIENT && !Platform->CursorIsDisabled && Platform->Buttons[Button_Left] == PRESSED) {
-            Platform_HideCursor(Window);
+            Platform_HideCursor(PrimaryWindow);
             Platform->Updates |= CURSOR_DISABLED;
             Platform->CursorIsDisabled = TRUE;
          }
          if(Platform->CursorIsDisabled && Platform->Keys[ScanCode_Escape] == PRESSED) {
-            Platform_ShowCursor(Window);
+            Platform_ShowCursor(PrimaryWindow);
             Platform->CursorIsDisabled = FALSE;
          }
       }
       
       for(u32 I = 0; I < Platform->ModuleCount; I++) {
-         vptr Cursor = Stack_GetCursor();
+         stack Stack = Stack_Get();
          Platform->Modules[I].Update(Platform);
-         Stack_SetCursor(Cursor);
+         Stack_Set(Stack);
       }
       
       if(Platform->WindowedApp)

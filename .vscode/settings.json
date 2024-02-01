@@ -44,9 +44,11 @@
         "world.h": "c",
         "*.rh": "c"
     },
-    "C_Cpp.intelliSenseEngineFallback": "Disabled",
+    "C_Cpp.intelliSenseEngineFallback": "disabled",
     "C_Cpp.dimInactiveRegions": true,
-    "C_Cpp.errorSquiggles": "Disabled",
+    "C_Cpp.errorSquiggles": "disabled",
     "todo-tree.tree.showCountsInTree": false,
-    "todo-tree.tree.showBadges": false
+    "todo-tree.tree.showBadges": false,
+    "editor.tabSize": 3,
+    "editor.insertSpaces": true
 }
