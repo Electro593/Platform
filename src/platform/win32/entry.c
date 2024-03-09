@@ -25,6 +25,7 @@
 global win32_window PrimaryWindow;
 global platform_state *Platform;
 global win32_device_context DeviceContext;
+global s64 CounterFrequency = 0;
 
 internal void Platform_Stub(void) { };
 
@@ -496,6 +497,14 @@ Platform_GetFileTime(c08 *FileName,
    }
 }
 
+internal r64
+Platform_GetTime(void)
+{
+	s64 Counts = 0;
+	Win32_QueryPerformanceCounter(&Counts);
+	return (r64) Counts / CounterFrequency;
+}
+
 internal s08
 Platform_CmpFileTime(datetime A,
                      datetime B)
@@ -768,6 +777,31 @@ Platform_WindowCallback(win32_window Window,
    return Win32_DefWindowProcA(Window, Message, WParam, LParam);
 }
 
+internal void
+Platform_ParseCommandLine(void)
+{
+   c16 *CmdLine = Win32_GetCommandLineW();
+   c16 **Args = Win32_CommandLineToArgvW(CmdLine, &Platform->ArgCount);
+   u32 *Sizes = Platform_AllocateMemory(Platform->ArgCount * sizeof(u32));
+   u32 Size = Platform->ArgCount * sizeof(string*);
+   for(u32 I = 0; I < Platform->ArgCount; I++) {
+      Sizes[I] = Win32_WideCharToMultiByte(CP_UTF8, 0, Args[I], -1, 0, 0, 0, 0);
+      Size += Sizes[I];
+   }
+   Platform->Args = Platform_AllocateMemory(Size);
+   c08 *Strings = (c08*)(Platform->Args+Platform->ArgCount);
+   for(u32 I = 0; I < Platform->ArgCount; I++) {
+      Platform->Args[I] = Strings;
+      u32 S = Win32_WideCharToMultiByte(
+         CP_UTF8, 0, Args[I], -1, Platform->Args[I], Sizes[I], 0, 0);
+      Assert(S == Sizes[I], "Buffer overflow while converting command line arguments");
+      Strings += Sizes[I];
+   }
+   
+   Win32_LocalFree(Args);
+   Platform_FreeMemory(Sizes);
+}
+
 external void
 Platform_Entry(void)
 {
@@ -780,31 +814,8 @@ Platform_Entry(void)
    #include <x.h>
    
    Platform_LoadWin32();
-   
-   // Command line processing
-   {
-      c16 *CmdLine = Win32_GetCommandLineW();
-      c16 **Args = Win32_CommandLineToArgvW(CmdLine, &Platform->ArgCount);
-      u32 *Sizes = Platform_AllocateMemory(Platform->ArgCount * sizeof(u32));
-      u32 Size = Platform->ArgCount * sizeof(string*);
-      for(u32 I = 0; I < Platform->ArgCount; I++) {
-         Sizes[I] = Win32_WideCharToMultiByte(CP_UTF8, 0, Args[I], -1, 0, 0, 0, 0);
-         Size += Sizes[I];
-      }
-      Platform->Args = Platform_AllocateMemory(Size);
-      c08 *Strings = (c08*)(Platform->Args+Platform->ArgCount);
-      for(u32 I = 0; I < Platform->ArgCount; I++) {
-         Platform->Args[I] = Strings;
-         u32 S = Win32_WideCharToMultiByte(
-            CP_UTF8, 0, Args[I], -1, Platform->Args[I], Sizes[I], 0, 0);
-         Assert(S == Sizes[I], "Buffer overflow while converting command line arguments");
-         Strings += Sizes[I];
-      }
-      
-      Win32_LocalFree(Args);
-      Platform_FreeMemory(Sizes);
-   }
-   
+	Platform_ParseCommandLine();
+	Win32_QueryPerformanceFrequency(&CounterFrequency);
    Platform_LoadUtilFuncs(Platform_LoadModule("util"));
    
    u32 Size = 16*1024*1024;

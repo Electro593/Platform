@@ -50,5 +50,5 @@
     "todo-tree.tree.showCountsInTree": false,
     "todo-tree.tree.showBadges": false,
     "editor.tabSize": 3,
-    "editor.insertSpaces": true
+    "editor.insertSpaces": false
 }

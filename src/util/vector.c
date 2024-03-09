@@ -130,6 +130,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    \
    DEFINE_VECTOR_MUL(2, r32) \
    DEFINE_VECTOR_MUL(3, r32) \
+   DEFINE_VECTOR_MUL(3, s32) \
    \
    DEFINE_VECTOR_MULS(2, r32) \
    DEFINE_VECTOR_MULS(3, r32) \
@@ -150,7 +151,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    DEFINE_VECTOR_DOT(3, r32) \
    DEFINE_VECTOR_DOT(4, r32) \
    \
-   DEFINE_VECTOR_VOLUME(u32) \
+   DEFINE_VECTOR_VOLUME(s32, S32) \
    \
    DEFINE_VECTOR_CROSS(2, r32) \
    DEFINE_VECTOR_CROSS(3, r32) \
@@ -307,11 +308,11 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
       return Result; \
    }
 
-#define DEFINE_VECTOR_VOLUME(Type) \
+#define DEFINE_VECTOR_VOLUME(Type, TypeName) \
    internal Type \
    V3##Type##_Volume(v3##Type V) \
    { \
-      return V.X*V.Y*V.Z; \
+      return TypeName##_Abs(V.X) * TypeName##_Abs(V.Y) * TypeName##_Abs(V.Z); \
    }
 
 #define DEFINE_VECTOR_DOT(Count, Type) \
@@ -562,7 +563,7 @@ RayRectIntersectionA(v3r32 RectStart, v3r32 RectEnd, v3r32 RectNormal,
 #define DEFINE_VECTOR_MULS(N, T)      EXPORT(v##N##T,   V##N##T##_MulS,        v##N##T, T)
 #define DEFINE_VECTOR_DIV(N, T)       EXPORT(v##N##T,   V##N##T##_Div,         v##N##T, v##N##T)
 #define DEFINE_VECTOR_DIVS(N, T)      EXPORT(v##N##T,   V##N##T##_DivS,        v##N##T, T)
-#define DEFINE_VECTOR_VOLUME(T)       EXPORT(T,         V##3##T##_Volume,      v##3##T)
+#define DEFINE_VECTOR_VOLUME(T, TN)   EXPORT(T,         V##3##T##_Volume,      v##3##T)
 #define DEFINE_VECTOR_DOT(N, T)       EXPORT(T,         V##N##T##_Dot,         v##N##T, v##N##T)
 #define DEFINE_VECTOR_CROSS_2(T)      EXPORT(T,         V##2##T##_Cross,       v##2##T, v##2##T)
 #define DEFINE_VECTOR_CROSS_3(T)      EXPORT(v##3##T,   V##3##T##_Cross,       v##3##T, v##3##T)

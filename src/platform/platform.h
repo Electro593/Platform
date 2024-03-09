@@ -242,9 +242,9 @@ typedef enum button {
 } button;
 
 typedef enum key_state {
-   RELEASED,
-   PRESSED,
-   HELD,
+   RELEASED = 0,
+   PRESSED  = 1,
+   HELD     = 2,
 } key_state;
 
 typedef enum file_mode {
@@ -276,6 +276,7 @@ typedef enum file_mode {
    EXPORT(void,             Platform, FreeMemory,     vptr Base) \
    EXPORT(u64,              Platform, GetFileLength,  file_handle FileHandle) \
    EXPORT(void,             Platform, GetFileTime,    c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
+	EXPORT(r64,              Platform, GetTime,        void) \
    INTERN(platform_module*, Platform, GetModule,      c08 *Name) \
    EXPORT(platform_module*, Platform, LoadModule,     c08 *Name) \
    EXPORT(s08,              Platform, CmpFileTime,    datetime A, datetime B) \
