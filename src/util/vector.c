@@ -172,8 +172,15 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    \
    DEFINE_VECTOR_LERP(4, u08, U08) \
    \
+   DEFINE_VECTOR_EQUAL(2, u32) \
    DEFINE_VECTOR_EQUAL(3, r32) \
    DEFINE_VECTOR_EQUAL(3, s32) \
+   DEFINE_VECTOR_EQUAL(4, u08) \
+   DEFINE_VECTOR_EQUAL(4, u32) \
+   \
+   DEFINE_VECTOR_ISZERO(2, u32) \
+   DEFINE_VECTOR_ISZERO(4, u08) \
+   DEFINE_VECTOR_ISZERO(4, u32) \
    \
    DEFINE_VECTOR_LEN(2, r32) \
    DEFINE_VECTOR_LEN(2, s16) \
@@ -215,6 +222,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
 #undef DEFINE_VECTOR_CLAMP
 #undef DEFINE_VECTOR_LERP
 #undef DEFINE_VECTOR_EQUAL
+#undef DEFINE_VECTOR_ISZERO
 #undef DEFINE_VECTOR_LEN
 #undef DEFINE_VECTOR_NORM
 
@@ -258,11 +266,11 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
       return Result; \
    }
 
-#define DEFINE_VECTOR_SUBS(Count, Type)                                              \
-   internal v##Count##Type                                                          \
-   V##Count##Type##_SubS(v##Count##Type V,                                          \
-                         Type S)                                                    \
-   {                                                                                \
+#define DEFINE_VECTOR_SUBS(Count, Type)                                            \
+   internal v##Count##Type                                                         \
+   V##Count##Type##_SubS(v##Count##Type V,                                         \
+                         Type S)                                                   \
+   {                                                                               \
       v##Count##Type Result;                                                       \
       MAC_FOR(-, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
       return Result;                                                               \
@@ -356,24 +364,24 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
       return Result; \
    }
 
-#define DEFINE_VECTOR_CLAMP(Count, Type, TypeName) \
-   internal v##Count##Type \
-   V##Count##Type##_Clamp(v##Count##Type V, Type S, Type E) \
-   { \
-      v##Count##Type Result = V; \
+#define DEFINE_VECTOR_CLAMP(Count, Type, TypeName)                                        \
+   internal v##Count##Type                                                                \
+   V##Count##Type##_Clamp(v##Count##Type V, Type S, Type E)                               \
+   {                                                                                      \
+      v##Count##Type Result = V;                                                          \
       MAC_FOR(TypeName, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_CLAMP, MAC_FOR_ARGS_VEC); \
-      return Result; \
+      return Result;                                                                      \
    }
 
-#define DEFINE_VECTOR_LERP(Count, Type, TypeName)                                             \
-   internal v##Count##Type                                                                   \
-   V##Count##Type##_Lerp(v##Count##Type A,                                                   \
-                         v##Count##Type B,                                                   \
-                         r32 T)                                                              \
-   {                                                                                         \
-      return (v##Count##Type){                                                              \
+#define DEFINE_VECTOR_LERP(Count, Type, TypeName)                                          \
+   internal v##Count##Type                                                                 \
+   V##Count##Type##_Lerp(v##Count##Type A,                                                 \
+                         v##Count##Type B,                                                 \
+                         r32 T)                                                            \
+   {                                                                                       \
+      return (v##Count##Type){                                                             \
          MAC_FOR(TypeName, Count, MAC_FOR_OP_SEQ_REV, MAC_FOR_FUNC_LERP, MAC_FOR_ARGS_VEC) \
-      };                                                                                    \
+      };                                                                                   \
    }
 
 #define DEFINE_VECTOR_EQUAL(Count, Type)                                                    \
@@ -384,18 +392,25 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
       return MAC_FOR(&&, Count, MAC_FOR_OP_NAME_REV, MAC_FOR_FUNC_VV_EQ, MAC_FOR_ARGS_VEC); \
    }
 
-#define DEFINE_VECTOR_LEN(Count, Type)                            \
-   internal r32                                                  \
-   V##Count##Type##_Len(v##Count##Type V)                        \
-   {                                                             \
+#define DEFINE_VECTOR_ISZERO(Count, Type)                                      \
+   internal b08                                                                \
+   V##Count##Type##_IsZero(v##Count##Type V)                                   \
+   {                                                                           \
+      return V##Count##Type##_IsEqual(V, (v##Count##Type){0});                 \
+   }
+
+#define DEFINE_VECTOR_LEN(Count, Type)                          \
+   internal r32                                                 \
+   V##Count##Type##_Len(v##Count##Type V)                       \
+   {                                                            \
       v##Count##r32 Vr32 = V##Count##Type##_ToV##Count##r32(V); \
       return R32_sqrt(V##Count##r32_Dot(Vr32, Vr32));           \
    }
 
-#define DEFINE_VECTOR_NORM(Count, Type)                         \
-   internal v##Count##r32                                      \
-   V##Count##Type##_Norm(v##Count##Type V)                     \
-   {                                                           \
+#define DEFINE_VECTOR_NORM(Count, Type)                       \
+   internal v##Count##r32                                     \
+   V##Count##Type##_Norm(v##Count##Type V)                    \
+   {                                                          \
       r32 L = V##Count##Type##_Len(V);                        \
       v##Count##r32 CV = V##Count##Type##_ToV##Count##r32(V); \
       return V##Count##r32_DivS(CV, L);                       \
@@ -422,6 +437,7 @@ VECTOR_FUNCS
 #undef DEFINE_VECTOR_CLAMP
 #undef DEFINE_VECTOR_LERP
 #undef DEFINE_VECTOR_EQUAL
+#undef DEFINE_VECTOR_ISZERO
 #undef DEFINE_VECTOR_LEN
 #undef DEFINE_VECTOR_NORM
 #undef EXPORT
@@ -571,5 +587,6 @@ RayRectIntersectionA(v3r32 RectStart, v3r32 RectEnd, v3r32 RectNormal,
 #define DEFINE_VECTOR_CLAMP(N, T, TN) EXPORT(v##N##T,   V##N##T##_Clamp,       v##N##T, T, T)
 #define DEFINE_VECTOR_LERP(N, T, TN)  EXPORT(v##N##T,   V##N##T##_Lerp,        v##N##T, v##N##T, r32)
 #define DEFINE_VECTOR_EQUAL(N, T)     EXPORT(b08,       V##N##T##_IsEqual,     v##N##T, v##N##T)
+#define DEFINE_VECTOR_ISZERO(N, T)    EXPORT(b08,       V##N##T##_IsZero,      v##N##T)
 #define DEFINE_VECTOR_LEN(N, T)       EXPORT(r32,       V##N##T##_Len,         v##N##T)
 #define DEFINE_VECTOR_NORM(N, T)      EXPORT(v##N##r32, V##N##T##_Norm,        v##N##T)

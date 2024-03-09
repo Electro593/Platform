@@ -9,6 +9,7 @@
 
 #ifdef INCLUDE_HEADER
 
+#define EString() CLStringL("")
 #define CLStringL(Literal) CLString(Literal, sizeof(Literal)-1)
 #define CFStringL(Literal, ...) FString(CLStringL(Literal), __VA_ARGS__)
 
