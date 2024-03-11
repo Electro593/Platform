@@ -31,6 +31,7 @@
    #include <util/intrin.h>
    #include <util/scalar.c>
    #include <util/vector.c>
+   #include <util/bigint.c>
    #include <util/memory.c>
    #include <util/string.c>
    #include <util/set.c>
@@ -42,6 +43,7 @@
       #define UTIL_FUNCS \
          SCALAR_FUNCS \
          VECTOR_FUNCS \
+         BIGINT_FUNCS \
          MEMORY_FUNCS \
          STRING_FUNCS \
          SET_FUNCS \

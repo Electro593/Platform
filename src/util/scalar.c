@@ -26,13 +26,17 @@
 #define R64_SIGN_MASK      0x8000000000000000
 #define R64_EXPONENT_MASK  0x7FF0000000000000
 #define R64_MANTISSA_MASK  0x000FFFFFFFFFFFFF
+#define R64_QUIET_MASK     0x0008000000000000
+#define R64_EXPONENT_BITS  11
 #define R64_MANTISSA_BITS  52
 #define R64_SIGN_SHIFT     63
 #define R64_EXPONENT_SHIFT 52
 #define R64_EXPONENT_BIAS  1023
 #define R64_EXPONENT_MAX   ((R64_EXPONENT_MASK>>R64_EXPONENT_SHIFT)-R64_EXPONENT_BIAS)
 #define R64_NAN(Payload)   LITERAL_CAST(u64, R64_EXPONENT_MASK | (Payload & R64_MANTISSA_MASK), r64)
-#define R64_INF            R64_NAN(0);
+#define R64_NNAN(Payload)  LITERAL_CAST(u64, R64_SIGN_MASK | R64_EXPONENT_MASK | (Payload & R64_MANTISSA_MASK), r64)
+#define R64_INF            R64_NAN(0)
+#define R64_NINF           R64_NNAN(0)
 
 #define S08_MIN (s08)(u08)0x80
 #define S08_MAX (s08)(u08)0x7F
@@ -153,6 +157,7 @@ typedef struct random {
    EXPORT(u08, U08_Median, u08 A, u08 B, u08 C) \
    EXPORT(u08, U08_Lerp, u08 A, u08 B, r32 T) \
    EXPORT(u32, U32_Min, u32 A, u32 B) \
+   EXPORT(u32, U32_Max, u32 A, u32 B) \
    EXPORT(random, Rand_Init, u32 Seed) \
    EXPORT(u32, Rand_Next, random *Random) \
    EXPORT(s32, S32_RandRange, random *Random, s32 Min, s32 Max) \
@@ -493,6 +498,12 @@ internal u08
 U08_Lerp(u08 A, u08 B, r32 T)
 {
    return A + (u08)(T * ((r32)B - A));
+}
+
+internal u32
+U32_Max(u32 A, u32 B)
+{
+   return (A > B) ? A : B;
 }
 
 internal u32
