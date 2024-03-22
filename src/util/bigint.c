@@ -24,7 +24,7 @@ typedef struct bigint_divmod {
 	EXPORT(bigint,        BigInt_Init,    u32 MaxCount) \
 	EXPORT(bigint,        BigInt_InitV,   u64 Value) \
 	EXPORT(bigint,        BigInt_Splice,  bigint A, u32 Start, u32 Count) \
-	EXPORT(bigint,        BigInt_Copy,    bigint A) \
+	EXPORT(void,          BigInt_Copy,    bigint Destination, bigint Source) \
 	EXPORT(s32,           BigInt_Compare, bigint A, bigint B) \
 	EXPORT(bigint,        BigInt_Add,     bigint A, bigint B) \
 	EXPORT(bigint_divmod, BigInt_DivMod,  bigint A, bigint B) \
@@ -70,11 +70,14 @@ BigInt_Splice(
 	return Result;
 }
 
-internal bigint
+internal void
 BigInt_Copy(
-	bigint A)
+	bigint *Destination,
+   bigint Source)
 {
-	return BigInt_Splice(A, 0, A.WordCount);
+   Assert(Destination->MaxCount >= Source.WordCount);
+   Mem_Cpy(Destination->Words, Source.Words, Source.WordCount * sizeof(u64));
+   Destination->WordCount = Source.WordCount;
 }
 
 internal s32
@@ -118,113 +121,31 @@ BigInt_Add(
 	return Result;
 }
 
-//CREDIT: https://mathsanew.com/articles/implementing_large_integers_division.pdf
-internal bigint_divmod
-BigInt_DivMod(
-	bigint A,
-	bigint B)
+internal void
+BigInt_DivModS(
+	bigint Numerator,
+	u64 Denominator,
+   bigint *Quotient,
+   u64 *Remainder)
 {
 	bigint_divmod Result;
 	
-	Assert(B.WordCount, "Divisor must be greater than 0");
+   bigint A = Numerator, *Q = Quotient;
+   u64 B = Denominator, *R = Remainder;
+   
+	Assert(B, "Divisor must be greater than 0");
+   Assert(Q && R, "Quotient and Remainder cannot be null");
+   Assert(Q->MaxCount >= A.WordCount, "Quotient is too small");
 	
 	if(!A.WordCount) {
-		Result.Quotient = BigInt_InitV(0);
-		Result.Remainder = BigInt_InitV(0);
-		return Result;
-	}
-	if(B.WordCount == 1 && B.Words[1] == 1) {
-		Result.Quotient = BigInt_Copy(A);
-		Result.Remainder = BigInt_InitV(0);
-		return Result;
-	}
-	
-	s32 Cmp = BigInt_Compare(A, B);
-	if(Cmp == LESS) {
-		Result.Quotient = BigInt_InitV(0);
-		Result.Remainder = BigInt_Copy(A);
-		return Result;
-	}
-	if(Cmp == EQUAL) {
-		Result.Quotient = BigInt_InitV(1);
-		Result.Remainder = BigInt_InitV(0);
-		return Result;
-	}
-	
-	bigint IDD = BigInt_Init(B.WordCount + 1);
-	IDD.WordCount = B.WordCount + 1;
-	u32 I = A.WordCount - B.WordCount;
-	Result.Quotient = BigInt_Init(I+1);
-	Stack_Push();
-	
-	bigint AF = A
-	bigint BF = B;
-	
-	u64 E = BF.Words[BF.WordCount-1];
-	bigint F = BigInt_InitV(1);
-	u64 HalfRadix = 1ull << 32;
-	if(BF.WordCount > 1 && E < HalfRadix) {
-		u64 Denom = E + 1;
-		F = BigInt_InitV(2*(HalfRadix / Denom) + (2*(HalfRadix % Denom) >= Denom));
-		AF = BigInt_Mul(AF, F);
-		BF = BigInt_Mul(BF, F);
-		E = BF.Words[BF.WordCount-1];
-	}
-	Mem_Cpy(IDD.Words, AF.Words+I, BF.WordCount * sizeof(u64));
-	
-	while(I >= 0) {
-		Stack_Push();
-		
-		bigint YZ = BigInt_Splice(IDD, IDD.WordCount-2, 2);
-		u64 Y = YZ.Words[1];
-		u64 Z = YZ.Words[0];
-		bigint D;
-		if(E > 1) {
-			bigint RadixOverE = BigInt_InitV(2*(HalfRadix / E) + (2*(HalfRadix % E) >= E));
-			bigint RadixModE = BigInt_InitV(-(RadixOverE.Words[0] * E));
-			bigint RemSum = BigInt_Add(BigInt_Mul(Y, RadixModE), BigInt_InitV(Z % E));
-			bigint QuotSum = BigInt_Add(BigInt_Mul(Y, RadixOverE), BigInt_InitV(Z / E));
-		} else {
-			D = YZ;
-		}
-		
-		if(D || Result.Quotient.WordCount) {
-			Result.Quotient.Words[I] = D;
-			Result.Quotient.WordCount++;
-		}
-		
-		bigint Diff;
-		if(BF.WordCount > 1) {
-			
-			
-			bigint Prod = BigInt_Mul(B, D);
-			Diff = BigInt_Sub(IDD, Prod);
-		} else {
-			Diff = BigInt_Sub(YZ, BigInt_Mul(BigInt_InitV(E), D));
-		}
-		
-		if(I) {
-			Mem_Cpy(IDD.Words+1, Diff.Words, B.WordCount * sizeof(u64));
-			IDD.Words[0] = A.Words[I];
-		} else {
-			Mem_Cpy(IDD.Words, Diff.Words, B.WordCount * sizeof(u64));
-			IDD.WordCount--;
-		}
-		
-		I--;
-		Stack_Pop();
-	}
-	
-	if(F.Words[0] > 1) {
-		bigint Remainder = BigInt_DivMod(IDD, F).Quotient;
-		Mem_Cpy(IDD.Words, Remainder.Words, Remainder.WordCount * sizeof(u64));
-		IDD.WordCount = Remainder.WordCount;
-	}
-	
-	Result.Remainder = IDD;
-	Stack_Pop();
-	
-	return Result;
+      Q->WordCount = 0;
+      *R = 0;
+      return;
+   }
+   
+   
+   
+   Q->WordCount = Q->Words[A.WordCount-1] == 0;
 }
 
 #endif
