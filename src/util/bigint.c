@@ -24,10 +24,10 @@ typedef struct bigint_divmod {
 	EXPORT(bigint,        BigInt_Init,    u32 MaxCount) \
 	EXPORT(bigint,        BigInt_InitV,   u64 Value) \
 	EXPORT(bigint,        BigInt_Splice,  bigint A, u32 Start, u32 Count) \
-	EXPORT(void,          BigInt_Copy,    bigint Destination, bigint Source) \
+	EXPORT(void,          BigInt_Copy,    bigint *Destination, bigint Source) \
 	EXPORT(s32,           BigInt_Compare, bigint A, bigint B) \
 	EXPORT(bigint,        BigInt_Add,     bigint A, bigint B) \
-	EXPORT(bigint_divmod, BigInt_DivMod,  bigint A, bigint B) \
+	// EXPORT(bigint_divmod, BigInt_DivMod,  bigint A, bigint B) \
 
 #endif
 
@@ -64,7 +64,7 @@ BigInt_Splice(
 	u32 Start,
 	u32 Count)
 {
-	bigint Result = BigInt_InitM(Count);
+	bigint Result = BigInt_Init(Count);
 	Mem_Cpy(Result.Words, A.Words + Start, Count * sizeof(u64));
 	Result.WordCount = Count;
 	return Result;
@@ -121,31 +121,31 @@ BigInt_Add(
 	return Result;
 }
 
-internal void
-BigInt_DivModS(
-	bigint Numerator,
-	u64 Denominator,
-   bigint *Quotient,
-   u64 *Remainder)
-{
-	bigint_divmod Result;
-	
-   bigint A = Numerator, *Q = Quotient;
-   u64 B = Denominator, *R = Remainder;
-   
-	Assert(B, "Divisor must be greater than 0");
-   Assert(Q && R, "Quotient and Remainder cannot be null");
-   Assert(Q->MaxCount >= A.WordCount, "Quotient is too small");
-	
-	if(!A.WordCount) {
-      Q->WordCount = 0;
-      *R = 0;
-      return;
-   }
-   
-   
-   
-   Q->WordCount = Q->Words[A.WordCount-1] == 0;
-}
+// internal void
+// BigInt_DivModS(
+// 	bigint Numerator,
+// 	u64 Denominator,
+//    bigint *Quotient,
+//    u64 *Remainder)
+// {
+// 	bigint_divmod Result;
+// 	
+//    bigint A = Numerator, *Q = Quotient;
+//    u64 B = Denominator, *R = Remainder;
+//    
+// 	Assert(B, "Divisor must be greater than 0");
+//    Assert(Q && R, "Quotient and Remainder cannot be null");
+//    Assert(Q->MaxCount >= A.WordCount, "Quotient is too small");
+// 	
+// 	if(!A.WordCount) {
+//       Q->WordCount = 0;
+//       *R = 0;
+//       return;
+//    }
+//    
+//    
+//    
+//    Q->WordCount = Q->Words[A.WordCount-1] == 0;
+// }
 
 #endif

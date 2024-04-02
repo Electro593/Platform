@@ -471,70 +471,77 @@ WriteFloat(
 	if(Flags.CustomTypeSize && Flags.TypeSize == 3)
 		Assert(FALSE, "Long doubles not implemented!");
 	
-	u64 Binary = FORCE_CAST(u64, Value);
-	
-	b08 Sign     = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
-	s32 Exponent = (s32)((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
-	u64 Mantissa = Binary & R64_MANTISSA_MASK;
-	
-	b08 Denormal = FALSE;
-	if(Exponent == -R64_EXPONENT_BIAS) {
-		Exponent++;
-		Denormal = TRUE;
-	}
-	
-	b08 Negative = Sign;
-	b08 HasPrefix = Negative || Flags.PrefixSpace || Flags.PrefixPlus;
-	c08 Prefix = Negative ? '-' : Flags.PrefixPlus ? '+' : ' ';
-	
 	vptr Cursor = Stack_GetCursor();
-	vptr TempCursor = (vptr)ALIGN_UP((u64)Out + Flags.MinChars, 8);
-	Stack_SetCursor(TempCursor);
-	
-	bigint Whole = BigInt_InitV(0);
-	s32 WholeLen = 1;
-	if(Exponent >= 0) {
-		Whole = BigInt_Init(1 + Exponent / 64);
-		Whole.WordCount = Whole.MaxCount;
-		
-		Whole.Words[Exponent / 64] |= !Denormal << (Exponent % 64);
-		for(s32 I = 0; I <= R64_MANTISSA_BITS; I++) {
-			if(Exponent + I < R64_MANTISSA_BITS) continue;
-			u64 Bit = Exponent - R64_MANTISSA_BITS + I;
-			u64 IsSet = (Mantissa >> I) & 1;
-			if(Whole.WordCount < Bit / 64) Whole.WordCount += IsSet;
-			Whole.Words[Bit / 64] |= IsSet << (Bit % 64);
-		}
-		
-		TempCursor = Stack_GetCursor();
-		
-		bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
-		bigint Divisor = BigInt_InitV(10);
-		do {
-			DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
-		} while(DivMod.Quotient.WordCount && WholeLen++);
-	}
-	
-	u32 TotalLen = HasPrefix;
-	
-	s32 Padding = Flags.MinChars - TotalLen;
-	
-	if(!Flags.AlignLeft) WritePadding(Out, &Padding);
-	
-	Stack_SetCursor(TempCursor);
-	
-	bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
-	bigint Divisor = BigInt_InitV(10);
-	while(WholeLen--) {
-		DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
-		*(*Out)++ = '0' + (DivMod.Remainder.WordCount ? DivMod.Remainder.Words[0] : 0);
-	}
-	
-	if(HasPrefix) *(*Out)++ = Prefix;
-	
-	WritePadding(Out, &Padding);
-	
+	Stack_SetCursor(*Out);
+	string String = R32_ToString((r32) Value, Flags.CustomPrecision ? Flags.Precision : 5);
+	Mem_Cpy(*Out, String.Text, String.Length);
+	*Out += String.Length;
 	Stack_SetCursor(Cursor);
+	
+	// u64 Binary = FORCE_CAST(u64, Value);
+	// 
+	// b08 Sign     = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
+	// s32 Exponent = (s32)((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
+	// u64 Mantissa = Binary & R64_MANTISSA_MASK;
+	// 
+	// b08 Denormal = FALSE;
+	// if(Exponent == -R64_EXPONENT_BIAS) {
+	// 	Exponent++;
+	// 	Denormal = TRUE;
+	// }
+	// 
+	// b08 Negative = Sign;
+	// b08 HasPrefix = Negative || Flags.PrefixSpace || Flags.PrefixPlus;
+	// c08 Prefix = Negative ? '-' : Flags.PrefixPlus ? '+' : ' ';
+	// 
+	// vptr Cursor = Stack_GetCursor();
+	// vptr TempCursor = (vptr)ALIGN_UP((u64)Out + Flags.MinChars, 8);
+	// Stack_SetCursor(TempCursor);
+	// 
+	// bigint Whole = BigInt_InitV(0);
+	// s32 WholeLen = 1;
+	// if(Exponent >= 0) {
+	// 	Whole = BigInt_Init(1 + Exponent / 64);
+	// 	Whole.WordCount = Whole.MaxCount;
+	// 	
+	// 	Whole.Words[Exponent / 64] |= !Denormal << (Exponent % 64);
+	// 	for(s32 I = 0; I <= R64_MANTISSA_BITS; I++) {
+	// 		if(Exponent + I < R64_MANTISSA_BITS) continue;
+	// 		u64 Bit = Exponent - R64_MANTISSA_BITS + I;
+	// 		u64 IsSet = (Mantissa >> I) & 1;
+	// 		if(Whole.WordCount < Bit / 64) Whole.WordCount += IsSet;
+	// 		Whole.Words[Bit / 64] |= IsSet << (Bit % 64);
+	// 	}
+	// 	
+	// 	TempCursor = Stack_GetCursor();
+	// 	
+	// 	bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
+	// 	bigint Divisor = BigInt_InitV(10);
+	// 	do {
+	// 		DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
+	// 	} while(DivMod.Quotient.WordCount && WholeLen++);
+	// }
+	// 
+	// u32 TotalLen = HasPrefix;
+	// 
+	// s32 Padding = Flags.MinChars - TotalLen;
+	// 
+	// if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	// 
+	// Stack_SetCursor(TempCursor);
+	// 
+	// bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
+	// bigint Divisor = BigInt_InitV(10);
+	// while(WholeLen--) {
+	// 	DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
+	// 	*(*Out)++ = '0' + (DivMod.Remainder.WordCount ? DivMod.Remainder.Words[0] : 0);
+	// }
+	// 
+	// if(HasPrefix) *(*Out)++ = Prefix;
+	// 
+	// WritePadding(Out, &Padding);
+	// 
+	// Stack_SetCursor(Cursor);
 }
 
 internal u32
