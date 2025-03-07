@@ -7,7 +7,7 @@ pushd build > /dev/null
 CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -Wall -Wextra" # -Werror # /GS- /Gs0x100000
 CompilerSwitches="$CompilerSwitches -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -D_LINUX -D_GCC -D_X64 -D_OPENGL"
-CompilerSwitches="$CompilerSwitches -O0 -ggdb -D_DEBUG"
+CompilerSwitches="$CompilerSwitches -O0 -g -D_DEBUG"
 # CompilerSwitches="$CompilerSwitches -O3"
 
 LinkerSwitches="$LinkerSwitches -nostdlib" # /subsystem:windows /stack:0x100000,0x100000 /machine:x64
@@ -26,7 +26,8 @@ build_module() {
    elif [ "$ModuleName" = "platform" ]; then
       echo Building $Module as an executable
       # gcc $CompilerSwitches $LinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}linux/entry.c
-      gcc $CompilerSwitches $LinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -Wl,-ePlatform_Entry -I ../src -I ../Platform/src -o $ModuleName ${Module}linux/entry.c
+      # gcc $CompilerSwitches $LinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName ${Module}linux/entry.c
+      gcc $CompilerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName ${Module}linux/entry.c
    else
       echo Building $Module as a library
       # gcc $DLLCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}main.c

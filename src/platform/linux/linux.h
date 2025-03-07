@@ -17,10 +17,10 @@
 	s32 __attribute__((naked)) \
 	Sys_##Name(__VA_ARGS__) { \
 		__asm__ ( \
-			"mov $"#ID", %eax\n" \
-			"mov %rcx, %r10\n" \
-			"syscall\n" \
-			"ret" \
+			"mov $"#ID", %eax  \n" \
+			"mov %rcx, %r10    \n" \
+			"syscall           \n" \
+			"ret               \n" \
 		); \
 	}
 LINUX_SYSCALLS

@@ -273,7 +273,6 @@ typedef enum file_mode {
 
 #define PLATFORM_FUNCS \
    PLATFORM_OPENGL_FUNCS \
-   EXTERN(void,             Platform, Entry,          void) \
    EXPORT(void,             Platform, Exit,           u32 ExitCode) \
    EXPORT(void,             Platform, CreateWindow,   void) \
    EXPORT(void,             Platform, Assert,         c08 *File, u32 Line, c08 *Expression, c08 *Message) \

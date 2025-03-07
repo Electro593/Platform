@@ -7,6 +7,22 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#if defined(_X64)
+
+// __asm__ (
+// 	".align 4                      \n"
+// 	".globl _start                 \n"
+// 	"_start:                       \n"
+// 	"	xor %rbp, %rbp             \n"
+// 	"	mov  0(%rsp), %rdi         \n"
+// 	"	lea  8(%rsp), %rsi         \n"
+// 	"	lea 16(%rsp,%rdi,8), %rdx  \n"
+// 	"	call Platform_Entry        \n"
+// 	"	ud2                        \n"
+// );
+
+#endif
+
 #include <platform/platform.c>
 
 internal opengl_funcs*
@@ -113,9 +129,14 @@ Platform_Exit(u32 ExitCode)
 }
 
 external void
-Platform_Entry(void)
+Platform_Entry(s32 argc, c08 **argv, c08 **envp)
 {
-	
-	
+	int i = 0;
+	int j = 0;
 	Platform_Exit(0);
+}
+
+external int
+main(int argc, char **argv) {
+	return 0;
 }
