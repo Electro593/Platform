@@ -135,19 +135,19 @@ typedef struct platform_exports platform_exports;
 
 typedef enum type_id {
     TYPEID_NONE,
-    
+
     #define ENUM(Name, Type) \
         TYPEID_##Name,
     TYPES
     #undef ENUM
-    
+
     TYPEID_EXTRA_EXP = 8,
     TYPEID_MOD_EXP   = 4,
-    
+
     TYPEID_TYPE_MASK  = (1<<TYPEID_EXTRA_EXP)-1,
-    TYPEID_MOD_MASK   = ~((1<<(32-TYPEID_MOD_EXP))-1), 
+    TYPEID_MOD_MASK   = ~((1<<(32-TYPEID_MOD_EXP))-1),
     TYPEID_EXTRA_MASK = ~(TYPEID_TYPE_MASK | TYPEID_MOD_MASK),
-    
+
     TYPEID_MEMBER   = 0x10000000,
 } type_id;
 

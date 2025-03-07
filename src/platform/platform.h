@@ -30,26 +30,38 @@ typedef void func_Module_Unload(platform_state *State);
 #define SHADERS_DIR  "assets\\shaders\\"
 #define TEXTURES_DIR "assets\\textures\\"
 
-typedef struct file_handle file_handle;
-
 #if defined(_WIN32)
-   
+   #include <platform/win32/win32.h>
+
+   typedef struct file_handle {
+      win32_handle Handle;
+   } file_handle;
+
+   #define NULL_FILE_HANDLE (file_handle){ .Handle = INVALID_HANDLE_VALUE }
+
 #elif defined(_LINUX)
+   #include <platform/linux/linux.h>
+
+   typedef struct file_handle {
+   	u32 FileDescriptor;
+   } file_handle;
+
+   #define NULL_FILE_HANDLE (file_handle){ .FileDescriptor = SYS_FILE_NONE }
 #else
    #error Unsupported platform
 #endif
 
 struct platform_module {
    c08 *Name;
-   
+
    func_Module_Load   *Load;
    func_Module_Init   *Init;
    func_Module_Update *Update;
    func_Module_Unload *Unload;
-   
+
    vptr Data;
    vptr Funcs;
-   
+
    #ifdef _WIN32
       c08 *FileName;
       win32_module DLL;
@@ -77,7 +89,7 @@ typedef enum focus_state {
 
 typedef enum scancode {
    ScanCode_Unknown          = 0x00,
-   
+
    ScanCode_Escape           = 0x01,
    ScanCode_1                = 0x02,
    ScanCode_2                = 0x03,
@@ -191,7 +203,7 @@ typedef enum scancode {
    ScanCode_SBCS             = 0x77,
    ScanCode_Convert          = 0x79,
    ScanCode_NonConvert       = 0x7B,
-   
+
    ScanCode_MediaPrev        = 0x80 | 0x10,
    ScanCode_MediaNext        = 0x80 | 0x19,
    ScanCode_NumpadEnter      = 0x80 | 0x1C,
@@ -232,7 +244,7 @@ typedef enum scancode {
    ScanCode_LaunchApp1       = 0x80 | 0x6B,
    ScanCode_LaunchEmail      = 0x80 | 0x6C,
    ScanCode_LaunchMedia      = 0x80 | 0x6D,
-   
+
    ScanCode_Pause            = 0xFF, //0xE11D45,
 } scancode;
 
@@ -261,7 +273,7 @@ typedef enum file_mode {
 #else
    #define PLATFORM_OPENGL_FUNCS
 #endif
-   
+
    // INTERN(opengl_funcs, Platform, LoadOpenGL,     win32_device_context DeviceContext) \
    // INTERN(void,         Platform, LoadWGL,        void) \
    // INTERN(void,         Platform, LoadGame,       module *Module, game_state *GameState, platform_exports *PlatformExports, opengl_funcs *OpenGLFuncs) \
@@ -272,18 +284,18 @@ typedef enum file_mode {
    EXPORT(void,             Platform, CreateWindow,   void) \
    EXPORT(void,             Platform, Assert,         c08 *File, u32 Line, c08 *Expression, c08 *Message) \
    EXPORT(vptr,             Platform, AllocateMemory, u64 Size) \
-   EXPORT(void,             Platform, CloseFile,      file_handle *FileHandle) \
-   EXPORT(void,             Platform, FreeMemory,     vptr Base) \
-   EXPORT(u64,              Platform, GetFileLength,  file_handle *FileHandle) \
+   EXPORT(void,             Platform, CloseFile,      file_handle FileHandle) \
+   EXPORT(void,             Platform, FreeMemory,     vptr Base, u64 Size) \
+   EXPORT(u64,              Platform, GetFileLength,  file_handle FileHandle) \
    EXPORT(void,             Platform, GetFileTime,    c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
 	EXPORT(r64,              Platform, GetTime,        void) \
    EXPORT(platform_module*, Platform, LoadModule,     c08 *Name) \
    EXPORT(s08,              Platform, CmpFileTime,    datetime A, datetime B) \
-   EXPORT(b08,              Platform, OpenFile,       file_handle **FileHandle, c08 *FileName, file_mode OpenMode) \
-   EXPORT(u64,              Platform, ReadFile,       file_handle *FileHandle, vptr Dest, u64 Length, u64 Offset) \
+   EXPORT(b08,              Platform, OpenFile,       file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \
+   EXPORT(u64,              Platform, ReadFile,       file_handle FileHandle, vptr Dest, u64 Length, u64 Offset) \
    EXPORT(void,             Platform, WriteConsole,   string Message) \
    EXPORT(void,             Platform, WriteError,     string Message, u32 Exit) \
-   EXPORT(u64,              Platform, WriteFile,      file_handle *FileHandle, vptr Src, u64 Length, u64 Offset) \
+   EXPORT(u64,              Platform, WriteFile,      file_handle FileHandle, vptr Src, u64 Length, u64 Offset) \
 
 #define EXPORT(ReturnType, Namespace, Name, ...) \
    typedef ReturnType func_##Namespace##_##Name(__VA_ARGS__);
@@ -316,25 +328,25 @@ struct platform_state {
    b08 CursorIsDisabled : 1;
    b08 WindowedApp : 1;
    b08 _Unused : 6;
-   
+
    v2s32 RestoreCursorPos;
    v2s32 CursorPos;
    stack *Stack;
-   
+
    u32 ModuleCount;
    u32 ModulesSize;
    platform_module *Modules;
-   
-   v2u32 WindowSize; 
+
+   v2u32 WindowSize;
    platform_exports Functions;
    execution_state ExecutionState;
    focus_state FocusState;
    platform_updates Updates;
    u08 Buttons[5];
    u08 Keys[256];
-   
+
    r32 FPS;
-   
+
    s32 ArgCount;
    c08 **Args;
 };

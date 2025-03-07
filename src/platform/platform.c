@@ -26,8 +26,12 @@
 
 #undef NO_SYMBOLS
 
+global platform_state *Platform;
 
 internal void Platform_Stub(void) { };
+
+// These are simple implementations of various util functions that we need
+// to have access to before we load the util module.
 
 internal void
 _Mem_Set(u08 *D, u08 B, u32 Bytes)
@@ -57,7 +61,7 @@ _Mem_Cmp(u08 *A, u08 *B, u32 Bytes)
       if(*A < *B) return LESS;
       A++, B++, Bytes--;
    }
-   
+
    return EQUAL;
 }
 
@@ -67,4 +71,16 @@ _Mem_BytesUntil(u08 *P, c08 B)
    u32 Count = 0;
    while(*P++ != B) Count++;
    return Count;
+}
+
+internal string
+_CString(c08 *Chars)
+{
+   u32 Length = _Mem_BytesUntil((u08*) Chars, 0);
+   return (string){
+      .Text = Chars,
+      .Length = Length,
+      .Capacity = Length,
+      .Resizable = FALSE
+   };
 }
