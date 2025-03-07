@@ -11,7 +11,7 @@
         {
             "type": "shell",
             "label": "Run Program (MS)",
-            "command": ".\\build\\Platform.exe",
+            "command": ".\\build\\platform.exe",
             "group": "test"
         },
         {
@@ -24,7 +24,7 @@
         {
             "type": "shell",
             "label": "Run Program (SH)",
-            "command": "chmod +rwx ./build/Platform && ./build/Platform",
+            "command": "chmod +rwx ./build/platform && ./build/platform",
             "group": "test"
         },
     ]

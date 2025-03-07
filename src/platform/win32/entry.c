@@ -7,20 +7,7 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include <shared.h>
-
-#define INCLUDE_HEADER
-#include <util/main.c>
-#undef INCLUDE_HEADER
-
-#include <platform/platform.h>
-
-#ifdef _OPENGL
-#define INCLUDE_HEADER
-   #include <renderer_opengl/opengl.h>
-   // #include <renderer/opengl/mesh.h>
-#undef INCLUDE_HEADER
-#endif
+#include <platform/platform.c>
 
 global win32_window PrimaryWindow;
 global platform_state *Platform;
@@ -28,46 +15,6 @@ global win32_device_context DeviceContext;
 global s64 CounterFrequency = 0;
 
 internal void Platform_Stub(void) { };
-
-internal void
-_Mem_Set(u08 *D, u08 B, u32 Bytes)
-{
-   while(Bytes--) *D++ = B;
-}
-
-internal void
-_Mem_Cpy(u08 *D, u08 *S, u32 Bytes)
-{
-   while(Bytes--) *D++ = *S++;
-}
-
-internal void
-_Mem_CpyRev(u08 *D, u08 *S, u32 Bytes)
-{
-   D += Bytes-1;
-   S += Bytes-1;
-   while(Bytes--) *D-- = *S--;
-}
-
-internal s08
-_Mem_Cmp(u08 *A, u08 *B, u32 Bytes)
-{
-   while(Bytes) {
-      if(*A > *B) return GREATER;
-      if(*A < *B) return LESS;
-      A++, B++, Bytes--;
-   }
-   
-   return EQUAL;
-}
-
-internal u32
-_Mem_BytesUntil(u08 *P, c08 B)
-{
-   u32 Count = 0;
-   while(*P++ != B) Count++;
-   return Count;
-}
 
 internal void
 Platform_LoadWin32(void)
@@ -460,7 +407,7 @@ Platform_WriteError(string Message, u32 Exit)
    Win32_OutputDebugStringA(StringCopy);
    Platform_FreeMemory(StringCopy);
    
-   if(Exit) Win32_ExitProcess(Exit);
+   if(Exit) Platform_Exit(Exit);
 }
 
 internal void
@@ -802,6 +749,13 @@ Platform_ParseCommandLine(void)
    Platform_FreeMemory(Sizes);
 }
 
+internal void
+Platform_Exit(u32 ExitCode)
+{
+   Win32_ExitProcess(ExitCode);
+   UNREACHABLE;
+}
+
 external void
 Platform_Entry(void)
 {
@@ -902,5 +856,5 @@ Platform_Entry(void)
    
    Stack_Pop();
    
-   Win32_ExitProcess(0);
+   Platform_Exit(0);
 }

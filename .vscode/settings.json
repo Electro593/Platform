@@ -54,11 +54,11 @@
         "string": "c",
         "*.inc": "c"
     },
-    "C_Cpp.intelliSenseEngineFallback": "disabled",
     "C_Cpp.dimInactiveRegions": true,
     "C_Cpp.errorSquiggles": "disabled",
     "todo-tree.tree.showCountsInTree": false,
     "todo-tree.tree.showBadges": false,
-    "editor.tabSize": 3,
-    "editor.insertSpaces": false
+    "editor.tabSize": 4,
+    "editor.insertSpaces": false,
+    "C_Cpp.clang_format_style": "{ BasedOnStyle: LLVM, AlignConsecutiveDeclarations: true }"
 }

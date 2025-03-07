@@ -274,8 +274,7 @@ typedef enum file_mode {
 #define PLATFORM_FUNCS \
    PLATFORM_OPENGL_FUNCS \
    EXTERN(void,             Platform, Entry,          void) \
-   EXPORT(void,             Platform, Exit,           void) \
-   INTERN(void,             Platform, LoadWin32,      void) \
+   EXPORT(void,             Platform, Exit,           u32 ExitCode) \
    EXPORT(void,             Platform, CreateWindow,   void) \
    EXPORT(void,             Platform, Assert,         c08 *File, u32 Line, c08 *Expression, c08 *Message) \
    EXPORT(vptr,             Platform, AllocateMemory, u64 Size) \
@@ -284,12 +283,10 @@ typedef enum file_mode {
    EXPORT(u64,              Platform, GetFileLength,  file_handle FileHandle) \
    EXPORT(void,             Platform, GetFileTime,    c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
 	EXPORT(r64,              Platform, GetTime,        void) \
-   INTERN(platform_module*, Platform, GetModule,      c08 *Name) \
    EXPORT(platform_module*, Platform, LoadModule,     c08 *Name) \
    EXPORT(s08,              Platform, CmpFileTime,    datetime A, datetime B) \
    EXPORT(b08,              Platform, OpenFile,       file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \
    EXPORT(u64,              Platform, ReadFile,       file_handle FileHandle, vptr Dest, u64 Length, u64 Offset) \
-   INTERN(s64,              Platform, WindowCallback, win32_window Window, u32 Message, s64 WParam, s64 LParam) \
    EXPORT(void,             Platform, WriteConsole,   string Message) \
    EXPORT(void,             Platform, WriteError,     string Message, u32 Exit) \
    EXPORT(u64,              Platform, WriteFile,      file_handle FileHandle, vptr Src, u64 Length, u64 Offset) \

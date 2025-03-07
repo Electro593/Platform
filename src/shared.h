@@ -11,10 +11,12 @@
     #define API_ENTRY  __stdcall
     #define API_IMPORT __declspec(dllimport)
     #define API_EXPORT __declspec(dllexport)
+    #define UNREACHABLE __assume(false)
 #elif defined(_GCC)
     #define API_ENTRY
     #define API_IMPORT
     #define API_EXPORT
+    #define UNREACHABLE __builtin_unreachable();
 #endif
 
 #define global   static
@@ -51,7 +53,7 @@
     #define STOP Intrin_DebugBreak()
     #define NOP Intrin_Nop()
 #else
-    #define STOP Platform_Exit()
+    #define STOP Platform_Exit(-1)
     #define NOP
 #endif
 

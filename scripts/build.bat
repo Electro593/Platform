@@ -24,7 +24,7 @@ for /F "delims=" %%A in ('dir /AD /b ..\src') do call :build_module "..\src" %%A
 for /F "delims=" %%A in ('dir /AD /b ..\Platform\src') do (
    if "%%A"=="platform" (
       echo Building platform...
-      cl %CompilerSwitches% /D  "_PLATFORM_MODULE" /I ..\src /I ..\Platform\src ..\Platform\src\platform\win32\entry.c /link %LinkerSwitches% /entry:Platform_Entry /out:Platform.exe
+      cl %CompilerSwitches% /D  "_PLATFORM_MODULE" /I ..\src /I ..\Platform\src ..\Platform\src\platform\win32\entry.c /link %LinkerSwitches% /entry:Platform_Entry /out:platform.exe
    ) else if not "%%A"=="template" (
       call :build_module "..\Platform\src" %%A
    )

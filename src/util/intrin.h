@@ -55,8 +55,8 @@ void __va_start(va_list *Args, ...);
 
 inline u64 Intrin_ReadGSQWord(u32 Offset) {
     u64 Result;
-    __asm__ volatile (
-        "mov %0, gs:%1"
+    __asm__ (
+        "mov %%gs:0(%1), %0"
         : "=r" (Result)
         : "r" (Offset)
     );
@@ -64,51 +64,52 @@ inline u64 Intrin_ReadGSQWord(u32 Offset) {
 }
 
 inline void Intrin_DebugBreak() {
-    __asm__ volatile ( "int3" );
+    __asm__ ( "int3" );
 }
 
 inline void Intrin_Nop() {
-    __asm__ volatile ( "nop" );
+    __asm__ ( "nop" );
 }
 
 inline u64 Intrin_Popcount64(u64 Value) {
     u64 Result;
-    __asm__ volatile ( "popcnt %0, %1" : "=r" (Result) : "r" (Value) );
+    __asm__ ( "popcnt %1, %0" : "=r" (Result) : "r" (Value) );
     return Result;
 }
 
 inline u64 Intrin_ReadTimeStampCounter() {
     u64 Result;
     __asm__ volatile (
-        "rdtsc \n"
-        "sal rdx, 32 \n"
-        "or %0, rdx"
-        : "=&a" (Result)
+        "rdtsc\n"
+        "shlq $32, %%rdx\n"
+        "orq %%rdx, %%rax\n"
+        : "=a" (Result)
     );
     return Result;
 }
 
 inline b08 Intrin_BitScanForward64(u32 *Index, u64 Value) {
     u64 Index64;
-    __asm__ volatile ( "bsf %0, %1" : "=r" (Index64) : "r" (Value) );
+    __asm__ ( "bsf %1, %0" : "=r" (Index64) : "r" (Value) );
     *Index = Index64;
     return Value != 0;
 }
 
 inline b08 Intrin_BitScanReverse32(u32 *Index, u32 Value) {
-    __asm__ volatile ( "bsr %0, %1" : "=r" (*Index) : "r" (Value) );
+    __asm__ ( "bsr %1, %0" : "=r" (*Index) : "r" (Value) );
     return Value != 0;
 }
 
 inline b08 Intrin_BitScanReverse64(u32 *Index, u64 Value) {
     u64 Index64;
-    __asm__ volatile ( "bsr %0, %1" : "=r" (Index64) : "r" (Value) );
+    __asm__ ( "bsr %1, %0" : "=r" (Index64) : "r" (Value) );
     *Index = Index64;
     return Value != 0;
 }
 
 inline r32 Intrin_Sqrt_R32(r32 Value) {
-    __asm__ volatile ( "sqrtss %0, %1" : "+x" (Value) );
+    __asm__ ( "sqrtss %1, %0" : "+x" (Value) );
+    return Value;
 }
 
 typedef __builtin_va_list va_list;
