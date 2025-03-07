@@ -42,7 +42,17 @@
         "file_json.h": "c",
         "glad.h": "c",
         "world.h": "c",
-        "*.rh": "c"
+        "*.rh": "c",
+        "charconv": "c",
+        "chrono": "c",
+        "optional": "c",
+        "format": "c",
+        "ratio": "c",
+        "array": "c",
+        "functional": "c",
+        "*.tcc": "c",
+        "string": "c",
+        "*.inc": "c"
     },
     "C_Cpp.intelliSenseEngineFallback": "disabled",
     "C_Cpp.dimInactiveRegions": true,

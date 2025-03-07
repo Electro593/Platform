@@ -108,9 +108,11 @@ Mem_Cpy(vptr Dest, vptr Src, u64 Size)
 internal s32
 Mem_Cmp(vptr A, vptr B, u64 Size)
 {
-   while(Size && *(((u08*)A)++) == *(((u08*)B)++)) Size--;
+   u08 *APtr = A;
+   u08 *BPtr = B;
+   while(Size && *APtr++ == *BPtr++) Size--;
    if(!Size) return EQUAL;
-   if((u64)A > (u64)B) return GREATER;
+   if((u64)APtr > (u64)BPtr) return GREATER;
    return LESS;
 }
 
@@ -187,7 +189,7 @@ Heap_Defragment(heap *Heap)
       
       if(Offset) {
          Mem_Cpy((u08*)Block->Data+Offset, Block->Data, Block->Size);
-         (u08*)Block->Data += Offset;
+         Block->Data = (u08*)Block->Data + Offset;
       }
    } while(Block->Index);
 }
@@ -383,7 +385,7 @@ Heap_Dump(heap *Heap)
          if(Handle->Size == 0) goto next;
          
          u32 Index;
-         Intrin_BitScanReverse(&Index, Handle->Size);
+         Intrin_BitScanReverse32(&Index, Handle->Size);
          u32 SizeWidth = (Index < 3) ? 1 : Index-1;
          
          b08 IsValid = Intrin_BitScanReverse64(&Index, Handle->Offset);

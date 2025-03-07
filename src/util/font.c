@@ -41,7 +41,7 @@ typedef struct ttf_font_dir {
         u32 Checksum;
         u32 Offset;
         u32 Length;
-    } Tables[];
+    } Tables[0];
 } ttf_font_dir;
 
 #define TTF_CMAP_PLATFORM_UNICODE 0
@@ -55,7 +55,7 @@ typedef struct ttf_cmap {
         u16 PlatformID;
         u16 PlatformSpecificID;
         u32 Offset;
-    } Records[];
+    } Records[0];
 } ttf_cmap;
 typedef struct ttf_cmap_subtable_4 {
     u16 SegCountX2;
@@ -97,7 +97,7 @@ typedef struct ttf_glyph {
     s16 YMin;
     s16 XMax;
     s16 YMax;
-    u08 Data[];
+    u08 Data[0];
 } ttf_glyph;
 
 typedef enum ttf_loca_format {
@@ -154,8 +154,8 @@ typedef struct ttf_hmtx {
 
 #define TTF_TAG_loca TTF_MAKE_TAG('l','o','c','a')
 typedef union ttf_loca {
-    u16 Shorts[];
-    u32 Longs[];
+    u16 Shorts[0];
+    u32 Longs[0];
 } ttf_loca;
 
 #define TTF_TAG_maxp TTF_MAKE_TAG('m','a','x','p')

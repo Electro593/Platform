@@ -26,16 +26,22 @@ typedef void func_Module_Init  (platform_state *State);
 typedef void func_Module_Update(platform_state *State);
 typedef void func_Module_Unload(platform_state *State);
 
+#define FONTS_DIR    "assets\\fonts\\"
+#define SHADERS_DIR  "assets\\shaders\\"
+#define TEXTURES_DIR "assets\\textures\\"
+
 #if defined(_WIN32)
    #include <platform/win32/win32.h>
    
-   #define _GRAPHICS _OPENGL || _DIRECTX
-   
-   #define FONTS_DIR    "assets\\fonts\\"
-   #define SHADERS_DIR  "assets\\shaders\\"
-   #define TEXTURES_DIR "assets\\textures\\"
-   
    typedef win32_handle file_handle;
+#elif defined(_LINUX)
+   #include <platform/linux/linux.h>
+   
+   typedef struct file_handle {
+      int dummy;
+   } file_handle;
+#else
+   #error Unsupported platform
 #endif
 
 struct platform_module {
@@ -268,6 +274,7 @@ typedef enum file_mode {
 #define PLATFORM_FUNCS \
    PLATFORM_OPENGL_FUNCS \
    EXTERN(void,             Platform, Entry,          void) \
+   EXPORT(void,             Platform, Exit,           void) \
    INTERN(void,             Platform, LoadWin32,      void) \
    EXPORT(void,             Platform, CreateWindow,   void) \
    EXPORT(void,             Platform, Assert,         c08 *File, u32 Line, c08 *Expression, c08 *Message) \

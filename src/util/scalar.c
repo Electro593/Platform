@@ -267,9 +267,7 @@ R32_Clamp(r32 N, r32 S, r32 E)
 internal r32
 R32_sqrt(r32 N)
 {
-   r32 Result;
-   Result = R128_Get32(R128_Sqrt32(R128_Set_4x32(N,N,N,N)), 0);
-   return Result;
+   return Intrin_Sqrt_R32(N);
 }
 
 #define R32_CBRT_ITERATIONS 10
@@ -511,6 +509,13 @@ U32_Min(u32 A, u32 B)
 {
    return (A < B) ? A : B;
 }
+
+internal u32
+U32_Abs(u32 N)
+{
+   return N;
+}
+
 
 
 

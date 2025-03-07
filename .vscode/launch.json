@@ -5,18 +5,36 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug Program",
+            "name": "Debug Program (Windows)",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "build/Platform.exe",
-            "args": [
-                "tests/relPrime.s"
-            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "requireExactSource": false,
-            "preLaunchTask": "",
+            "requireExactSource": false
+        },
+        {
+            "name": "Debug Program (Linux)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "build/Platform",
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }

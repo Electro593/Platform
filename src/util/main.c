@@ -31,8 +31,8 @@
    #include <util/intrin.h>
    #include <util/scalar.c>
    #include <util/vector.c>
-   #include <util/bigint.c>
    #include <util/memory.c>
+   #include <util/bigint.c>
    #include <util/string.c>
    #include <util/set.c>
    #include <util/msdf.c>
@@ -43,8 +43,8 @@
       #define UTIL_FUNCS \
          SCALAR_FUNCS \
          VECTOR_FUNCS \
-         BIGINT_FUNCS \
          MEMORY_FUNCS \
+         BIGINT_FUNCS \
          STRING_FUNCS \
          SET_FUNCS \
          MSDF_FUNCS \
