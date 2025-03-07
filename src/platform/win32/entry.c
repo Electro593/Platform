@@ -7,7 +7,10 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#include <platform/win32/win32.h>
 #include <platform/platform.c>
+
+typedef win32_handle file_handle;
 
 global win32_window PrimaryWindow;
 global platform_state *Platform;
@@ -270,18 +273,18 @@ Platform_FreeMemory(vptr Base)
 }
 
 internal u64
-Platform_GetFileLength(file_handle FileHandle)
+Platform_GetFileLength(file_handle *FileHandle)
 {
    win32_large_integer Size;
    Size.QuadPart = 0;
    
-   Assert(Win32_GetFileSizeEx(FileHandle, &Size));
+   Assert(Win32_GetFileSizeEx(*FileHandle, &Size));
    
    return Size.QuadPart;
 }
 
 internal b08
-Platform_OpenFile(file_handle *FileHandle,
+Platform_OpenFile(file_handle **FileHandle,
                   c08 *FileName,
                   file_mode OpenMode)
 {
@@ -313,17 +316,17 @@ Platform_OpenFile(file_handle *FileHandle,
                                                 NULL, CreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
    
    if(GivenHandle != INVALID_HANDLE_VALUE) {
-      *(win32_handle*)FileHandle = GivenHandle;
+      **(win32_handle**)FileHandle = GivenHandle;
       return TRUE;
    } else {
-      *(win32_handle*)FileHandle = NULL;
+      **(win32_handle**)FileHandle = NULL;
    }
    
    return FALSE;
 }
 
 internal u64
-Platform_ReadFile(file_handle FileHandle,
+Platform_ReadFile(file_handle *FileHandle,
                   vptr Dest,
                   u64 Length,
                   u64 Offset)
@@ -336,7 +339,7 @@ Platform_ReadFile(file_handle FileHandle,
    while(Length) {
       u32 BytesRead;
       u32 BytesToRead = Length % (U32_MAX+1ULL);
-      b08 Success = Win32_ReadFile(FileHandle, Dest, BytesToRead, &BytesRead, &Overlapped);
+      b08 Success = Win32_ReadFile(*FileHandle, Dest, BytesToRead, &BytesRead, &Overlapped);
       
       if(!Success) {
          u32 DEBUG_Err = Win32_GetLastError();
@@ -353,7 +356,7 @@ Platform_ReadFile(file_handle FileHandle,
 }
 
 internal u64
-Platform_WriteFile(file_handle FileHandle,
+Platform_WriteFile(file_handle *FileHandle,
                    vptr Src,
                    u64 Length,
                    u64 Offset)
@@ -366,7 +369,7 @@ Platform_WriteFile(file_handle FileHandle,
    while(Length) {
       u32 BytesWritten;
       u32 BytesToWrite = Length % (U32_MAX+1ULL);
-      b08 Success = Win32_WriteFile(FileHandle, Src, BytesToWrite, &BytesWritten, &Overlapped);
+      b08 Success = Win32_WriteFile(*FileHandle, Src, BytesToWrite, &BytesWritten, &Overlapped);
       
       if(!Success) {
          u32 DEBUG_Err = Win32_GetLastError();
@@ -411,9 +414,9 @@ Platform_WriteError(string Message, u32 Exit)
 }
 
 internal void
-Platform_CloseFile(file_handle FileHandle)
+Platform_CloseFile(file_handle *FileHandle)
 {
-   Win32_CloseHandle(FileHandle);
+   Win32_CloseHandle(*FileHandle);
 }
 
 internal void

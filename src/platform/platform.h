@@ -30,16 +30,11 @@ typedef void func_Module_Unload(platform_state *State);
 #define SHADERS_DIR  "assets\\shaders\\"
 #define TEXTURES_DIR "assets\\textures\\"
 
+typedef struct file_handle file_handle;
+
 #if defined(_WIN32)
-   #include <platform/win32/win32.h>
    
-   typedef win32_handle file_handle;
 #elif defined(_LINUX)
-   #include <platform/linux/linux.h>
-   
-   typedef struct file_handle {
-      int dummy;
-   } file_handle;
 #else
    #error Unsupported platform
 #endif
@@ -277,18 +272,18 @@ typedef enum file_mode {
    EXPORT(void,             Platform, CreateWindow,   void) \
    EXPORT(void,             Platform, Assert,         c08 *File, u32 Line, c08 *Expression, c08 *Message) \
    EXPORT(vptr,             Platform, AllocateMemory, u64 Size) \
-   EXPORT(void,             Platform, CloseFile,      file_handle FileHandle) \
+   EXPORT(void,             Platform, CloseFile,      file_handle *FileHandle) \
    EXPORT(void,             Platform, FreeMemory,     vptr Base) \
-   EXPORT(u64,              Platform, GetFileLength,  file_handle FileHandle) \
+   EXPORT(u64,              Platform, GetFileLength,  file_handle *FileHandle) \
    EXPORT(void,             Platform, GetFileTime,    c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
 	EXPORT(r64,              Platform, GetTime,        void) \
    EXPORT(platform_module*, Platform, LoadModule,     c08 *Name) \
    EXPORT(s08,              Platform, CmpFileTime,    datetime A, datetime B) \
-   EXPORT(b08,              Platform, OpenFile,       file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \
-   EXPORT(u64,              Platform, ReadFile,       file_handle FileHandle, vptr Dest, u64 Length, u64 Offset) \
+   EXPORT(b08,              Platform, OpenFile,       file_handle **FileHandle, c08 *FileName, file_mode OpenMode) \
+   EXPORT(u64,              Platform, ReadFile,       file_handle *FileHandle, vptr Dest, u64 Length, u64 Offset) \
    EXPORT(void,             Platform, WriteConsole,   string Message) \
    EXPORT(void,             Platform, WriteError,     string Message, u32 Exit) \
-   EXPORT(u64,              Platform, WriteFile,      file_handle FileHandle, vptr Src, u64 Length, u64 Offset) \
+   EXPORT(u64,              Platform, WriteFile,      file_handle *FileHandle, vptr Src, u64 Length, u64 Offset) \
 
 #define EXPORT(ReturnType, Namespace, Name, ...) \
    typedef ReturnType func_##Namespace##_##Name(__VA_ARGS__);

@@ -7,6 +7,8 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#define NO_SYMBOLS
+
 #include <shared.h>
 
 #define INCLUDE_HEADER
@@ -17,10 +19,13 @@
 
 #ifdef _OPENGL
 #define INCLUDE_HEADER
-   #include <renderer_opengl/opengl.h>
-   // #include <renderer/opengl/mesh.h>
+#include <renderer_opengl/opengl.h>
+// #include <renderer/opengl/mesh.h>
 #undef INCLUDE_HEADER
 #endif
+
+#undef NO_SYMBOLS
+
 
 internal void Platform_Stub(void) { };
 

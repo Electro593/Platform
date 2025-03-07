@@ -36,7 +36,7 @@
    #include <util/font.c>
    #include <util/file.c>
    
-   #ifdef INCLUDE_HEADER
+   #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
       #define UTIL_FUNCS \
          SCALAR_FUNCS \
          VECTOR_FUNCS \

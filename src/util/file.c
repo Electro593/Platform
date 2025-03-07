@@ -21,7 +21,7 @@
 internal string
 File_Read(c08 *FileName, u64 Length, u64 Offset)
 {
-   file_handle FileHandle;
+   file_handle *FileHandle;
    Assert(Platform_OpenFile(&FileHandle, FileName, FILE_READ),
          "Invalid file name!");
    

@@ -23,10 +23,6 @@
             "cwd": "${workspaceFolder}",
             "environment": [],
             "MIMode": "gdb",
-            "logging": {
-                "engineLogging": true,
-                "traceResponse": true
-            },
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",
@@ -39,11 +35,6 @@
                     "ignoreFailures": true
                 }
             ],
-            "_postRemoteConnectCommands": [
-                {
-                    "text": "break Platform_Entry"
-                }
-            ]
         }
     ]
 }

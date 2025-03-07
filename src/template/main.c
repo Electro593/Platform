@@ -27,7 +27,7 @@
    
    // #include <...>
    
-   #ifdef INCLUDE_HEADER
+   #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
       #define ${MODULE}_FUNCS \
       
       typedef struct ${module}_state {

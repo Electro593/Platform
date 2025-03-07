@@ -156,17 +156,21 @@ typedef struct type {
     u16 Size;
 } type;
 
+#ifndef NO_SYMBOLS
+
 global type TYPE_NONE = {TYPEID_NONE, 0};
 #define ENUM(Name, Type) \
     global type TYPE_##Name = {TYPEID_##Name, sizeof(Type)};
 TYPES
 #undef ENUM
 
-#undef TYPES
+#endif
 
 //TODO fix this whole mess up
-internal type MakeMemberType(type_id TypeID, u16 Size, u32 Offset) {
+inline type MakeMemberType(type_id TypeID, u16 Size, u32 Offset) {
     return (type){TYPEID_MEMBER | ((Offset<<TYPEID_EXTRA_EXP)&TYPEID_MOD_MASK) | TypeID, Size};
 }
 
+#ifdef _WIN32
 s32 _fltused;
+#endif

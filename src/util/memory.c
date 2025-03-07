@@ -364,7 +364,7 @@ Heap_FreeA(vptr Data)
 internal void
 Heap_Dump(heap *Heap)
 {
-   file_handle FileHandle;
+   file_handle *FileHandle;
    Platform_OpenFile(&FileHandle, "heap_dump.txt", FILE_WRITE);
    u32 FileOffset = 0;
    
