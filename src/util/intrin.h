@@ -14,8 +14,8 @@
 #ifdef _MSVC
 
 typedef union __declspec(intrin_type) __declspec(align(16)) __m128 {
-    r32 R32[4];
-    r64 R64[2];
+	r32 R32[4];
+	r64 R64[2];
 } r128;
 
 void __debugbreak(void);
@@ -39,7 +39,7 @@ r128 _mm_set_ps(r32, r32, r32, r32);
 #define Intrin_BitScanReverse64(u32_p_Index, u64_Value) RETURNS(b08)  _BitScanReverse(u32_p_Index, u64_Value)
 
 inline r32 Intrin_Sqrt_R32(r32 Value) {
-    return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(Value)));
+	return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(Value)));
 }
 
 typedef u08* va_list;
@@ -47,69 +47,98 @@ void __va_start(va_list *Args, ...);
 #define VA_Start(Args, Last) ((void)(__va_start(&Args, Last)))
 #define VA_End(Args) ((void)(Args = NULL))
 #define VA_Next(Args, Type) \
-    ((sizeof(Type) > 8 || (sizeof(Type) & (sizeof(Type) - 1)) != 0) /*Pointer or not a power of 2*/ \
-        ? **(Type**)((Args += 8) - 8) \
-        :  *(Type* )((Args += 8) - 8))
+	((sizeof(Type) > 8 || (sizeof(Type) & (sizeof(Type) - 1)) != 0) /*Pointer or not a power of 2*/ \
+		? **(Type**)((Args += 8) - 8) \
+		:  *(Type* )((Args += 8) - 8))
 
 #elif defined(_GCC)
 
-inline u64 Intrin_ReadGSQWord(u32 Offset) {
-    u64 Result;
-    __asm__ (
-        "mov %%gs:0(%1), %0"
-        : "=r" (Result)
-        : "r" (Offset)
-    );
-    return Result;
+internal u64
+Intrin_ReadGSQWord(u32 Offset)
+{
+	u64 Result;
+	__asm__ (
+		"mov %%gs:0(%1), %0"
+		: "=r" (Result)
+		: "r" (Offset)
+	);
+	return Result;
 }
 
-inline void Intrin_DebugBreak() {
-    __asm__ ( "int3" );
+#define Intrin_DebugBreak() __asm__ ( "int3" )
+#define Intrin_Nop() __asm__ ( "nop" )
+
+internal u16
+Intrin_ByteSwap16(u16 Value)
+{
+	__asm__ ( "xchg %%al, %%ah" : "+a" (Value) );
+	return Value;
 }
 
-inline void Intrin_Nop() {
-    __asm__ ( "nop" );
+internal u32
+Intrin_ByteSwap32(u32 Value)
+{
+	__asm__ ( "bswap %0" : "+r" (Value) );
+	return Value;
 }
 
-inline u64 Intrin_Popcount64(u64 Value) {
-    u64 Result;
-    __asm__ ( "popcnt %1, %0" : "=r" (Result) : "r" (Value) );
-    return Result;
+internal u64
+Intrin_ByteSwap64(u64 Value)
+{
+	__asm__ ( "bswapq %0" : "+r" (Value) );
+	return Value;
 }
 
-inline u64 Intrin_ReadTimeStampCounter() {
-    u64 Result;
-    __asm__ volatile (
-        "rdtsc\n"
-        "shlq $32, %%rdx\n"
-        "orq %%rdx, %%rax\n"
-        : "=a" (Result)
-    );
-    return Result;
+internal u64
+Intrin_Popcount64(u64 Value)
+{
+	__asm__ ( "popcnt %0, %0" : "+r" (Value) );
+	return Value;
 }
 
-inline b08 Intrin_BitScanForward64(u32 *Index, u64 Value) {
-    u64 Index64;
-    __asm__ ( "bsf %1, %0" : "=r" (Index64) : "r" (Value) );
-    *Index = Index64;
-    return Value != 0;
+internal u64
+Intrin_ReadTimeStampCounter()
+{
+	u64 Result;
+	__asm__ volatile (
+		"rdtsc\n"
+		"shlq $32, %%rdx\n"
+		"orq %%rdx, %%rax\n"
+		: "=a" (Result)
+	);
+	return Result;
 }
 
-inline b08 Intrin_BitScanReverse32(u32 *Index, u32 Value) {
-    __asm__ ( "bsr %1, %0" : "=r" (*Index) : "r" (Value) );
-    return Value != 0;
+internal b08
+Intrin_BitScanForward64(u32 *Index, u64 Value)
+{
+	u64 Index64;
+	__asm__ ( "bsf %1, %0" : "=r" (Index64) : "r" (Value) );
+	*Index = Index64;
+	return Value != 0;
 }
 
-inline b08 Intrin_BitScanReverse64(u32 *Index, u64 Value) {
-    u64 Index64;
-    __asm__ ( "bsr %1, %0" : "=r" (Index64) : "r" (Value) );
-    *Index = Index64;
-    return Value != 0;
+internal b08
+Intrin_BitScanReverse32(u32 *Index, u32 Value)
+{
+	__asm__ ( "bsr %1, %0" : "=r" (*Index) : "r" (Value) );
+	return Value != 0;
 }
 
-inline r32 Intrin_Sqrt_R32(r32 Value) {
-    __asm__ ( "sqrtss %1, %0" : "+x" (Value) );
-    return Value;
+internal b08
+Intrin_BitScanReverse64(u32 *Index, u64 Value)
+{
+	u64 Index64;
+	__asm__ ( "bsr %1, %0" : "=r" (Index64) : "r" (Value) );
+	*Index = Index64;
+	return Value != 0;
+}
+
+internal r32
+Intrin_Sqrt_R32(r32 Value)
+{
+	__asm__ ( "sqrtss %1, %0" : "+x" (Value) );
+	return Value;
 }
 
 typedef __builtin_va_list va_list;

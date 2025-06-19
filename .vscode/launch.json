@@ -18,9 +18,9 @@
             "name": "Debug Program (Linux)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "build/platform",
+            "program": "${workspaceFolder}/build/platform",
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/build",
             "environment": [],
             "MIMode": "gdb",
             "setupCommands": [
