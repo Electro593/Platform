@@ -64,16 +64,30 @@
 #define EQUAL   0
 #define GREATER 1
 
-typedef signed   __int8  s08;
-typedef signed   __int16 s16;
-typedef signed   __int32 s32;
-typedef signed   __int64 s64;
+#ifdef _MSVC
+    typedef signed   __int8  s08;
+    typedef signed   __int16 s16;
+    typedef signed   __int32 s32;
+    typedef signed   __int64 s64;
 
-typedef unsigned __int8  u08;
-typedef unsigned __int16 u16;
-typedef unsigned __int32 u32;
-typedef unsigned __int64 u64;
+    typedef unsigned __int8  u08;
+    typedef unsigned __int16 u16;
+    typedef unsigned __int32 u32;
+    typedef unsigned __int64 u64;
+#elif defined(_GCC) && defined(_X64)
+    typedef signed char      __int8  s08;
+    typedef signed short     __int16 s16;
+    typedef signed int       __int32 s32;
+    typedef signed long long __int64 s64;
 
+    typedef unsigned char      u08;
+    typedef unsigned short     u16;
+    typedef unsigned int       u32;
+    typedef unsigned long long u64;
+#else
+    #error Unsupported os+architecture combination
+#endif
+    
 typedef float  r32;
 typedef double r64;
 
