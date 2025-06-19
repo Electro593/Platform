@@ -94,6 +94,14 @@
     static_assert(sizeof(u64) == 8, "u64 must be 8 bytes!");
 #endif
 
+    typedef unsigned char      u08;
+    typedef unsigned short     u16;
+    typedef unsigned int       u32;
+    typedef unsigned long long u64;
+#else
+    #error Unsupported os+architecture combination
+#endif
+
 typedef float  r32;
 typedef double r64;
 static_assert(sizeof(r32) == 4, "r32 must be 4 bytes!");
