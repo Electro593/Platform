@@ -61,34 +61,83 @@ CLString(c08 *Chars,
 	String.Text = Chars;
 	return String;
 }
-internal string CString(c08 *Chars) { return CLString(Chars, Mem_BytesUntil(Chars, 0)); }
-internal string CNString(c08 *Chars) { return CLString(Chars, Mem_BytesUntil(Chars, 0)+1); }
+internal string CString(c08 *Chars) { return CLString(Chars, Mem_BytesUntil((u08*) Chars, 0)); }
+internal string CNString(c08 *Chars) { return CLString(Chars, Mem_BytesUntil((u08*) Chars, 0)+1); }
 internal string LString(u64 Length) { return CLString(Stack_Allocate(Length), Length); }
 
-internal void
-SetVAArgsToIndex(va_list ArgsStart, va_list *Args, u32 Index)
-{
-	#ifdef _X64
-		*Args = ArgsStart + 8*Index;
-	#endif
-}
+// internal arg
+// ReadArgAtIndex(va_args *Args, u32 Index, type Type) {
+// 	//NOTE: Referring to the same argument with multiple types will always use the first one
+// 	
+// 	while (Args->CacheCount <= Index) {
+// 		arg Arg;
+// 		switch (Type.ID) {
+// 			case TypeID_S08:  Arg.I = va_arg(Args->List, s08) \
+// 			case TypeID_S16:  Arg.I = va_arg(Args->List, s16) \
+// 			case TypeID_S32:  Arg.I = va_arg(Args->List, s32) \
+// 			case TypeID_S64:  Arg.I = va_arg(Args->List, s64) \
+// 			case TypeID_U08:  Arg.I = va_arg(Args->List, u08) \
+// 			case TypeID_U16:  Arg.I = va_arg(Args->List, u16) \
+// 			case TypeID_U32:  Arg.I = va_arg(Args->List, u32) \
+// 			case TypeID_U64:  Arg.I = va_arg(Args->List, u64) \
+// 			case TypeID_R32:  Arg.R = va_arg(Args->List, r32) \
+// 			case TypeID_R64:  Arg.R = va_arg(Args->List, r64) \
+// 			case TypeID_C08:  Arg.I = va_arg(Args->List, c08) \
+// 			case TypeID_STR:  Arg.P = va_arg(Args->List, c08*) \
+// 			case TypeID_VPTR: Arg.P = va_arg(Args->List, vptr) \
+// 			default: STOP;
+// 		}
+// 		Args->Cache[Args->CacheCount++] = Arg;
+// 	}
+// }
 
-typedef struct format_flags {
-	s64 MinChars;
-	s64 Precision;
-	u32 ConversionIndex;
-	b08 AlignLeft        : 1;
-	b08 PrefixPlus       : 1;
-	b08 PrefixSpace      : 1;
-	b08 HashFlag         : 1;
-	b08 HasSeparatorChar : 1;
-	b08 PadZero          : 1;
-	b08 Caps             : 1;
-	b08 CustomPrecision  : 1;
-	b08 CustomConversionIndex : 1;
-	b08 TypeSize              : 2;
-	b08 CustomTypeSize        : 1;
-} format_flags;
+// internal void
+// SetVAArgsToIndex(va_list ArgsStart, va_list *Args, u32 Index)
+// {
+// 	#ifdef _X64
+// 		*Args = ArgsStart + 8*Index;
+// 	#endif
+// }
+
+typedef enum vstring_format_type {
+	VSTRING_FORMAT_NONE,
+	VSTRING_FORMAT_BOOL,
+	VSTRING_FORMAT_INT,
+	VSTRING_FORMAT_UINT_BIN,
+	VSTRING_FORMAT_UINT_OCT,
+	VSTRING_FORMAT_UINT_DEC,
+	VSTRING_FORMAT_UINT_HEX,
+	VSTRING_FORMAT_FLOAT,
+	VSTRING_FORMAT_FLOAT_EXP,
+	VSTRING_FORMAT_FLOAT_HEX,
+	VSTRING_FORMAT_FLOAT_EITHER,
+	VSTRING_FORMAT_CHAR,
+	VSTRING_FORMAT_STRING,
+	VSTRING_FORMAT_POINTER
+} vstring_format_type;
+
+typedef struct vstring_format {
+	u64 MinChars  : 30;
+	u64 Precision : 30;
+	u64 Type      :  4;
+	
+	// u16 MinCharsIndex;
+	u16 PrecisionIndex;
+	u16 ConversionIndex;
+	
+	u08 AlignLeft        : 1;
+	u08 PrefixPlus       : 1;
+	u08 PrefixSpace      : 1;
+	u08 HashFlag         : 1;
+	u08 HasSeparatorChar : 1;
+	u08 PadZero          : 1;
+	u08 Caps             : 1;
+	u08 CustomTypeSize   : 1;
+	u08 TypeSize              : 2;
+	// u08 CustomMinChars        : 1;
+	u08 CustomPrecision       : 1;
+	u08 CustomConversionIndex : 1;
+} vstring_format;
 
 internal void
 WritePadding(
@@ -102,48 +151,48 @@ internal void
 WriteSignedNumber(
 	c08 **Out,
 	s64 Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(!Flags.CustomTypeSize) Value = (s32) Value;
-	else if(Flags.TypeSize == 0) Value = (s08) Value;
-	else if(Flags.TypeSize == 1) Value = (s16) Value;
-	else if(Flags.TypeSize == 2) Value = (s32) Value;
-	else if(Flags.TypeSize == 3) Value = (s64) Value;
+	if(!Format.CustomTypeSize) Value = (s32) Value;
+	else if(Format.TypeSize == 0) Value = (s08) Value;
+	else if(Format.TypeSize == 1) Value = (s16) Value;
+	else if(Format.TypeSize == 2) Value = (s32) Value;
+	else if(Format.TypeSize == 3) Value = (s64) Value;
 	
 	s64 OriginalValue = (s64)Value;
 	
-	if(!Flags.CustomPrecision) Flags.Precision = 1;
+	if(!Format.CustomPrecision) Format.Precision = 1;
 	
 	b08 Negative = (Value < 0);
-	b08 HasPrefix = Negative || Flags.PrefixSpace || Flags.PrefixPlus;
+	b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
 	c08 Prefix;
 	if(Negative) Prefix = '-';
-	else if(Flags.PrefixPlus) Prefix = '+';
-	else if(Flags.PrefixSpace) Prefix = ' ';
+	else if(Format.PrefixPlus) Prefix = '+';
+	else if(Format.PrefixSpace) Prefix = ' ';
 	
 	s32 Len = 0;
 	while(Value > 0) {
 		Value /= 10;
 		Len++;
 	}
-	Len = MAX(Len, Flags.Precision);
+	Len = MAX(Len, Format.Precision);
 	
 	s32 SeparatorCount = 0;
-	if(Flags.HasSeparatorChar) SeparatorCount = (Len-1)/3;
-	s32 MinDigits = Flags.MinChars - HasPrefix - SeparatorCount;
-	if(Flags.PadZero && !Flags.AlignLeft && !Flags.CustomPrecision)
+	if(Format.HasSeparatorChar) SeparatorCount = (Len-1)/3;
+	s32 MinDigits = Format.MinChars - HasPrefix - SeparatorCount;
+	if(Format.PadZero && !Format.AlignLeft && !Format.CustomPrecision)
 		Len = MAX(MinDigits, Len);
 	s32 Padding = MinDigits - Len;
 	
 	Value = OriginalValue * (1-2*Negative);
 	
-	if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	if(!Format.AlignLeft) WritePadding(Out, &Padding);
 	
 	if(HasPrefix) *(*Out)++ = Prefix;
 	
 	u32 IStart = Len + SeparatorCount - 1;
 	for(s32 I = IStart; I >= 0; I--) {
-		if(Flags.HasSeparatorChar && (IStart-I+1)%4 == 0) {
+		if(Format.HasSeparatorChar && (IStart-I+1)%4 == 0) {
 			(*Out)[I] = ',';
 		} else {
 			(*Out)[I] = (Value%10) + '0';
@@ -159,13 +208,13 @@ internal void
 WriteBoolean(
 	c08 **Out,
 	b64 Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(!Flags.CustomTypeSize) Value = (b08) Value;
-	else if(Flags.TypeSize == 0) Value = (b08) Value;
-	else if(Flags.TypeSize == 1) Value = (b16) Value;
-	else if(Flags.TypeSize == 2) Value = (b32) Value;
-	else if(Flags.TypeSize == 3) Value = (b64) Value;
+	if(!Format.CustomTypeSize) Value = (b08) Value;
+	else if(Format.TypeSize == 0) Value = (b08) Value;
+	else if(Format.TypeSize == 1) Value = (b16) Value;
+	else if(Format.TypeSize == 2) Value = (b32) Value;
+	else if(Format.TypeSize == 3) Value = (b64) Value;
 	
 	c08 FalseStr[] = "False";
 	c08 TrueStr[] = "True";
@@ -173,9 +222,9 @@ WriteBoolean(
 	s32 Len;
 	if(Value) Len = sizeof(TrueStr)-1;
 	else      Len = sizeof(FalseStr)-1;
-	s32 Padding = Flags.MinChars - Len;
+	s32 Padding = Format.MinChars - Len;
 	
-	if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	if(!Format.AlignLeft) WritePadding(Out, &Padding);
 	
 	Mem_Cpy(*Out, (Value) ? TrueStr : FalseStr, Len);
 	*Out += Len;
@@ -188,17 +237,17 @@ WriteUnsignedNumber(
 	c08 **Out,
 	u64 Value,
 	c08 Conversion,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(!Flags.CustomTypeSize) Value = (u32) Value;
-	else if(Flags.TypeSize == 0) Value = (u08) Value;
-	else if(Flags.TypeSize == 1) Value = (u16) Value;
-	else if(Flags.TypeSize == 2) Value = (u32) Value;
-	else if(Flags.TypeSize == 3) Value = (u64) Value;
+	if(!Format.CustomTypeSize) Value = (u32) Value;
+	else if(Format.TypeSize == 0) Value = (u08) Value;
+	else if(Format.TypeSize == 1) Value = (u16) Value;
+	else if(Format.TypeSize == 2) Value = (u32) Value;
+	else if(Format.TypeSize == 3) Value = (u64) Value;
 	
 	s64 OriginalValue = (u64)Value;
 	
-	if(!Flags.CustomPrecision) Flags.Precision = 1;
+	if(!Format.CustomPrecision) Format.Precision = 1;
 	
 	u32 Radix;
 	u32 SeparatorGap;
@@ -221,22 +270,22 @@ WriteUnsignedNumber(
 		SeparatorChar = '_';
 	}
 	
-	b08 PrefixLen = Flags.HashFlag * (2*(Radix == 2) + (Radix == 8) + 2*(Radix == 16));
+	b08 PrefixLen = Format.HashFlag * (2*(Radix == 2) + (Radix == 8) + 2*(Radix == 16));
 	s32 Len = 0;
 	while(Value > 0) {
 		Value /= Radix;
 		Len++;
 	}
-	Len = MAX(Len, Flags.Precision);
+	Len = MAX(Len, Format.Precision);
 	
 	s32 SeparatorCount = 0;
-	if(Flags.HasSeparatorChar) SeparatorCount = (Len-1)/SeparatorGap;
-	s32 MinDigits = Flags.MinChars - PrefixLen - SeparatorCount;
-	if(Flags.PadZero && !Flags.AlignLeft && !Flags.CustomPrecision)
+	if(Format.HasSeparatorChar) SeparatorCount = (Len-1)/SeparatorGap;
+	s32 MinDigits = Format.MinChars - PrefixLen - SeparatorCount;
+	if(Format.PadZero && !Format.AlignLeft && !Format.CustomPrecision)
 		Len = MAX(MinDigits, Len);
 	s32 Padding = MinDigits - Len;
 	
-	if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	if(!Format.AlignLeft) WritePadding(Out, &Padding);
 	
 	if(PrefixLen && Radix == 2) {
 		*(*Out)++ = '0';
@@ -248,11 +297,11 @@ WriteUnsignedNumber(
 		*(*Out)++ = Conversion;
 	}
 	
-	u32 Offset = Flags.Caps * 16;
+	u32 Offset = Format.Caps * 16;
 	Value = OriginalValue;
 	u32 IStart = Len + SeparatorCount - 1;
 	for(s32 I = IStart; I >= 0; I--) {
-		if(Flags.HasSeparatorChar && (IStart-I+1)%(SeparatorGap+1) == 0) {
+		if(Format.HasSeparatorChar && (IStart-I+1)%(SeparatorGap+1) == 0) {
 			(*Out)[I] = SeparatorChar;
 		} else {
 			(*Out)[I] = BaseChars[Value%Radix + Offset];
@@ -268,16 +317,16 @@ internal void
 WriteCharacter(
 	c08 **Out,
 	s64 Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(Flags.CustomTypeSize && Flags.TypeSize == 2)
+	if(Format.CustomTypeSize && Format.TypeSize == 2)
 		Assert(FALSE, "Wide chars not implemented!");
 	else Value = (c08) Value;
 	
 	s32 Len = 1;
-	s32 Padding = Flags.MinChars - Len;
+	s32 Padding = Format.MinChars - Len;
 	
-	if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	if(!Format.AlignLeft) WritePadding(Out, &Padding);
 	
 	*(*Out)++ = Value;
 	
@@ -288,9 +337,9 @@ internal void
 WriteString(
 	c08 **Out,
 	string Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(Flags.CustomTypeSize && Flags.TypeSize == 2)
+	if(Format.CustomTypeSize && Format.TypeSize == 2)
 		Assert(FALSE, "Wide strings not implemented!");
 	
 	if(!Value.Text) Value = CLStringL("(null)");
@@ -299,10 +348,10 @@ WriteString(
 	c08 *Start = *Out;
 	
 	s32 Len = Value.Length;
-	if(Flags.CustomPrecision) Len = MIN(Len, Flags.Precision);
-	s32 Padding = Flags.MinChars - Len;
+	if(Format.CustomPrecision) Len = MIN(Len, Format.Precision);
+	s32 Padding = Format.MinChars - Len;
 	
-	if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	if(!Format.AlignLeft) WritePadding(Out, &Padding);
 	
 	while(Len--) *(*Out)++ = *In++;
 	
@@ -313,19 +362,19 @@ internal void
 WritePointer(
 	c08 **Out,
 	vptr Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	format_flags NewFlags = {0};
-	NewFlags.MinChars = Flags.MinChars;
-	NewFlags.AlignLeft = Flags.AlignLeft;
-	NewFlags.HasSeparatorChar = Flags.HasSeparatorChar;
+	vstring_format NewFormat = {0};
+	NewFormat.MinChars = Format.MinChars;
+	NewFormat.AlignLeft = Format.AlignLeft;
+	NewFormat.HasSeparatorChar = Format.HasSeparatorChar;
 	
 	if(!Value) {
-		WriteString(Out, CLStringL("(nil)"), NewFlags);
+		WriteString(Out, CLStringL("(nil)"), NewFormat);
 	} else {
 		*(*Out)++ = '0';
 		*(*Out)++ = 'x';
-		WriteUnsignedNumber(Out, (u64) Value, 'X', NewFlags);
+		WriteUnsignedNumber(Out, (u64) Value, 'X', NewFormat);
 	}
 }
 
@@ -333,26 +382,26 @@ internal b08
 WriteSpecialtyFloat(
 	c08 **Out,
 	r64 Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(Flags.CustomTypeSize && Flags.TypeSize == 3)
+	if(Format.CustomTypeSize && Format.TypeSize == 3)
 		Assert(FALSE, "Long doubles not implemented!");
 	
-	format_flags StringFlags = {0};
-	StringFlags.MinChars = Flags.MinChars;
-	StringFlags.AlignLeft = Flags.AlignLeft;
+	vstring_format StringFormat = {0};
+	StringFormat.MinChars = Format.MinChars;
+	StringFormat.AlignLeft = Format.AlignLeft;
 	
 	if(Value == R64_INF) {
-		WriteString(Out, Flags.Caps ? CLStringL("INF") : CLStringL("inf"), StringFlags);
+		WriteString(Out, Format.Caps ? CLStringL("INF") : CLStringL("inf"), StringFormat);
 	} else if(Value == R64_NINF) {
-		WriteString(Out, Flags.Caps ? CLStringL("-INF") : CLStringL("-inf"), StringFlags);
+		WriteString(Out, Format.Caps ? CLStringL("-INF") : CLStringL("-inf"), StringFormat);
 	} else if(Value != Value) {
 		u64 Binary = FORCE_CAST(u64, Value);
 		u32 FracMax = (R64_MANTISSA_BITS+3)/4;
-		u32 Offset = Flags.Caps * 16;
+		u32 Offset = Format.Caps * 16;
 		
-		string String = Flags.Caps ? CLStringL("-SNAN[0XFFFFFFFFFFFFF]") : CLStringL("-snan[0xfffffffffffff]");
-		String.Text[1] = (Binary & R64_QUIET_MASK) ? (Flags.Caps ? 'Q' : 'q') : (Flags.Caps ? 'S' : 's');
+		string String = Format.Caps ? CLStringL("-SNAN[0XFFFFFFFFFFFFF]") : CLStringL("-snan[0xfffffffffffff]");
+		String.Text[1] = (Binary & R64_QUIET_MASK) ? (Format.Caps ? 'Q' : 'q') : (Format.Caps ? 'S' : 's');
 		
 		u32 Len = 8;
 		u64 MantissaBits = Binary & R64_MANTISSA_MASK;
@@ -372,7 +421,7 @@ WriteSpecialtyFloat(
 			String.Length--;
 		}
 		
-		WriteString(Out, String, StringFlags);
+		WriteString(Out, String, StringFormat);
 	} else {
 		return FALSE;
 	}
@@ -384,15 +433,15 @@ internal void
 WriteHexadecimalFloat(
 	c08 **Out,
 	r64 Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(WriteSpecialtyFloat(Out, Value, Flags)) return;
+	if(WriteSpecialtyFloat(Out, Value, Format)) return;
 	
-	if(Flags.CustomTypeSize && Flags.TypeSize == 3)
+	if(Format.CustomTypeSize && Format.TypeSize == 3)
 		Assert(FALSE, "Long doubles not implemented!");
 	
 	u32 FracMax = (R64_MANTISSA_BITS+3)/4;
-	u32 Offset = Flags.Caps * 16;
+	u32 Offset = Format.Caps * 16;
 	
 	u64 Binary = FORCE_CAST(u64, Value);
 	
@@ -401,8 +450,8 @@ WriteHexadecimalFloat(
 	u64 MantissaBits = Binary & R64_MANTISSA_MASK;
 	
 	b08 Negative = Sign;
-	b08 HasPrefix = Negative || Flags.PrefixSpace || Flags.PrefixPlus;
-	c08 Prefix = Negative ? '-' : Flags.PrefixPlus ? '+' : ' ';
+	b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
+	c08 Prefix = Negative ? '-' : Format.PrefixPlus ? '+' : ' ';
 	
 	b08 IsDenormal = (Exponent == -R64_EXPONENT_BIAS);
 	if(IsDenormal) Exponent++;
@@ -411,27 +460,27 @@ WriteHexadecimalFloat(
 	u32 Index;
 	b08 ValidIndex = Intrin_BitScanForward64(&Index, MantissaBits);
 	u32 FracLen = ValidIndex ? (R64_MANTISSA_BITS - Index) / 4 + 1 : 0;
-	FracLen = MAX(Flags.Precision, FracLen);
+	FracLen = MAX(Format.Precision, FracLen);
 	
 	b08 ExpIsNegative = Exponent < 0;
 	Exponent *= 1 - 2*ExpIsNegative;
-	b08 HasExpSign = ExpIsNegative || Flags.PrefixPlus;
-	b08 ExpHasComma = Flags.HasSeparatorChar && (Exponent > 999);
+	b08 HasExpSign = ExpIsNegative || Format.PrefixPlus;
+	b08 ExpHasComma = Format.HasSeparatorChar && (Exponent > 999);
 	s32 ExpLen = 1 + ExpHasComma;
 	s32 ExpCpy = Exponent;
 	while(ExpCpy /= 10) ExpLen++;
 	
-	b08 HasDecimal = FracLen || Flags.HashFlag;
+	b08 HasDecimal = FracLen || Format.HashFlag;
 	u32 TotalLen = HasPrefix + 2 + 1 + HasDecimal + FracLen + 1 + HasExpSign + ExpLen;
 	
-	s32 Padding = Flags.MinChars - TotalLen;
+	s32 Padding = Format.MinChars - TotalLen;
 	
-	if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	if(!Format.AlignLeft) WritePadding(Out, &Padding);
 	
 	if(HasPrefix) *(*Out)++ = Prefix;
 	
 	*(*Out)++ = '0';
-	*(*Out)++ = (Flags.Caps) ? 'X' : 'x';
+	*(*Out)++ = (Format.Caps) ? 'X' : 'x';
 	
 	*(*Out)++ = IsDenormal ? '0' : '1';
 	
@@ -442,7 +491,7 @@ WriteHexadecimalFloat(
 		*(*Out)++ = BaseChars[Digit + Offset];
 	}
 	
-	*(*Out)++ = (Flags.Caps) ? 'P' : 'p';
+	*(*Out)++ = (Format.Caps) ? 'P' : 'p';
 	
 	if(HasExpSign)
 		*(*Out)++ = ExpIsNegative ? '-' : '+';
@@ -464,16 +513,16 @@ internal void
 WriteFloat(
 	c08 **Out,
 	r64 Value,
-	format_flags Flags)
+	vstring_format Format)
 {
-	if(WriteSpecialtyFloat(Out, Value, Flags)) return;
+	if(WriteSpecialtyFloat(Out, Value, Format)) return;
 	
-	if(Flags.CustomTypeSize && Flags.TypeSize == 3)
+	if(Format.CustomTypeSize && Format.TypeSize == 3)
 		Assert(FALSE, "Long doubles not implemented!");
 	
 	vptr Cursor = Stack_GetCursor();
 	Stack_SetCursor(*Out);
-	string String = R32_ToString((r32) Value, Flags.CustomPrecision ? Flags.Precision : 5);
+	string String = R32_ToString((r32) Value, Format.CustomPrecision ? Format.Precision : 5);
 	Mem_Cpy(*Out, String.Text, String.Length);
 	*Out += String.Length;
 	Stack_SetCursor(Cursor);
@@ -491,11 +540,11 @@ WriteFloat(
 	// }
 	// 
 	// b08 Negative = Sign;
-	// b08 HasPrefix = Negative || Flags.PrefixSpace || Flags.PrefixPlus;
-	// c08 Prefix = Negative ? '-' : Flags.PrefixPlus ? '+' : ' ';
+	// b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
+	// c08 Prefix = Negative ? '-' : Format.PrefixPlus ? '+' : ' ';
 	// 
 	// vptr Cursor = Stack_GetCursor();
-	// vptr TempCursor = (vptr)ALIGN_UP((u64)Out + Flags.MinChars, 8);
+	// vptr TempCursor = (vptr)ALIGN_UP((u64)Out + Format.MinChars, 8);
 	// Stack_SetCursor(TempCursor);
 	// 
 	// bigint Whole = BigInt_InitV(0);
@@ -524,9 +573,9 @@ WriteFloat(
 	// 
 	// u32 TotalLen = HasPrefix;
 	// 
-	// s32 Padding = Flags.MinChars - TotalLen;
+	// s32 Padding = Format.MinChars - TotalLen;
 	// 
-	// if(!Flags.AlignLeft) WritePadding(Out, &Padding);
+	// if(!Format.AlignLeft) WritePadding(Out, &Padding);
 	// 
 	// Stack_SetCursor(TempCursor);
 	// 
@@ -544,253 +593,272 @@ WriteFloat(
 	// Stack_SetCursor(Cursor);
 }
 
-internal u32
-ReadNumber(
-	c08 **In)
-{
-	u32 Value = 0;
-	
-	while(**In >= '0' && **In <= '9')
-		Value = Value * 10 + *(*In)++ - '0';
-	
-	return Value;
-}
+// internal u32
+// ReadNumber(
+// 	c08 **In)
+// {
+// 	u32 Value = 0;
+// 	
+// 	while(**In >= '0' && **In <= '9')
+// 		Value = Value * 10 + *(*In)++ - '0';
+// 	
+// 	return Value;
+// }
 
-internal void
-ReadConversionIndex(
-	c08 **In,
-	format_flags *Flags)
-{
-	if(**In < '0' || **In > '9') return;
-
-	u32 Index = ReadNumber(In);
-	
-	if(**In == '$') {
-		Flags->CustomConversionIndex = TRUE;
-		Flags->ConversionIndex = Index;
-		(*In)++;
-	} else {
-		Flags->MinChars = Index;
-	}
-}
-
-internal void
-ReadActualFlags(
-	c08 **In,
-	format_flags *Flags)
-{
-	while(TRUE) {
-		switch(**In) {
-			case '-':  Flags->AlignLeft        = TRUE; break;
-			case '+':  Flags->PrefixPlus       = TRUE; break;
-			case ' ':  Flags->PrefixSpace      = TRUE; break;
-			case '#':  Flags->HashFlag         = TRUE; break;
-			case '\'': Flags->HasSeparatorChar = TRUE; break;
-			case '0':  Flags->PadZero          = TRUE; break;
-			default: return;
-		}
-		(*In)++;
-	}
-}
-
-internal s64
-ReadArgsFlag(
-	c08 **In,
-	format_flags *Flags,
-	va_list ArgsStart,
-	va_list *Args)
-{
-	if(**In == '*') {
-		(*In)++;
-		
-		if(**In >= '0' && **In <= '9') {
-			u32 Index = ReadNumber(In);
-			Assert(**In == '$', "Invalid format!");
-			(*In)++;
-			
-			SetVAArgsToIndex(ArgsStart, Args, Index - 1);
-		}
-		
-		return VA_Next(*Args, s64);
-	}
-	
-	return ReadNumber(In);
-}
-
-internal void
-ReadMinWidth(
-	c08** In,
-	format_flags *Flags,
-	va_list ArgsStart,
-	va_list *Args)
-{
-	Flags->MinChars = ReadArgsFlag(In, Flags, ArgsStart, Args);
-	
-	if(Flags->MinChars < 0) {
-		Flags->AlignLeft = !Flags->AlignLeft;
-		Flags->MinChars = -Flags->MinChars;
-	}
-}
-
-internal void
-ReadPrecision(
-	c08 **In,
-	format_flags *Flags,
-	va_list ArgsStart,
-	va_list *Args)
-{
-	if(**In != '.') return;
-	(*In)++;
-	
-	Flags->CustomPrecision = TRUE;
-	Flags->Precision = ReadArgsFlag(In, Flags, ArgsStart, Args);
-	
-	if(Flags->Precision < 0) Flags->Precision = 0;
-}
-
-internal void
-ReadTypeModifiers(
-	c08 **In,
-	format_flags *Flags)
-{
-	c08 *C = *In;
-	Flags->CustomTypeSize = TRUE;
-	
-	if(C[0] == 'h' && C[1] == 'h') {
-		Flags->TypeSize = 0;
-		*In += 2;
-	} else if(C[0] == 'l' && C[1] == 'l') {
-		Flags->TypeSize = 3;
-		*In += 2;
-	} else {
-		if(C[0] == 'h')
-			Flags->TypeSize = 1;
-		else if(C[0] == 'l')
-			Flags->TypeSize = 2;
-		else if(C[0] == 'L' || C[0] == 'q' || *C == 'j' || *C == 'z' || *C == 'Z' || *C == 't')
-			Flags->TypeSize = 3;
-		else {
-			Flags->CustomTypeSize = FALSE;
-			return;
-		}
-		(*In)++;
-	}
-}
-
-internal format_flags
-ReadFlags(
-	c08 **In,
-	va_list ArgsStart,
-	va_list *Args)
-{
-	format_flags Flags = {0};
-	
-	ReadConversionIndex(In, &Flags);
-	ReadActualFlags(In, &Flags);
-	ReadMinWidth(In, &Flags, ArgsStart, Args);
-	ReadPrecision(In, &Flags, ArgsStart, Args);
-	ReadTypeModifiers(In, &Flags);
-	
-	if (**In >= 'A' && **In <= 'Z')
-		Flags.Caps = TRUE;
-	
-	if(Flags.CustomConversionIndex)
-		SetVAArgsToIndex(ArgsStart, Args, Flags.ConversionIndex - 1);
-	
-	return Flags;
-}
-
-internal void
-WriteFormattedString(
-	c08 **In,
-	c08 **Out,
-	string Result,
-	va_list ArgsStart,
-	va_list *Args)
-{
-	format_flags Flags = ReadFlags(In, ArgsStart, Args);
-	
-	switch(**In) {
-		case 'T': WriteBoolean(Out, VA_Next(*Args, s64), Flags); break;
-		case 'c': WriteCharacter(Out, VA_Next(*Args, s64), Flags); break;
-		case 's': WriteString(Out, VA_Next(*Args, string), Flags); break;
-		case 'p': WritePointer(Out, VA_Next(*Args, vptr), Flags); break;
-		case 'd': case 'i': WriteSignedNumber(Out, VA_Next(*Args, s64), Flags); break;
-		case 'a': case 'A': WriteHexadecimalFloat(Out, VA_Next(*Args, r64), Flags); break;
-		case 'f': case 'F': WriteFloat(Out, VA_Next(*Args, r64), Flags); break;
-		case 'b': case 'B': case 'o': case 'u': case 'x': case 'X':
-			WriteUnsignedNumber(Out, VA_Next(*Args, u64), **In, Flags); break;
-		
-		case 'e':
-		case 'E':
-		case 'g':
-		case 'G':
-			Assert(FALSE, "Floats not implemented!");
-			break;
-		
-		case 'n': {
-			s64 Diff = (u64)*Out - (u64)Result.Text;
-			if(Flags.CustomTypeSize) {
-				s32 *Value = VA_Next(*Args, s32*);
-				*Value = Diff;
-			} else if(Flags.TypeSize == 0) {
-				s08 *Value = VA_Next(*Args, s08*);
-				*Value = Diff;
-			} else if(Flags.TypeSize == 1) {
-				s16 *Value = VA_Next(*Args, s16*);
-				*Value = Diff;
-			} else if(Flags.TypeSize == 2) {
-				s32 *Value = VA_Next(*Args, s32*);
-				*Value = Diff;
-			} else if(Flags.TypeSize == 3) {
-				s64 *Value = VA_Next(*Args, s64*);
-				*Value = Diff;
-			}
-		} break;
-		
-		default: Assert(FALSE, "Invalid format!");
-	}
-	
-	(*In)++;
-}
+// internal void
+// ReadConversionIndex(
+// 	c08 **In,
+// 	format_flags *Format)
+// {
+// 	if(**In < '0' || **In > '9') return;
+// 
+// 	u32 Index = ReadNumber(In);
+// 	
+// 	if(**In == '$') {
+// 		Format->CustomConversionIndex = TRUE;
+// 		Format->ConversionIndex = Index;
+// 		(*In)++;
+// 	} else {
+// 		Format->MinChars = Index;
+// 	}
+// }
+// 
+// internal void
+// ReadActualFlags(
+// 	c08 **In,
+// 	format_flags *Format)
+// {
+// 	while(TRUE) {
+// 		switch(**In) {
+// 			case '-':  Format->AlignLeft        = TRUE; break;
+// 			case '+':  Format->PrefixPlus       = TRUE; break;
+// 			case ' ':  Format->PrefixSpace      = TRUE; break;
+// 			case '#':  Format->HashFlag         = TRUE; break;
+// 			case '\'': Format->HasSeparatorChar = TRUE; break;
+// 			case '0':  Format->PadZero          = TRUE; break;
+// 			default: return;
+// 		}
+// 		(*In)++;
+// 	}
+// }
+// 
+// internal s64
+// ReadArgsFlag(
+// 	c08 **In,
+// 	format_flags *Format,
+// 	va_list ArgsStart,
+// 	va_list *Args)
+// {
+// 	if(**In == '*') {
+// 		(*In)++;
+// 		
+// 		if(**In >= '0' && **In <= '9') {
+// 			u32 Index = ReadNumber(In);
+// 			Assert(**In == '$', "Invalid format!");
+// 			(*In)++;
+// 			
+// 			SetVAArgsToIndex(ArgsStart, Args, Index - 1);
+// 		}
+// 		
+// 		return VA_Next(*Args, s64);
+// 	}
+// 	
+// 	return ReadNumber(In);
+// }
+// 
+// internal void
+// ReadMinWidth(
+// 	c08** In,
+// 	format_flags *Format,
+// 	va_list ArgsStart,
+// 	va_list *Args)
+// {
+// 	Format->MinChars = ReadArgsFlag(In, Format, ArgsStart, Args);
+// 	
+// 	if(Format->MinChars < 0) {
+// 		Format->AlignLeft = !Format->AlignLeft;
+// 		Format->MinChars = -Format->MinChars;
+// 	}
+// }
+// 
+// internal void
+// ReadPrecision(
+// 	c08 **In,
+// 	format_flags *Format,
+// 	va_list ArgsStart,
+// 	va_list *Args)
+// {
+// 	if(**In != '.') return;
+// 	(*In)++;
+// 	
+// 	Format->CustomPrecision = TRUE;
+// 	Format->Precision = ReadArgsFlag(In, Format, ArgsStart, Args);
+// 	
+// 	if(Format->Precision < 0) Format->Precision = 0;
+// }
+// 
+// internal void
+// ReadTypeModifiers(
+// 	c08 **In,
+// 	format_flags *Format)
+// {
+// 	c08 *C = *In;
+// 	Format->CustomTypeSize = TRUE;
+// 	
+// 	if(C[0] == 'h' && C[1] == 'h') {
+// 		Format->TypeSize = 0;
+// 		*In += 2;
+// 	} else if(C[0] == 'l' && C[1] == 'l') {
+// 		Format->TypeSize = 3;
+// 		*In += 2;
+// 	} else {
+// 		if(C[0] == 'h')
+// 			Format->TypeSize = 1;
+// 		else if(C[0] == 'l')
+// 			Format->TypeSize = 2;
+// 		else if(C[0] == 'L' || C[0] == 'q' || *C == 'j' || *C == 'z' || *C == 'Z' || *C == 't')
+// 			Format->TypeSize = 3;
+// 		else {
+// 			Format->CustomTypeSize = FALSE;
+// 			return;
+// 		}
+// 		(*In)++;
+// 	}
+// }
+// 
+// internal void
+// VString_ReadFormat(
+// 	c08 **In,
+// 	vstring_format *Args,
+// 	u32 *ArgCount)
+// {
+// 	vstring_format Format = {0};
+// 	
+// 	ReadConversionIndex(In, &Format);
+// 	ReadActualFlags(In, &Format);
+// 	ReadMinWidth(In, &Format, ArgsStart, Args);
+// 	ReadPrecision(In, &Format, ArgsStart, Args);
+// 	ReadTypeModifiers(In, &Format);
+// 	
+// 	if (**In >= 'A' && **In <= 'Z')
+// 		Format.Caps = TRUE;
+// 	
+// 	if(Format.CustomConversionIndex)
+// 		SetVAArgsToIndex(ArgsStart, Args, Format.ConversionIndex - 1);
+// 	
+// 	return Format;
+// }
+// 
+// internal void
+// VString_WriteFormattedValue(
+// 	c08 **In,
+// 	c08 **Out,
+// 	string Result,
+// 	format_flags *Args,
+// 	va_list ArgsStart,
+// 	va_list *Args)
+// {
+// 	vstring_format Format = ReadFlags(In, ArgsStart, Args);
+// 	
+// 	switch(**In) {
+// 		case 'T': WriteBoolean(Out, VA_Next(*Args, s64), Format); break;
+// 		case 'c': WriteCharacter(Out, VA_Next(*Args, s64), Format); break;
+// 		case 's': WriteString(Out, VA_Next(*Args, string), Format); break;
+// 		case 'p': WritePointer(Out, VA_Next(*Args, vptr), Format); break;
+// 		case 'd': case 'i': WriteSignedNumber(Out, VA_Next(*Args, s64), Format); break;
+// 		case 'a': case 'A': WriteHexadecimalFloat(Out, VA_Next(*Args, r64), Format); break;
+// 		case 'f': case 'F': WriteFloat(Out, VA_Next(*Args, r64), Format); break;
+// 		case 'b': case 'B': case 'o': case 'u': case 'x': case 'X':
+// 			WriteUnsignedNumber(Out, VA_Next(*Args, u64), **In, Format); break;
+// 		
+// 		case 'e':
+// 		case 'E':
+// 		case 'g':
+// 		case 'G':
+// 			Assert(FALSE, "Floats not implemented!");
+// 			break;
+// 		
+// 		case 'n': {
+// 			s64 Diff = (u64)*Out - (u64)Result.Text;
+// 			if(Format.CustomTypeSize) {
+// 				s32 *Value = VA_Next(*Args, s32*);
+// 				*Value = Diff;
+// 			} else if(Format.TypeSize == 0) {
+// 				s08 *Value = VA_Next(*Args, s08*);
+// 				*Value = Diff;
+// 			} else if(Format.TypeSize == 1) {
+// 				s16 *Value = VA_Next(*Args, s16*);
+// 				*Value = Diff;
+// 			} else if(Format.TypeSize == 2) {
+// 				s32 *Value = VA_Next(*Args, s32*);
+// 				*Value = Diff;
+// 			} else if(Format.TypeSize == 3) {
+// 				s64 *Value = VA_Next(*Args, s64*);
+// 				*Value = Diff;
+// 			}
+// 		} break;
+// 		
+// 		default: Assert(FALSE, "Invalid format!");
+// 	}
+// 	
+// 	(*In)++;
+// }
 
 /* TODO:
-  - %f/%F, %e/%E, %g/%G, %m, %S, %C, 
+  - %f/%F, %e/%E, %g/%G, %m, %S, %C, %m
   - %lc, %ls, %La
   - wn, wfn
+  - Custom MinChars index
 */
 internal string
 VString(
 	string Format,
-	va_list Args)
+	va_list List)
 {
-	va_list ArgsStart = Args;
+	// First, read through and parse all format specifiers
 	
-	c08 *Out = Stack_GetCursor();
-	string Result;
-	Result.Resizable = FALSE;
-	Result.Text = Out;
+	// va_arg *Args = (va_arg*) Stack_GetCursor();
+	// u32 ArgCount = 0;
+	// 
+	// c08 *C = Format.Text;
+	// while(C < Format.Text + Format.Length) {
+	// 	C++;
+	// 	if(*(C-1) == '%') {
+	// 		if(*C != '%') VString_ReadFlags(&C, Args, &ArgCount);
+	// 		C++;
+	// 	}
+	// }
 	
-	c08 *C = Format.Text;
-	while(C < Format.Text+Format.Length) {
-		if(*C == '%') {
-			C++;
-			if(*C == '%') {
-				*Out++ = *C++;
-			} else {
-				WriteFormattedString(&C, &Out, Result, ArgsStart, &Args);
-			}
-		} else {
-			*Out++ = *C++;
-		}
-	}
+	// Next, apply the formats 
 	
-	Result.Length = (u64)Out - (u64)Result.Text;
-	Result.Capacity = Result.Length;
+	// c08 *Out = (c08*) (Args + ArgCount);
+	// 
+	// string Result;
+	// Result.Resizable = FALSE;
+	// Result.Text = Out;
+	// 
+	// c08 *C = Format.Text;
+	// while(C < Format.Text + Format.Length) {
+	// 	if(*C == '%') {
+	// 		C++;
+	// 		if(*C == '%') {
+	// 			*Out++ = *C++;
+	// 		} else {
+	// 			WriteFormattedString(&C, &Out, Result, ArgsStart, &Args);
+	// 		}
+	// 	} else {
+	// 		*Out++ = *C++;
+	// 	}
+	// }
+	// 
+	// Result.Length = (u64)Out - (u64)Result.Text;
+	// Result.Capacity = Result.Length;
+	// 
+	// Stack_SetCursor(Out);
 	
-	Stack_SetCursor(Out);
+	// return Result;
 	
-	return Result;
+	return Format;
 }
 
 internal string

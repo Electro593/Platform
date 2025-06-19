@@ -7,9 +7,11 @@
                 "${workspaceFolder}/Platform/src/**"
             ],
             "defines": [
+                "_WIN32=1",
                 "_MSVC=1",
                 "_X64=1",
                 "_DEBUG=1",
+                "_OPENGL=1",
                 "_GAME_MODULE",
                 "_PLATFORM_MODULE",
                 "_RENDERER_MODULE",
@@ -19,6 +21,28 @@
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "windows-msvc-x64"
+        },
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/src/**",
+                "${workspaceFolder}/Platform/src/**"
+            ],
+            "defines": [
+                "_LINUX=1",
+                "_GCC=1",
+                "_X64=1",
+                "_DEBUG=1",
+                "_OPENGL=1",
+                "_GAME_MODULE",
+                "_PLATFORM_MODULE",
+                "_RENDERER_MODULE",
+                "INCLUDE_HEADER",
+                "INCLUDE_SOURCE"
+            ],
+            "cStandard": "c23",
+            "cppStandard": "c++23",
+            "intelliSenseMode": "linux-gcc-x64"
         }
     ],
     "version": 4

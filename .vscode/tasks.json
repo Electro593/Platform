@@ -11,7 +11,20 @@
         {
             "type": "shell",
             "label": "Run Program (MS)",
-            "command": ".\\build\\Platform.exe",
+            "command": ".\\build\\platform.exe",
+            "group": "test"
+        },
+        {
+            "label": "Build Program (SH)",
+            "type": "shell",
+            "command": "chmod +rwx ./Platform/scripts/build.sh && ./Platform/scripts/build.sh",
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "type": "shell",
+            "label": "Run Program (SH)",
+            "command": "chmod +rwx ./build/platform && ./build/platform",
             "group": "test"
         },
     ]

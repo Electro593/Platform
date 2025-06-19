@@ -7,20 +7,10 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include <shared.h>
+#include <platform/win32/win32.h>
+#include <platform/platform.c>
 
-#define INCLUDE_HEADER
-#include <util/main.c>
-#undef INCLUDE_HEADER
-
-#include <platform/platform.h>
-
-#ifdef _OPENGL
-#define INCLUDE_HEADER
-   #include <renderer_opengl/opengl.h>
-   // #include <renderer/opengl/mesh.h>
-#undef INCLUDE_HEADER
-#endif
+typedef win32_handle file_handle;
 
 global win32_window PrimaryWindow;
 global platform_state *Platform;
@@ -30,49 +20,9 @@ global s64 CounterFrequency = 0;
 internal void Platform_Stub(void) { };
 
 internal void
-_Mem_Set(u08 *D, u08 B, u32 Bytes)
-{
-   while(Bytes--) *D++ = B;
-}
-
-internal void
-_Mem_Cpy(u08 *D, u08 *S, u32 Bytes)
-{
-   while(Bytes--) *D++ = *S++;
-}
-
-internal void
-_Mem_CpyRev(u08 *D, u08 *S, u32 Bytes)
-{
-   D += Bytes-1;
-   S += Bytes-1;
-   while(Bytes--) *D-- = *S--;
-}
-
-internal s08
-_Mem_Cmp(u08 *A, u08 *B, u32 Bytes)
-{
-   while(Bytes) {
-      if(*A > *B) return GREATER;
-      if(*A < *B) return LESS;
-      A++, B++, Bytes--;
-   }
-   
-   return EQUAL;
-}
-
-internal u32
-_Mem_BytesUntil(u08 *P, c08 B)
-{
-   u32 Count = 0;
-   while(*P++ != B) Count++;
-   return Count;
-}
-
-internal void
 Platform_LoadWin32(void)
 {
-   win32_teb *TEB = (win32_teb*)Asm_ReadGSQWord(48);
+   win32_teb *TEB = (win32_teb*)Intrin_ReadGSQWord(48);
    win32_list_entry *Entry = TEB->PEB->Ldr->MemoryOrderList.Next;
    u32 Offset = OFFSET_OF(win32_ldr_data_table_entry, MemoryOrderLinks);
    Entry = Entry->Next->Next;
@@ -323,18 +273,18 @@ Platform_FreeMemory(vptr Base)
 }
 
 internal u64
-Platform_GetFileLength(file_handle FileHandle)
+Platform_GetFileLength(file_handle *FileHandle)
 {
    win32_large_integer Size;
    Size.QuadPart = 0;
    
-   Assert(Win32_GetFileSizeEx(FileHandle, &Size));
+   Assert(Win32_GetFileSizeEx(*FileHandle, &Size));
    
    return Size.QuadPart;
 }
 
 internal b08
-Platform_OpenFile(file_handle *FileHandle,
+Platform_OpenFile(file_handle **FileHandle,
                   c08 *FileName,
                   file_mode OpenMode)
 {
@@ -366,17 +316,17 @@ Platform_OpenFile(file_handle *FileHandle,
                                                 NULL, CreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
    
    if(GivenHandle != INVALID_HANDLE_VALUE) {
-      *(win32_handle*)FileHandle = GivenHandle;
+      **(win32_handle**)FileHandle = GivenHandle;
       return TRUE;
    } else {
-      *(win32_handle*)FileHandle = NULL;
+      **(win32_handle**)FileHandle = NULL;
    }
    
    return FALSE;
 }
 
 internal u64
-Platform_ReadFile(file_handle FileHandle,
+Platform_ReadFile(file_handle *FileHandle,
                   vptr Dest,
                   u64 Length,
                   u64 Offset)
@@ -389,7 +339,7 @@ Platform_ReadFile(file_handle FileHandle,
    while(Length) {
       u32 BytesRead;
       u32 BytesToRead = Length % (U32_MAX+1ULL);
-      b08 Success = Win32_ReadFile(FileHandle, Dest, BytesToRead, &BytesRead, &Overlapped);
+      b08 Success = Win32_ReadFile(*FileHandle, Dest, BytesToRead, &BytesRead, &Overlapped);
       
       if(!Success) {
          u32 DEBUG_Err = Win32_GetLastError();
@@ -406,7 +356,7 @@ Platform_ReadFile(file_handle FileHandle,
 }
 
 internal u64
-Platform_WriteFile(file_handle FileHandle,
+Platform_WriteFile(file_handle *FileHandle,
                    vptr Src,
                    u64 Length,
                    u64 Offset)
@@ -419,7 +369,7 @@ Platform_WriteFile(file_handle FileHandle,
    while(Length) {
       u32 BytesWritten;
       u32 BytesToWrite = Length % (U32_MAX+1ULL);
-      b08 Success = Win32_WriteFile(FileHandle, Src, BytesToWrite, &BytesWritten, &Overlapped);
+      b08 Success = Win32_WriteFile(*FileHandle, Src, BytesToWrite, &BytesWritten, &Overlapped);
       
       if(!Success) {
          u32 DEBUG_Err = Win32_GetLastError();
@@ -460,13 +410,13 @@ Platform_WriteError(string Message, u32 Exit)
    Win32_OutputDebugStringA(StringCopy);
    Platform_FreeMemory(StringCopy);
    
-   if(Exit) Win32_ExitProcess(Exit);
+   if(Exit) Platform_Exit(Exit);
 }
 
 internal void
-Platform_CloseFile(file_handle FileHandle)
+Platform_CloseFile(file_handle *FileHandle)
 {
-   Win32_CloseHandle(FileHandle);
+   Win32_CloseHandle(*FileHandle);
 }
 
 internal void
@@ -802,6 +752,13 @@ Platform_ParseCommandLine(void)
    Platform_FreeMemory(Sizes);
 }
 
+internal void
+Platform_Exit(u32 ExitCode)
+{
+   Win32_ExitProcess(ExitCode);
+   UNREACHABLE;
+}
+
 external void
 Platform_Entry(void)
 {
@@ -902,5 +859,5 @@ Platform_Entry(void)
    
    Stack_Pop();
    
-   Win32_ExitProcess(0);
+   Platform_Exit(0);
 }

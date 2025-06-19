@@ -13,7 +13,7 @@
    #define INCLUDE_HEADER
    #include "main.c"
    #undef INCLUDE_HEADER
-
+   
    #include <platform/platform.h>
 
    #define INCLUDE_SOURCE
@@ -21,36 +21,37 @@
    #undef INCLUDE_SOURCE
 #else
    #ifdef INCLUDE_SOURCE
-      global struct module_state {
-         stack *Stack;
-      } _G;
-      
-      global util_funcs _F;
+      extern struct util_state _G;
+      extern struct util_funcs _F;
    #endif
    
    #include <util/intrin.h>
    #include <util/scalar.c>
    #include <util/vector.c>
-   #include <util/bigint.c>
    #include <util/memory.c>
+   #include <util/bigint.c>
    #include <util/string.c>
    #include <util/set.c>
    #include <util/msdf.c>
    #include <util/font.c>
    #include <util/file.c>
    
-   #ifdef INCLUDE_HEADER
+   #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
       #define UTIL_FUNCS \
          SCALAR_FUNCS \
          VECTOR_FUNCS \
-         BIGINT_FUNCS \
          MEMORY_FUNCS \
+         BIGINT_FUNCS \
          STRING_FUNCS \
          SET_FUNCS \
          MSDF_FUNCS \
          FONT_FUNCS \
          FILE_FUNCS \
-
+      
+      typedef struct util_state {
+         stack *Stack;
+      } util_state;
+      
       typedef struct util_funcs {
          #define EXPORT(R, N, ...) \
             R (*N)(__VA_ARGS__);
@@ -72,6 +73,9 @@
    #endif
    
    #ifdef INCLUDE_SOURCE
+      util_state _G;
+      util_funcs _F;
+      
       external API_EXPORT void
       Load(platform_state *Platform, platform_module *Module)
       {
