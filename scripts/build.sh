@@ -13,7 +13,7 @@ CompilerSwitches="$CompilerSwitches -D_LINUX -D_GCC -D_X64 -D_OPENGL"
 LinkerSwitches="$LinkerSwitches -nostdlib" # /subsystem:windows /stack:0x100000,0x100000 /machine:x64
 
 DLLCompilerSwitches="$DLLCompilerSwitches $CompilerSwitches -fPIC"
-DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared"
+DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
 
 if [[ Debug -eq 1 ]]; then
    echo Building as DEBUG
@@ -25,6 +25,8 @@ fi
 
 if [[ -e *.pdb ]]; then rm *.pdb > /dev/null 2> /dev/null; fi
 
+Result=0
+
 build_module() {
    ModuleName=$(basename $Module)
    CapitalName=$(echo $ModuleName | awk '{ print toupper($0) }')
@@ -35,12 +37,20 @@ build_module() {
       echo Building $Module as an executable
       # gcc $CompilerSwitches $LinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}linux/entry.c
       gcc $CompilerSwitches $LinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName ${Module}linux/entry.c
-      objdump -xd $ModuleName > $ModuleName.dump
+      if [[ -e $ModuleName ]]; then
+         objdump -xd $ModuleName > $ModuleName.dump
+      else
+         Result=1
+      fi
    else
       echo Building $Module as a library
       # gcc $DLLCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}main.c
       gcc $DLLCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.so ${Module}main.c
-      objdump -xd $ModuleName.so > $ModuleName.dump
+      if [[ -e $ModuleName.so ]]; then
+         objdump -xd $ModuleName.so > $ModuleName.dump
+      else
+         Result=1
+      fi
    fi
 }
 
@@ -50,3 +60,5 @@ for Module in ../Platform/src/*/; do build_module; done
 if [[ -e *.obj ]]; then rm *.obj > /dev/null; fi
 if [[ -e *.exp ]]; then rm *.exp > /dev/null; fi
 popd > /dev/null
+
+exit $Result

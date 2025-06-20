@@ -77,7 +77,6 @@ Elf_SetupAndValidate(elf_state *State)
 	if (State->Header->ProgramHeaderCount) {
 		State->ProgramHeaderTable = State->File + State->Header->ProgramHeaderTableOffset;
 
-		u64 MaxLoadableVAddress = 0;
 		b08 FoundLoadable = FALSE;
 		b08 FoundPHDR = FALSE;
 		b08 FoundInterp = FALSE;
@@ -94,8 +93,6 @@ Elf_SetupAndValidate(elf_state *State)
 					break;
 				case ELF_SEGMENT_TYPE_LOAD:
 					if (Header->FileSize > Header->MemSize) return ELF_ERROR_INVALID_FORMAT;
-					if (Header->VirtualAddress < MaxLoadableVAddress) return ELF_ERROR_INVALID_FORMAT;
-					MaxLoadableVAddress = Header->VirtualAddress;
 					break;
 				case ELF_SEGMENT_TYPE_DYNAMIC:
 					break;
@@ -130,12 +127,15 @@ Elf_SetupAndValidate(elf_state *State)
 /* ========== EXTERNAL API ========== */
 
 internal elf_error
-Elf_Open(elf_state *State, c08 *FileName)
+Elf_Open(elf_state *State, c08 *FileName, usize PageSize)
 {
+	//TODO: Don't allocate the entire file, just map what's needed
+
 	if (!State || !FileName) return ELF_ERROR_INVALID_ARGUMENT;
 	if (State->State != ELF_STATE_CLOSED) return ELF_ERROR_INVALID_OPERATION;
 
 	*State = (elf_state){0};
+	State->PageSize = PageSize;
 
 	State->FileDescriptor = Sys_Open(FileName, SYS_OPEN_READONLY, 0);
 	if (!CHECK((s32) State->FileDescriptor)) return ELF_ERROR_UNKNOWN;
@@ -161,53 +161,75 @@ Elf_LoadProgram(elf_state *State)
 	if (State->State != ELF_STATE_OPENED) return ELF_ERROR_INVALID_OPERATION;
 
 	if (State->Header->Type == ELF_TYPE_DYNAMIC) {
-		b08 FoundLoadable = FALSE;
-		u64 MinVAddr;
-		u64 MaxVAddr = 0;
+		usize MinVAddr = (usize)-1;
+		usize MaxVAddr = 0;
 
-		for (u32 I = 0; I < State->Header->ProgramHeaderCount; I++) {
+		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
 			switch (Header->Type) {
-				case ELF_SEGMENT_TYPE_NULL: break;
 				case ELF_SEGMENT_TYPE_LOAD: {
-					if (!FoundLoadable) {
-						FoundLoadable = TRUE;
+					if (MinVAddr > Header->VirtualAddress)
 						MinVAddr = Header->VirtualAddress;
-					}
 					if (MaxVAddr < Header->VirtualAddress + Header->MemSize)
 						MaxVAddr = Header->VirtualAddress + Header->MemSize;
 				} break;
-				case ELF_SEGMENT_TYPE_DYNAMIC: break;
-				case ELF_SEGMENT_TYPE_INTERP: break;
-				case ELF_SEGMENT_TYPE_NOTE: break;
-				case ELF_SEGMENT_TYPE_SHLIB: break;
-				case ELF_SEGMENT_TYPE_PHDR: break;
-				case ELF_SEGMENT_TYPE_TLS: break;
 			}
 		}
 
-		if (!FoundLoadable) return ELF_ERROR_SUCCESS;
+		if (MinVAddr == (usize)-1) return ELF_ERROR_INVALID_FORMAT;
 
+		// Reserve the overall space
+		usize PageMask = State->PageSize - 1;
+		MinVAddr &= ~PageMask;
 		State->ImageSize = MaxVAddr - MinVAddr;
+		vptr Base = Sys_MemMap(
+			NULL, (State->ImageSize + PageMask) & ~PageMask,
+			SYS_PROT_NONE, SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS | SYS_MAP_NORESERVE,
+			-1, 0
+		);
+		if ((usize)Base & PageMask) return ELF_ERROR_OUT_OF_MEMORY;
 
-		for (u32 I = 0; I < State->Header->ProgramHeaderCount; I++) {
+		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
 			switch (Header->Type) {
-				case ELF_SEGMENT_TYPE_NULL: break;
 				case ELF_SEGMENT_TYPE_LOAD: {
-					if (!FoundLoadable) {
-						FoundLoadable = TRUE;
-						MinVAddr = Header->VirtualAddress;
+					usize Padding = Header->VirtualAddress & PageMask;
+					vptr ProgBase = Base + (Header->VirtualAddress - MinVAddr);
+					s32 Prot = 0
+						| ((Header->Flags & ELF_SEGMENT_FLAG_READ ) ? SYS_PROT_READ  : 0)
+						| ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE : 0)
+						| ((Header->Flags & ELF_SEGMENT_FLAG_EXEC ) ? SYS_PROT_EXEC  : 0);
+					s32 Flags = SYS_MAP_PRIVATE | SYS_MAP_FIXED;
+
+					// Try to map the file portion into memory
+					if (Header->FileSize > 0) {
+						vptr Addr = Sys_MemMap(
+							(vptr)((usize)ProgBase & ~PageMask),
+							(Header->FileSize + Padding + PageMask) & ~PageMask,
+							Prot, Flags,
+							State->FileDescriptor, Header->Offset - Padding
+						);
+						if ((usize)Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
 					}
-					if (MaxVAddr < Header->VirtualAddress + Header->MemSize)
-						MaxVAddr = Header->VirtualAddress + Header->MemSize;
+
+					// Try to map the nobits portion into memory
+					if (Header->MemSize > Header->FileSize) {
+						usize NoBitsPadding = State->PageSize - (((usize)ProgBase + Header->FileSize) & PageMask);
+						_Mem_Set(ProgBase + Header->FileSize, 0, NoBitsPadding);
+
+						if (Header->MemSize > Header->FileSize + NoBitsPadding) {
+							vptr NoBitsBase = (vptr)(((usize)ProgBase + Header->FileSize + PageMask) & ~PageMask);
+							usize NoBitsExtra = Header->MemSize - Header->FileSize - NoBitsPadding;
+							vptr Addr = Sys_MemMap(
+								NoBitsBase, NoBitsExtra,
+								Prot, Flags | SYS_MAP_ANONYMOUS,
+								-1, 0
+							);
+							if ((usize)Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
+							_Mem_Set(NoBitsBase, 0, NoBitsExtra);
+						}
+					}
 				} break;
-				case ELF_SEGMENT_TYPE_DYNAMIC: break;
-				case ELF_SEGMENT_TYPE_INTERP: break;
-				case ELF_SEGMENT_TYPE_NOTE: break;
-				case ELF_SEGMENT_TYPE_SHLIB: break;
-				case ELF_SEGMENT_TYPE_PHDR: break;
-				case ELF_SEGMENT_TYPE_TLS: break;
 			}
 		}
 	} else {

@@ -22,14 +22,14 @@ __asm__ (
 
 #endif
 
-#define CHECK(Status) ((s64)(Status) >= 0 || (s64)(Status) < -4096)
+#define CHECK(Status) ((ssize)(Status) >= 0 || (ssize)(Status) < -4096)
 
 #include <platform/platform.c>
 #include <platform/linux/elf.c>
 
 #define VALIDATE(Result, ErrorMessage) \
 	do { \
-		s64 Status = (s64) Result; \
+		ssize Status = (ssize) Result; \
 		Assert(CHECK(Status), ErrorMessage); \
 	} while(0)
 
@@ -200,7 +200,7 @@ Platform_CmpFileTime(datetime A, datetime B)
 internal void
 Platform_GetProcAddress(elf_state *State, c08 *Name, vptr *ProcAddress)
 {
-	s32 Error = Elf_GetProcAddress(State, Name, ProcAddress);
+	elf_error Error = Elf_GetProcAddress(State, Name, ProcAddress);
 	if (Error == ELF_ERROR_NOT_FOUND)
 		*ProcAddress = (vptr) Platform_Stub;
 	else
@@ -225,15 +225,15 @@ Platform_ReloadModule(platform_module *Module)
 	}
 	Module->LastWriteTime = LastWriteTime;
 
-	s32 Error = Elf_Open(&Module->ELF, Module->FileName);
+	s32 Error = Elf_Open(&Module->ELF, Module->FileName, Platform->PageSize);
 	Assert(!Error, "Failed to read elf");
 	Error = Elf_LoadProgram(&Module->ELF);
 	Assert(!Error, "Failed to load elf");
 
-	Platform_GetProcAddress(&Module->ELF, "Load", (vptr) Module->Load);
-	Platform_GetProcAddress(&Module->ELF, "Init", (vptr) Module->Init);
-	Platform_GetProcAddress(&Module->ELF, "Update", (vptr) Module->Update);
-	Platform_GetProcAddress(&Module->ELF, "Unload", (vptr) Module->Unload);
+	Platform_GetProcAddress(&Module->ELF, "Load", (vptr*) &Module->Load);
+	Platform_GetProcAddress(&Module->ELF, "Init", (vptr*) &Module->Init);
+	Platform_GetProcAddress(&Module->ELF, "Update", (vptr*) &Module->Update);
+	Platform_GetProcAddress(&Module->ELF, "Unload", (vptr*) &Module->Unload);
 
 	Module->Load(Platform, Module);
 
@@ -248,7 +248,7 @@ Platform_Exit(u32 ExitCode)
 }
 
 external void
-Platform_Entry(s32 argc, c08 **argv, c08 **envp)
+Platform_Entry(u64 ArgCount, c08 **Args, c08 **EnvParams)
 {
 	platform_state _P = {0};
 	Platform = &_P;
@@ -259,6 +259,24 @@ Platform_Entry(s32 argc, c08 **argv, c08 **envp)
 	#include <x.h>
 
 	VALIDATE(Sys_GetClockRes(SYS_CLOCK_REALTIME, &ClockResolution), "Failed to get clock resolution");
+
+	elf_auxv *AuxVectors;
+	u64 EnvCount = 0, AuxCount = 0;
+	{
+		c08 **EnvParam = EnvParams;
+		while (*EnvParam) EnvCount++, EnvParam++;
+
+		AuxVectors = (elf_auxv*) (EnvParam+1);
+		elf_auxv *AuxVector = AuxVectors;
+		while (AuxVector->Type != ELF_AT_NULL) AuxCount++, AuxVector++;
+	}
+
+	Platform->PageSize = 4096; // Most common page size
+	for (u64 I = 0; I < AuxCount; I++) {
+		if (AuxVectors[I].Type == ELF_AT_PAGESZ)
+			Platform->PageSize = AuxVectors[I].Value;
+	}
+
 	Platform_LoadUtilFuncs(Platform_LoadModule("util"));
 
 	Platform_Exit(0);

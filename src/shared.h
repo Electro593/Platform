@@ -94,6 +94,14 @@
     static_assert(sizeof(u64) == 8, "u64 must be 8 bytes!");
 #endif
 
+#ifdef _X64
+    typedef s64 ssize;
+    typedef u64 usize;
+#else
+    typedef s32 ssize;
+    typedef u32 usize;
+#endif
+
 typedef float  r32;
 typedef double r64;
 static_assert(sizeof(r32) == 4, "r32 must be 4 bytes!");

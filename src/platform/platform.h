@@ -338,8 +338,8 @@ struct platform_state {
 	v2s32 CursorPos;
 	stack *Stack;
 
-	u32 ModuleCount;
-	u32 ModulesSize;
+	usize ModuleCount;
+	usize ModulesSize;
 	platform_module *Modules;
 
 	v2u32 WindowSize;
@@ -352,6 +352,11 @@ struct platform_state {
 
 	r32 FPS;
 
-	s32 ArgCount;
+	usize ArgCount;
 	c08 **Args;
+
+	usize EnvParamCount;
+	c08 **EnvParams;
+
+	usize PageSize;
 };

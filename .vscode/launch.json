@@ -21,6 +21,7 @@
             "program": "${workspaceFolder}/build/platform",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
+            "preLaunchTask": "Build Program (SH)",
             "environment": [],
             "MIMode": "gdb",
             "setupCommands": [

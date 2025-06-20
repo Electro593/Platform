@@ -442,6 +442,64 @@ typedef struct elf64_dynamic {
 
 #define elf_dynamic ELF_CAT3(elf, ELF_CLASS, _dynamic)
 
+/* ========== AUXILIARY VECTORS ========== */
+
+#define ELF_AT_NULL               0 /* end of vector */
+#define ELF_AT_IGNORE             1 /* entry should be ignored */
+#define ELF_AT_EXECFD             2 /* file descriptor of program */
+#define ELF_AT_PHDR               3 /* program headers for program */
+#define ELF_AT_PHENT              4 /* size of program header entry */
+#define ELF_AT_PHNUM              5 /* number of program headers */
+#define ELF_AT_PAGESZ             6 /* system page size */
+#define ELF_AT_BASE               7 /* base address of interpreter */
+#define ELF_AT_FLAGS              8 /* flags */
+#define ELF_AT_ENTRY              9 /* entry point of program */
+#define ELF_AT_NOTELF            10 /* program is not ELF */
+#define ELF_AT_UID               11 /* real uid */
+#define ELF_AT_EUID              12 /* effective uid */
+#define ELF_AT_GID               13 /* real gid */
+#define ELF_AT_EGID              14 /* effective gid */
+#define ELF_AT_PLATFORM          15 /* string identifying CPU for optimizations */
+#define ELF_AT_HWCAP             16 /* arch dependent hints at CPU capabilities */
+#define ELF_AT_CLKTCK            17 /* frequency at which times() increments */
+#define ELF_AT_SECURE            23 /* secure mode boolean */
+#define ELF_AT_BASE_PLATFORM     24 /* string identifying real platform, may differ from AT_PLATFORM. */
+#define ELF_AT_RANDOM            25 /* address of 16 random bytes */
+#define ELF_AT_HWCAP2            26 /* extension of AT_HWCAP */
+#define ELF_AT_RSEQ_FEATURE_SIZE 27 /* rseq supported feature size */
+#define ELF_AT_RSEQ_ALIGN        28 /* rseq allocation alignment */
+#define ELF_AT_HWCAP3            29 /* extension of AT_HWCAP */
+#define ELF_AT_HWCAP4            30 /* extension of AT_HWCAP */
+#define ELF_AT_EXECFN            31 /* filename of program */
+#define ELF_AT_MINSIGSTKSZ       51 /* minimal stack size for signal delivery */
+
+#define ELF_AT_SYSINFO      32
+#define ELF_AT_SYSINFO_EHDR 33
+
+typedef struct elf32_auxv {
+	u32 Type;
+	union {
+		u32 Value;
+		#if ELF_CLASS == 32
+		void *Pointer;
+		void (*Function)(void);
+		#endif
+	};
+} elf32_auxv;
+
+typedef struct elf64_auxv {
+	u64 Type;
+	union {
+		u64 Value;
+		#if ELF_CLASS == 64
+		void *Pointer;
+		void (*Function)(void);
+		#endif
+	};
+} elf64_auxv;
+
+#define elf_auxv ELF_CAT3(elf, ELF_CLASS, _auxv)
+
 /* ========== IMPLEMENTATION ========== */
 
 #define ELF_ERROR_SUCCESS           0
@@ -452,6 +510,8 @@ typedef struct elf64_dynamic {
 #define ELF_ERROR_NOT_FOUND         5
 #define ELF_ERROR_UNKNOWN_FORMAT    6
 #define ELF_ERROR_NOT_SUPPORTED     7
+#define ELF_ERROR_OUT_OF_MEMORY     8
+#define ELF_ERROR_INVALID_MEM_MAP   9
 
 #define ELF_STATE_CLOSED           0
 #define ELF_STATE_OPENED           1
@@ -462,6 +522,7 @@ typedef s32 elf_error;
 typedef struct elf_state {
 	// General
 	u08 State;
+	u64 PageSize;
 
 	// Mapped file
 	u32 FileDescriptor;
