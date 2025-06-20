@@ -30,6 +30,131 @@ Elf_GetProgramHeader(elf_state *State, u64 Index)
 	return (vptr) (State->ProgramHeaderTable + State->Header->ProgramHeaderSize * Index);
 }
 
+internal bool
+Elf_CheckName(c08 *Name, c08 *Expected)
+{
+	usize Bytes = _Mem_BytesUntil((u08*) Expected, 0);
+	bool Same = _Mem_Cmp((u08*) Name, (u08*) Expected, Bytes) == 0;
+	bool Ending = Name[Bytes] == '.' || Name[Bytes] == '\0';
+	return Same && Ending;
+}
+
+internal usize
+Elf_ExtractAddend(elf_state *State, usize Type)
+{
+	switch (State->Header->Machine) {
+		case ELF_MACHINE_X86_64: return 0; // X86_64 uses only Rela
+		default: return 0;
+	}
+}
+
+internal usize
+Elf_ComputeRelocation(elf_state *State, usize Type, usize A, usize S, usize B)
+{
+	usize V = 0;
+	switch (State->Header->Machine) {
+		case ELF_MACHINE_X86_64: {
+			switch (Type) {
+				case ELF_RELOCATION_X86_64_GLOB_DAT: V = S; break;
+				case ELF_RELOCATION_X86_64_RELATIVE: V = B + A; break;
+				default: Platform_Exit(1); break;
+			}
+		} break;
+	}
+	return V;
+}
+
+internal void
+Elf_ApplyRelocation(elf_state *State, vptr Target, usize Type, usize Value)
+{
+	u64 *V64 = Target;
+	switch (State->Header->Machine) {
+		case ELF_MACHINE_X86_64: {
+			switch (Type) {
+				case ELF_RELOCATION_X86_64_GLOB_DAT: *V64 = Value; break;
+				case ELF_RELOCATION_X86_64_RELATIVE: *V64 = Value; break;
+				default: Platform_Exit(1); break;
+			}
+		} break;
+	}
+}
+
+internal elf_error
+Elf_HandleRelocations(elf_state *State)
+{
+	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
+	if (State->State != ELF_STATE_LOADED_NORELOC) return ELF_ERROR_INVALID_OPERATION;
+
+	for (usize I = 0; I < State->SectionHeaderCount; I++) {
+		elf_section_header *Header = Elf_GetSectionHeader(State, I);
+		vptr Data = State->File + Header->Offset;
+		char *Name = (char*)(State->SectionNameTable + Header->Name);
+
+		bool IsRela = Elf_CheckName(Name, ".rela");
+		bool IsRel = !IsRela && Elf_CheckName(Name, ".rel");
+
+		if (!IsRela && !IsRel) continue;
+
+		elf_section_header *SymtabHeader = Elf_GetSectionHeader(State, Header->Link);
+		vptr Symtab = State->File + SymtabHeader->Offset;
+
+		elf_section_header *TargetHeader = Elf_GetSectionHeader(State, Header->Info);
+		vptr TargetBase = State->File + TargetHeader->Offset;
+
+		elf_section_header *StrtabHeader = Elf_GetSectionHeader(State, SymtabHeader->Link);
+		vptr Strtab = State->File + StrtabHeader->Offset;
+
+		vptr PrevTarget = NULL, Cursor = Data;
+		usize Value, RelocType;
+		elf_symbol *Symbol;
+		while (Cursor < Data + Header->Size) {
+			elf_relocation *Rel = Cursor;
+			elf_relocation_a *Rela = Cursor;
+
+			vptr Target;
+			Target = State->ImageAddress - State->VAddrOffset + Rel->Offset;
+
+			if (PrevTarget != Target) {
+				if (PrevTarget) {
+					c08 *Name = (c08*) Strtab + Symbol->Name;
+					Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
+				}
+
+				if (IsRela) {
+					Value = Rela->Addend;
+				} else {
+					Value = Elf_ExtractAddend(State, RelocType);
+				}
+			}
+
+			usize SymbolIndex;
+			if (State->Header->Ident.FileClass == ELF_CLASS_32) {
+				SymbolIndex = Rela->Info >> 8;
+				RelocType = Rela->Info & 0xFF;
+			} else {
+				SymbolIndex = Rela->Info >> 32;
+				RelocType = Rela->Info & 0xFFFFFFFF;
+			}
+			Symbol = (elf_symbol*)(Symtab + SymtabHeader->EntrySize * SymbolIndex);
+
+			Value = Elf_ComputeRelocation(
+				State, RelocType, Value,
+				(usize) State->ImageAddress - State->VAddrOffset + Symbol->Value,
+				(usize) State->ImageAddress
+			);
+
+			PrevTarget = Target;
+			Cursor += Header->EntrySize;
+		}
+
+		if (PrevTarget)
+			Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
+	}
+
+	State->State = ELF_STATE_LOADED;
+	return ELF_ERROR_SUCCESS;
+}
+
 internal elf_error
 Elf_SetupAndValidate(elf_state *State)
 {
@@ -69,7 +194,13 @@ Elf_SetupAndValidate(elf_state *State)
 		else if (Index >= ELF_SECTION_INDEX_LORESERVE) return ELF_ERROR_INVALID_FORMAT;
 		else if (State->NullSectionHeader->Link) return ELF_ERROR_INVALID_FORMAT;
 		State->SectionNameSectionHeader = Elf_GetSectionHeader(State, Index);
-		State->SectionNameTable = Elf_GetSection(State, State->SectionNameSectionHeader);
+		State->SectionNameTable = (c08*) Elf_GetSection(State, State->SectionNameSectionHeader);
+
+		for (usize I = 0; I < State->SectionHeaderCount; I++) {
+			elf_section_header *Header = Elf_GetSectionHeader(State, I);
+			c08 *Name = State->SectionNameTable + Header->Name;
+			if (Elf_CheckName(Name, ".gnu.hash")) State->GnuHashTableHeader = Header;
+		}
 	} else {
 		if (State->Header->SectionNameTableIndex != ELF_SECTION_INDEX_UNDEF) return ELF_ERROR_INVALID_FORMAT;
 	}
@@ -181,8 +312,9 @@ Elf_LoadProgram(elf_state *State)
 		// Reserve the overall space
 		usize PageMask = State->PageSize - 1;
 		MinVAddr &= ~PageMask;
+		State->VAddrOffset = MinVAddr;
 		State->ImageSize = MaxVAddr - MinVAddr;
-		vptr Base = Sys_MemMap(
+		vptr Base = State->ImageAddress = Sys_MemMap(
 			NULL, (State->ImageSize + PageMask) & ~PageMask,
 			SYS_PROT_NONE, SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS | SYS_MAP_NORESERVE,
 			-1, 0
@@ -235,6 +367,10 @@ Elf_LoadProgram(elf_state *State)
 	} else {
 		return ELF_ERROR_NOT_SUPPORTED;
 	}
+
+	State->State = ELF_STATE_LOADED_NORELOC;
+	elf_error Error = Elf_HandleRelocations(State);
+	if (Error) return Error;
 
 	State->State = ELF_STATE_LOADED;
 	return ELF_ERROR_SUCCESS;

@@ -355,6 +355,39 @@ typedef struct elf64_symbol {
 #define elf_symbol ELF_CAT3(elf, ELF_CLASS, _symbol)
 
 /* ========== ELF RELOCATION ========== */
+#define ELF_RELOCATION_X86_64_NONE             0 // none      none
+#define ELF_RELOCATION_X86_64_64               1 // word64    S + A
+#define ELF_RELOCATION_X86_64_PC32             2 // word32    S + A - P
+#define ELF_RELOCATION_X86_64_GOT32            3 // word32    G + A
+#define ELF_RELOCATION_X86_64_PLT32            4 // word32    L + A - P
+#define ELF_RELOCATION_X86_64_COPY             5 // none      none
+#define ELF_RELOCATION_X86_64_GLOB_DAT         6 // word64    S
+#define ELF_RELOCATION_X86_64_JUMP_SLOT        7 // word64    S
+#define ELF_RELOCATION_X86_64_RELATIVE         8 // word64    B + A
+#define ELF_RELOCATION_X86_64_GOTPCREL         9 // word32    G + GOT + A - P
+#define ELF_RELOCATION_X86_64_32              10 // word32    S + A
+#define ELF_RELOCATION_X86_64_32S             11 // word32    S + A
+#define ELF_RELOCATION_X86_64_16              12 // word16    S + A
+#define ELF_RELOCATION_X86_64_PC16            13 // word16    S + A - P
+#define ELF_RELOCATION_X86_64_8               14 // word8     S + A
+#define ELF_RELOCATION_X86_64_PC8             15 // word8     S + A - P
+#define ELF_RELOCATION_X86_64_DTPMOD64        16 // word64
+#define ELF_RELOCATION_X86_64_DTPOFF64        17 // word64
+#define ELF_RELOCATION_X86_64_TPOFF64         18 // word64
+#define ELF_RELOCATION_X86_64_TLSGD           19 // word32
+#define ELF_RELOCATION_X86_64_TLSLD           20 // word32
+#define ELF_RELOCATION_X86_64_DTPOFF32        21 // word32
+#define ELF_RELOCATION_X86_64_GOTTPOFF        22 // word32
+#define ELF_RELOCATION_X86_64_TPOFF32         23 // word32
+#define ELF_RELOCATION_X86_64_PC64            24 // word64    S + A - P
+#define ELF_RELOCATION_X86_64_GOTOFF64        25 // word64    S + A - GOT
+#define ELF_RELOCATION_X86_64_GOTPC32         26 // word32    GOT + A - P
+#define ELF_RELOCATION_X86_64_SIZE32          32 // word32    Z + A
+#define ELF_RELOCATION_X86_64_SIZE64          33 // word64    Z + A
+#define ELF_RELOCATION_X86_64_GOTPC32_TLSDESC 34 // word32
+#define ELF_RELOCATION_X86_64_TLSDESC_CALL    35 // none
+#define ELF_RELOCATION_X86_64_TLSDESC         36 // word64×2
+#define ELF_RELOCATION_X86_64_IRELATIVE       37 // word64    indirect (B + A)
 
 typedef struct elf32_relocation {
 	elf32_addr Offset;
@@ -515,7 +548,8 @@ typedef struct elf64_auxv {
 
 #define ELF_STATE_CLOSED           0
 #define ELF_STATE_OPENED           1
-#define ELF_STATE_LOADED           2
+#define ELF_STATE_LOADED_NORELOC   2
+#define ELF_STATE_LOADED           3
 
 typedef s32 elf_error;
 
@@ -537,11 +571,12 @@ typedef struct elf_state {
 	u08 *ProgramHeaderTable;
 
 	elf_section_header *NullSectionHeader;
-
+	elf_section_header *GnuHashTableHeader;
 	elf_section_header *SectionNameSectionHeader;
-	u08 *SectionNameTable;
+	c08 *SectionNameTable;
 
 	// Loaded image
+	usize VAddrOffset;
 	vptr ImageAddress;
 	u64 ImageSize;
 } elf_state;

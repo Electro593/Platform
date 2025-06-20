@@ -12,9 +12,6 @@ CompilerSwitches="$CompilerSwitches -D_LINUX -D_GCC -D_X64 -D_OPENGL"
 
 LinkerSwitches="$LinkerSwitches -nostdlib" # /subsystem:windows /stack:0x100000,0x100000 /machine:x64
 
-DLLCompilerSwitches="$DLLCompilerSwitches $CompilerSwitches -fPIC"
-DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
-
 if [[ Debug -eq 1 ]]; then
    echo Building as DEBUG
    CompilerSwitches="$CompilerSwitches -O0 -g -D_DEBUG"
@@ -22,6 +19,9 @@ else
    echo Building as RELEASE
    CompilerSwitches="$CompilerSwitches -O3"
 fi
+
+DLLCompilerSwitches="$DLLCompilerSwitches $CompilerSwitches -fPIC"
+DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
 
 if [[ -e *.pdb ]]; then rm *.pdb > /dev/null 2> /dev/null; fi
 
@@ -38,7 +38,8 @@ build_module() {
       # gcc $CompilerSwitches $LinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}linux/entry.c
       gcc $CompilerSwitches $LinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName ${Module}linux/entry.c
       if [[ -e $ModuleName ]]; then
-         objdump -xd $ModuleName > $ModuleName.dump
+         objdump --source-comment -M intel $ModuleName > $ModuleName.dump.asm
+         objdump -xrR $ModuleName > $ModuleName.dump.dat
       else
          Result=1
       fi
@@ -47,7 +48,8 @@ build_module() {
       # gcc $DLLCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}main.c
       gcc $DLLCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.so ${Module}main.c
       if [[ -e $ModuleName.so ]]; then
-         objdump -xd $ModuleName.so > $ModuleName.dump
+         objdump --source-comment -M intel $ModuleName.so > $ModuleName.dump.asm
+         objdump -xrR $ModuleName.so > $ModuleName.dump.dat
       else
          Result=1
       fi
