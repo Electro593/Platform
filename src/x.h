@@ -8,19 +8,19 @@
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #if !defined(DEFAULT)
-   #define DEFAULT(...)
+#define DEFAULT(...)
 #endif
 #if !defined(EXTERN)
-   #define EXTERN DEFAULT
+#define EXTERN DEFAULT
 #endif
 #if !defined(INTERN)
-   #define INTERN DEFAULT
+#define INTERN DEFAULT
 #endif
 #if !defined(EXPORT)
-   #define EXPORT DEFAULT
+#define EXPORT DEFAULT
 #endif
 #if !defined(IMPORT)
-   #define IMPORT DEFAULT
+#define IMPORT DEFAULT
 #endif
 
 X

@@ -198,11 +198,9 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    EXPORT(v4r32,   M4x4r32_MulMV,        m4x4r32 M, v4r32 V) \
    EXPORT(m4x4r32, M4x4r32_Mul,          m4x4r32 A, m4x4r32 B) \
    EXPORT(b08,     RayPlaneIntersection, v3r32 PlanePoint, v3r32 PlaneNormal, v3r32 RayPoint, v3r32 RayDir, r32 *T) \
-   EXPORT(b08,     RayRectIntersectionA, v3r32 RectStart, v3r32 RectEnd, v3r32 RectNormal, v3r32 RayPoint, v3r32 RayDir, r32 *T, v3r32 *Intersection) \
+   EXPORT(b08,     RayRectIntersectionA, v3r32 RectStart, v3r32 RectEnd, v3r32 RectNormal, v3r32 RayPoint, v3r32 RayDir, r32 *T, v3r32 *Intersection)
 
 #endif
-
-
 
 #ifdef INCLUDE_SOURCE
 
@@ -446,128 +444,134 @@ VECTOR_FUNCS
 internal m4x4r32
 M4x4r32_Translation(r32 X, r32 Y, r32 Z)
 {
-   m4x4r32 Result = M4x4r32_I;
-   Result.V[0].E[3] = X;
-   Result.V[1].E[3] = Y;
-   Result.V[2].E[3] = Z;
-   return Result;
+	m4x4r32 Result	 = M4x4r32_I;
+	Result.V[0].E[3] = X;
+	Result.V[1].E[3] = Y;
+	Result.V[2].E[3] = Z;
+	return Result;
 }
 
 internal m4x4r32
 M4x4r32_Scaling(r32 X, r32 Y, r32 Z)
 {
-   m4x4r32 Result = M4x4r32_I;
-   Result.V[0].E[0] = X;
-   Result.V[1].E[1] = Y;
-   Result.V[2].E[2] = Z;
-   return Result;
+	m4x4r32 Result	 = M4x4r32_I;
+	Result.V[0].E[0] = X;
+	Result.V[1].E[1] = Y;
+	Result.V[2].E[2] = Z;
+	return Result;
 }
 
 internal m4x4r32
 M4x4r32_Rotation(r32 Theta, v3r32 Axis)
 {
-   r32 X,Y,Z, C,S;
-   
-   v3r32 A = V3r32_Norm(Axis);
-   X = A.X; Y = A.Y; Z = A.Z;
-   C = R32_cos(Theta);
-   S = R32_sin(Theta);
-   
-   m4x4r32 Result;
-   Result.V[0] = (v4r32){X*X*(1-C)+C,   Y*X*(1-C)-Z*S, Z*X*(1-C)+Y*S, 0};
-   Result.V[1] = (v4r32){X*Y*(1-C)+Z*S, Y*Y*(1-C)+C,   Z*Y*(1-C)-X*S, 0};
-   Result.V[2] = (v4r32){X*Z*(1-C)-Y*S, Y*Z*(1-C)+X*S, Z*Z*(1-C)+C,   0};
-   Result.V[3] = (v4r32){0,             0,             0,             1};
-   return Result;
+	r32 X, Y, Z, C, S;
+
+	v3r32 A = V3r32_Norm(Axis);
+	X		= A.X;
+	Y		= A.Y;
+	Z		= A.Z;
+	C		= R32_cos(Theta);
+	S		= R32_sin(Theta);
+
+	m4x4r32 Result;
+	Result.V[0] = (v4r32) {X * X * (1 - C) + C, Y * X * (1 - C) - Z * S, Z * X * (1 - C) + Y * S, 0};
+	Result.V[1] = (v4r32) {X * Y * (1 - C) + Z * S, Y * Y * (1 - C) + C, Z * Y * (1 - C) - X * S, 0};
+	Result.V[2] = (v4r32) {X * Z * (1 - C) - Y * S, Y * Z * (1 - C) + X * S, Z * Z * (1 - C) + C, 0};
+	Result.V[3] = (v4r32) {0, 0, 0, 1};
+	return Result;
 }
 
 internal m4x4r32
 M4x4r32_Transpose(m4x4r32 M)
 {
-   m4x4r32 Result;
-   Result.V[0] = (v4r32){M.V[0].E[0], M.V[1].E[0], M.V[2].E[0], M.V[3].E[0]};
-   Result.V[1] = (v4r32){M.V[0].E[1], M.V[1].E[1], M.V[2].E[1], M.V[3].E[1]};
-   Result.V[2] = (v4r32){M.V[0].E[2], M.V[1].E[2], M.V[2].E[2], M.V[3].E[2]};
-   Result.V[3] = (v4r32){M.V[0].E[3], M.V[1].E[3], M.V[2].E[3], M.V[3].E[3]};
-   return Result;
+	m4x4r32 Result;
+	Result.V[0] = (v4r32) {M.V[0].E[0], M.V[1].E[0], M.V[2].E[0], M.V[3].E[0]};
+	Result.V[1] = (v4r32) {M.V[0].E[1], M.V[1].E[1], M.V[2].E[1], M.V[3].E[1]};
+	Result.V[2] = (v4r32) {M.V[0].E[2], M.V[1].E[2], M.V[2].E[2], M.V[3].E[2]};
+	Result.V[3] = (v4r32) {M.V[0].E[3], M.V[1].E[3], M.V[2].E[3], M.V[3].E[3]};
+	return Result;
 }
 
 internal v4r32
 M4x4r32_MulMV(m4x4r32 M, v4r32 V)
 {
-   v4r32 Result;
-   Result.X = V4r32_Dot(M.V[0], V);
-   Result.Y = V4r32_Dot(M.V[1], V);
-   Result.Z = V4r32_Dot(M.V[2], V);
-   Result.W = V4r32_Dot(M.V[3], V);
-   return Result;
+	v4r32 Result;
+	Result.X = V4r32_Dot(M.V[0], V);
+	Result.Y = V4r32_Dot(M.V[1], V);
+	Result.Z = V4r32_Dot(M.V[2], V);
+	Result.W = V4r32_Dot(M.V[3], V);
+	return Result;
 }
 
 internal m4x4r32
 M4x4r32_Mul(m4x4r32 A, m4x4r32 B)
 {
-   B = M4x4r32_Transpose(B);
-   
-   m4x4r32 Result;
-   Result.V[0].E[0] = V4r32_Dot(A.V[0], B.V[0]);
-   Result.V[0].E[1] = V4r32_Dot(A.V[0], B.V[1]);
-   Result.V[0].E[2] = V4r32_Dot(A.V[0], B.V[2]);
-   Result.V[0].E[3] = V4r32_Dot(A.V[0], B.V[3]);
-   Result.V[1].E[0] = V4r32_Dot(A.V[1], B.V[0]);
-   Result.V[1].E[1] = V4r32_Dot(A.V[1], B.V[1]);
-   Result.V[1].E[2] = V4r32_Dot(A.V[1], B.V[2]);
-   Result.V[1].E[3] = V4r32_Dot(A.V[1], B.V[3]);
-   Result.V[2].E[0] = V4r32_Dot(A.V[2], B.V[0]);
-   Result.V[2].E[1] = V4r32_Dot(A.V[2], B.V[1]);
-   Result.V[2].E[2] = V4r32_Dot(A.V[2], B.V[2]);
-   Result.V[2].E[3] = V4r32_Dot(A.V[2], B.V[3]);
-   Result.V[3].E[0] = V4r32_Dot(A.V[3], B.V[0]);
-   Result.V[3].E[1] = V4r32_Dot(A.V[3], B.V[1]);
-   Result.V[3].E[2] = V4r32_Dot(A.V[3], B.V[2]);
-   Result.V[3].E[3] = V4r32_Dot(A.V[3], B.V[3]);
-   return Result;
+	B = M4x4r32_Transpose(B);
+
+	m4x4r32 Result;
+	Result.V[0].E[0] = V4r32_Dot(A.V[0], B.V[0]);
+	Result.V[0].E[1] = V4r32_Dot(A.V[0], B.V[1]);
+	Result.V[0].E[2] = V4r32_Dot(A.V[0], B.V[2]);
+	Result.V[0].E[3] = V4r32_Dot(A.V[0], B.V[3]);
+	Result.V[1].E[0] = V4r32_Dot(A.V[1], B.V[0]);
+	Result.V[1].E[1] = V4r32_Dot(A.V[1], B.V[1]);
+	Result.V[1].E[2] = V4r32_Dot(A.V[1], B.V[2]);
+	Result.V[1].E[3] = V4r32_Dot(A.V[1], B.V[3]);
+	Result.V[2].E[0] = V4r32_Dot(A.V[2], B.V[0]);
+	Result.V[2].E[1] = V4r32_Dot(A.V[2], B.V[1]);
+	Result.V[2].E[2] = V4r32_Dot(A.V[2], B.V[2]);
+	Result.V[2].E[3] = V4r32_Dot(A.V[2], B.V[3]);
+	Result.V[3].E[0] = V4r32_Dot(A.V[3], B.V[0]);
+	Result.V[3].E[1] = V4r32_Dot(A.V[3], B.V[1]);
+	Result.V[3].E[2] = V4r32_Dot(A.V[3], B.V[2]);
+	Result.V[3].E[3] = V4r32_Dot(A.V[3], B.V[3]);
+	return Result;
 }
 
 internal b08
-RayPlaneIntersection(v3r32 PlanePoint, v3r32 PlaneNormal,
-                     v3r32 RayPoint, v3r32 RayDir,
-                     r32 *T)
+RayPlaneIntersection(v3r32 PlanePoint, v3r32 PlaneNormal, v3r32 RayPoint, v3r32 RayDir, r32 *T)
 {
-   v3r32 P0 = PlanePoint;
-   v3r32 N = PlaneNormal;
-   
-   v3r32 L0 = RayPoint;
-   v3r32 L = RayDir;
-   
-   *T = V3r32_Dot(V3r32_Sub(P0, L0), N) / V3r32_Dot(L, N);
-   
-   return TRUE;
+	v3r32 P0 = PlanePoint;
+	v3r32 N	 = PlaneNormal;
+
+	v3r32 L0 = RayPoint;
+	v3r32 L	 = RayDir;
+
+	*T = V3r32_Dot(V3r32_Sub(P0, L0), N) / V3r32_Dot(L, N);
+
+	return TRUE;
 }
 
 internal b08
-RayRectIntersectionA(v3r32 RectStart, v3r32 RectEnd, v3r32 RectNormal,
-                     v3r32 RayPoint, v3r32 RayDir,
-                     r32 *T, v3r32 *Intersection)
+RayRectIntersectionA(
+	v3r32  RectStart,
+	v3r32  RectEnd,
+	v3r32  RectNormal,
+	v3r32  RayPoint,
+	v3r32  RayDir,
+	r32	  *T,
+	v3r32 *Intersection
+)
 {
-   v3r32 P0 = RectStart;
-   v3r32 N = RectNormal;
-   
-   v3r32 L0 = RayPoint;
-   v3r32 L = RayDir;
-   
-   r32 LDotN = V3r32_Dot(L, N);
-   if(LDotN == 0) return FALSE;
-   
-   r32 t = V3r32_Dot(V3r32_Sub(P0, L0), N) / LDotN;
-   if(T) *T = t;
-   
-   v3r32 I = V3r32_Add(L0, V3r32_MulS(L, t));
-   if(Intersection) *Intersection = I;
-   
-   r32 Epsilon = 0.000001;
-   return R32_Within(I.X, RectStart.X, RectEnd.X, Epsilon) &&
-          R32_Within(I.Y, RectStart.Y, RectEnd.Y, Epsilon) &&
-          R32_Within(I.Z, RectStart.Z, RectEnd.Z, Epsilon);
+	v3r32 P0 = RectStart;
+	v3r32 N	 = RectNormal;
+
+	v3r32 L0 = RayPoint;
+	v3r32 L	 = RayDir;
+
+	r32 LDotN = V3r32_Dot(L, N);
+	if (LDotN == 0) return FALSE;
+
+	r32 t = V3r32_Dot(V3r32_Sub(P0, L0), N) / LDotN;
+	if (T) *T = t;
+
+	v3r32 I = V3r32_Add(L0, V3r32_MulS(L, t));
+	if (Intersection) *Intersection = I;
+
+	r32 Epsilon = 0.000001;
+	return R32_Within(I.X, RectStart.X, RectEnd.X, Epsilon)
+		&& R32_Within(I.Y, RectStart.Y, RectEnd.Y, Epsilon)
+		&& R32_Within(I.Z, RectStart.Z, RectEnd.Z, Epsilon);
 }
 #endif
 

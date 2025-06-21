@@ -8,15 +8,15 @@
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #if defined(_MSVC)
-    #define API_ENTRY  __stdcall
-    #define API_IMPORT __declspec(dllimport)
-    #define API_EXPORT __declspec(dllexport)
-    #define UNREACHABLE __assume(false)
+#define API_ENTRY  __stdcall
+#define API_IMPORT __declspec(dllimport)
+#define API_EXPORT __declspec(dllexport)
+#define UNREACHABLE __assume(false)
 #elif defined(_GCC)
-    #define API_ENTRY
-    #define API_IMPORT
-    #define API_EXPORT
-    #define UNREACHABLE __builtin_unreachable();
+#define API_ENTRY
+#define API_IMPORT
+#define API_EXPORT
+#define UNREACHABLE __builtin_unreachable();
 #endif
 
 #define global   static
@@ -50,11 +50,11 @@
     } while(0)
 
 #ifdef _DEBUG
-    #define STOP Intrin_DebugBreak()
-    #define NOP Intrin_Nop()
+#define STOP Intrin_DebugBreak()
+#define NOP Intrin_Nop()
 #else
-    #define STOP Platform_Exit(-1)
-    #define NOP
+#define STOP Platform_Exit(-1)
+#define NOP
 #endif
 
 #define NULL ((vptr)0)
@@ -65,41 +65,41 @@
 #define GREATER 1
 
 #ifdef _MSVC
-    typedef signed   __int8  s08;
-    typedef signed   __int16 s16;
-    typedef signed   __int32 s32;
-    typedef signed   __int64 s64;
+typedef signed __int8  s08;
+typedef signed __int16 s16;
+typedef signed __int32 s32;
+typedef signed __int64 s64;
 
-    typedef unsigned __int8  u08;
-    typedef unsigned __int16 u16;
-    typedef unsigned __int32 u32;
-    typedef unsigned __int64 u64;
+typedef unsigned __int8	 u08;
+typedef unsigned __int16 u16;
+typedef unsigned __int32 u32;
+typedef unsigned __int64 u64;
 #else
-    typedef signed char      s08;
-    typedef signed short     s16;
-    typedef signed int       s32;
-    typedef signed long long s64;
-    static_assert(sizeof(s08) == 1, "s08 must be 1 byte!");
-    static_assert(sizeof(s16) == 2, "s16 must be 2 bytes!");
-    static_assert(sizeof(s32) == 4, "s32 must be 4 bytes!");
-    static_assert(sizeof(s64) == 8, "s64 must be 8 bytes!");
+typedef signed char		 s08;
+typedef signed short	 s16;
+typedef signed int		 s32;
+typedef signed long long s64;
+static_assert(sizeof(s08) == 1, "s08 must be 1 byte!");
+static_assert(sizeof(s16) == 2, "s16 must be 2 bytes!");
+static_assert(sizeof(s32) == 4, "s32 must be 4 bytes!");
+static_assert(sizeof(s64) == 8, "s64 must be 8 bytes!");
 
-    typedef unsigned char      u08;
-    typedef unsigned short     u16;
-    typedef unsigned int       u32;
-    typedef unsigned long long u64;
-    static_assert(sizeof(u08) == 1, "u08 must be 1 byte!");
-    static_assert(sizeof(u16) == 2, "u16 must be 2 bytes!");
-    static_assert(sizeof(u32) == 4, "u32 must be 4 bytes!");
-    static_assert(sizeof(u64) == 8, "u64 must be 8 bytes!");
+typedef unsigned char	   u08;
+typedef unsigned short	   u16;
+typedef unsigned int	   u32;
+typedef unsigned long long u64;
+static_assert(sizeof(u08) == 1, "u08 must be 1 byte!");
+static_assert(sizeof(u16) == 2, "u16 must be 2 bytes!");
+static_assert(sizeof(u32) == 4, "u32 must be 4 bytes!");
+static_assert(sizeof(u64) == 8, "u64 must be 8 bytes!");
 #endif
 
 #ifdef _X64
-    typedef s64 ssize;
-    typedef u64 usize;
+typedef s64 ssize;
+typedef u64 usize;
 #else
-    typedef s32 ssize;
-    typedef u32 usize;
+typedef s32 ssize;
+typedef u32 usize;
 #endif
 
 typedef float  r32;
@@ -107,7 +107,7 @@ typedef double r64;
 static_assert(sizeof(r32) == 4, "r32 must be 4 bytes!");
 static_assert(sizeof(r64) == 8, "r64 must be 8 bytes!");
 
-typedef void* vptr;
+typedef void *vptr;
 typedef void (*fptr)(void);
 
 typedef s08 b08;
@@ -116,10 +116,10 @@ typedef s32 b32;
 typedef s64 b64;
 
 typedef char c08;
-typedef u16 c16;
-typedef u32 c32;
+typedef u16	 c16;
+typedef u32	 c32;
 
-typedef struct platform_state platform_state;
+typedef struct platform_state	platform_state;
 typedef struct platform_exports platform_exports;
 
 #define TYPES \
@@ -139,29 +139,30 @@ typedef struct platform_exports platform_exports;
     ENUM(C08,  c08) \
     ENUM(STR,  c08*) \
     \
-    ENUM(VPTR, vptr) \
+    ENUM(VPTR, vptr)
 
 typedef enum type_id {
-    TYPEID_NONE,
+	TYPEID_NONE,
 
-    #define ENUM(Name, Type) \
+#define ENUM(Name, Type) \
         TYPEID_##Name,
-    TYPES
-    #undef ENUM
+	TYPES
+#undef ENUM
 
-    TYPEID_EXTRA_EXP = 8,
-    TYPEID_MOD_EXP   = 4,
+		TYPEID_EXTRA_EXP
+	= 8,
+	TYPEID_MOD_EXP = 4,
 
-    TYPEID_TYPE_MASK  = (1<<TYPEID_EXTRA_EXP)-1,
-    TYPEID_MOD_MASK   = ~((1<<(32-TYPEID_MOD_EXP))-1),
-    TYPEID_EXTRA_MASK = ~(TYPEID_TYPE_MASK | TYPEID_MOD_MASK),
+	TYPEID_TYPE_MASK  = (1 << TYPEID_EXTRA_EXP) - 1,
+	TYPEID_MOD_MASK	  = ~((1 << (32 - TYPEID_MOD_EXP)) - 1),
+	TYPEID_EXTRA_MASK = ~(TYPEID_TYPE_MASK | TYPEID_MOD_MASK),
 
-    TYPEID_MEMBER   = 0x10000000,
+	TYPEID_MEMBER = 0x10000000,
 } type_id;
 
 typedef struct type {
-    type_id ID;
-    u16 Size;
+	type_id ID;
+	u16		Size;
 } type;
 
 #ifndef NO_SYMBOLS
@@ -174,9 +175,11 @@ TYPES
 
 #endif
 
-//TODO fix this whole mess up
-inline type MakeMemberType(type_id TypeID, u16 Size, u32 Offset) {
-    return (type){TYPEID_MEMBER | ((Offset<<TYPEID_EXTRA_EXP)&TYPEID_MOD_MASK) | TypeID, Size};
+// TODO fix this whole mess up
+inline type
+MakeMemberType(type_id TypeID, u16 Size, u32 Offset)
+{
+	return (type) {TYPEID_MEMBER | ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK) | TypeID, Size};
 }
 
 #ifdef _WIN32

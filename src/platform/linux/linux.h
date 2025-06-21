@@ -99,7 +99,7 @@ typedef struct sys_timespec {
 	SYSCALL(11,  MemUnmap,     s32,   vptr Address, usize Length) \
 	SYSCALL(60,  Exit,         void,  s32 ErrorCode) \
 	SYSCALL(228, GetClockTime, s32,   s32 ClockID, sys_timespec *Timespec) \
-	SYSCALL(229, GetClockRes,  s32,   s32 ClockID, sys_timespec *Timespec) \
+	SYSCALL(229, GetClockRes,  s32,   s32 ClockID, sys_timespec *Timespec)
 
 // rdi, rsi, rdx, rcx, r8, r9 -> rdi, rsi, rdx, r10, r8, r9
 #define SYSCALL(ID, Name, ReturnType, ...) \

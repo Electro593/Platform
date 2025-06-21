@@ -9,7 +9,7 @@
 
 #if defined(_X64)
 
-__asm__ (
+__asm__(
 	".globl _start                 \n"
 	"_start:                       \n"
 	"	xor %rbp, %rbp             \n"
@@ -37,7 +37,7 @@ global sys_timespec ClockResolution;
 
 #ifdef _OPENGL
 
-internal opengl_funcs*
+internal opengl_funcs *
 Platform_LoadOpenGL(void)
 {
 	return 0;
@@ -48,33 +48,32 @@ Platform_LoadOpenGL(void)
 internal void
 Platform_CreateWindow(void)
 {
-
 }
 
 internal void
 Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message)
 {
 	c08 LineStr[11];
-	u32 Index = sizeof(LineStr);
+	u32 Index		 = sizeof(LineStr);
 	LineStr[--Index] = 0;
 	do {
-	   LineStr[--Index] = (Line % 10) + '0';
-	   Line /= 10;
-	} while(Line);
+		LineStr[--Index]  = (Line % 10) + '0';
+		Line			 /= 10;
+	} while (Line);
 
 	Platform_WriteError(_CString(File), FALSE);
 	Platform_WriteError(_CString(": "), FALSE);
 	Platform_WriteError(_CString(LineStr + Index), FALSE);
-	if(Expression[0] != 0) {
-	   Platform_WriteError(_CString(": Assertion hit!\n\t("), FALSE);
-	   Platform_WriteError(_CString(Expression), FALSE);
-	   Platform_WriteError(_CString(") was FALSE\n"), FALSE);
+	if (Expression[0] != 0) {
+		Platform_WriteError(_CString(": Assertion hit!\n\t("), FALSE);
+		Platform_WriteError(_CString(Expression), FALSE);
+		Platform_WriteError(_CString(") was FALSE\n"), FALSE);
 	} else {
-	   Platform_WriteError(_CString(": \n"), FALSE);
+		Platform_WriteError(_CString(": \n"), FALSE);
 	}
-	if(Message[0] != 0) {
-	   Platform_WriteError(_CString("\t"), FALSE);
-	   Platform_WriteError(_CString(Message), FALSE);
+	if (Message[0] != 0) {
+		Platform_WriteError(_CString("\t"), FALSE);
+		Platform_WriteError(_CString(Message), FALSE);
 	}
 	Platform_WriteError(_CString("\n"), FALSE);
 }
@@ -82,7 +81,14 @@ Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message)
 internal vptr
 Platform_AllocateMemory(u64 Size)
 {
-	vptr Address = Sys_MemMap(NULL, Size, SYS_PROT_READ | SYS_PROT_WRITE, SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS, SYS_FILE_NONE, 0);
+	vptr Address = Sys_MemMap(
+		NULL,
+		Size,
+		SYS_PROT_READ | SYS_PROT_WRITE,
+		SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS,
+		SYS_FILE_NONE,
+		0
+	);
 	VALIDATE(Address, "Failed to map memory");
 	return Address;
 }
@@ -97,7 +103,7 @@ internal u64
 Platform_GetFileLength(file_handle FileHandle)
 {
 	sys_stat Stat;
-	s32 Result = Sys_FileStat(FileHandle.FileDescriptor, &Stat);
+	s32		 Result = Sys_FileStat(FileHandle.FileDescriptor, &Stat);
 	VALIDATE(Result, "Failed to stat the file");
 	return Stat.Size;
 }
@@ -106,9 +112,9 @@ internal b08
 Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 {
 	s32 Flags = 0;
-	u16 Mode = 0;
+	u16 Mode  = 0;
 
-	//TODO Append is incorrect, need to handle offsets better with win32
+	// TODO Append is incorrect, need to handle offsets better with win32
 
 	switch (OpenMode) {
 		case FILE_READ: {
@@ -116,16 +122,19 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 		} break;
 		case FILE_WRITE: {
 			Flags |= SYS_OPEN_WRITEONLY | SYS_OPEN_CREATE | SYS_OPEN_TRUNCATE;
-			Mode |= SYS_CREATE_USER_READ | SYS_CREATE_USER_WRITE
-				| SYS_CREATE_GROUP_READ  | SYS_CREATE_GROUP_WRITE
-				| SYS_CREATE_OTHERS_READ | SYS_CREATE_OTHERS_WRITE;
+			Mode  |= SYS_CREATE_USER_READ
+				  | SYS_CREATE_USER_WRITE
+				  | SYS_CREATE_GROUP_READ
+				  | SYS_CREATE_GROUP_WRITE
+				  | SYS_CREATE_OTHERS_READ
+				  | SYS_CREATE_OTHERS_WRITE;
 		} break;
 		case FILE_APPEND: {
 			Flags |= SYS_OPEN_WRITEONLY | SYS_OPEN_CREATE | SYS_OPEN_APPEND;
 		} break;
 	}
 
-	u32 FD = Sys_Open(FileName, Flags, Mode);
+	u32 FD		= Sys_Open(FileName, Flags, Mode);
 	b08 Success = CHECK((s32) FD);
 
 	FileHandle->FileDescriptor = Success ? FD : SYS_FILE_NONE;
@@ -171,18 +180,18 @@ Platform_CloseFile(file_handle FileHandle)
 	VALIDATE(Sys_Close(FileHandle.FileDescriptor), "Failed to close the file");
 }
 
-//TODO Make this use a file handle
+// TODO Make this use a file handle
 
 internal void
 Platform_GetFileTime(c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime)
 {
-// 	sys_stat Stat;
-//
-// 	file_handle FileHandle;
-// 	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
-// 	s32 Result = Sys_FileStat(FileHandle.FileDescriptor, &Stat);
-// 	Platform_CloseFile(FileHandle);
-// 	VALIDATE(Result, "Failed to stat the file");
+	// 	sys_stat Stat;
+	//
+	// 	file_handle FileHandle;
+	// 	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
+	// 	s32 Result = Sys_FileStat(FileHandle.FileDescriptor, &Stat);
+	// 	Platform_CloseFile(FileHandle);
+	// 	VALIDATE(Result, "Failed to stat the file");
 }
 
 internal r64
@@ -201,22 +210,20 @@ internal void
 Platform_GetProcAddress(elf_state *State, c08 *Name, vptr *ProcAddress)
 {
 	elf_error Error = Elf_GetProcAddress(State, Name, ProcAddress);
-	if (Error == ELF_ERROR_NOT_FOUND)
-		*ProcAddress = (vptr) Platform_Stub;
-	else
-		Assert(!Error, "Failed to get proc address");
+	if (Error == ELF_ERROR_NOT_FOUND) *ProcAddress = (vptr) Platform_Stub;
+	else Assert(!Error, "Failed to get proc address");
 }
 
 internal b08
 Platform_UnloadModule(platform_module *Module)
 {
-	if(Module->ELF.State == ELF_STATE_LOADED) {
-	   Module->Unload(Platform);
-	   s32 Error = Elf_Unload(&Module->ELF);
-	   Assert(!Error, "Failed to unload elf");
-	   Error = Elf_Close(&Module->ELF);
-	   Assert(!Error, "Failed to close elf");
-	   return TRUE;
+	if (Module->ELF.State == ELF_STATE_LOADED) {
+		Module->Unload(Platform);
+		s32 Error = Elf_Unload(&Module->ELF);
+		Assert(!Error, "Failed to unload elf");
+		Error = Elf_Close(&Module->ELF);
+		Assert(!Error, "Failed to close elf");
+		return TRUE;
 	}
 	return FALSE;
 }
@@ -226,11 +233,10 @@ Platform_ReloadModule(platform_module *Module)
 {
 	datetime LastWriteTime;
 	Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
-	if(Module->ELF.State == ELF_STATE_LOADED) {
-	   if(Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS)
-		  return FALSE;
+	if (Module->ELF.State == ELF_STATE_LOADED) {
+		if (Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS) return FALSE;
 
-	   Platform_UnloadModule(Module);
+		Platform_UnloadModule(Module);
 	}
 	Module->LastWriteTime = LastWriteTime;
 
@@ -239,10 +245,10 @@ Platform_ReloadModule(platform_module *Module)
 	Error = Elf_LoadProgram(&Module->ELF, Module->DebugLoadAddress);
 	Assert(!Error, "Failed to load elf");
 
-	Platform_GetProcAddress(&Module->ELF, "Load", (vptr*) &Module->Load);
-	Platform_GetProcAddress(&Module->ELF, "Init", (vptr*) &Module->Init);
-	Platform_GetProcAddress(&Module->ELF, "Update", (vptr*) &Module->Update);
-	Platform_GetProcAddress(&Module->ELF, "Unload", (vptr*) &Module->Unload);
+	Platform_GetProcAddress(&Module->ELF, "Load", (vptr *) &Module->Load);
+	Platform_GetProcAddress(&Module->ELF, "Init", (vptr *) &Module->Init);
+	Platform_GetProcAddress(&Module->ELF, "Update", (vptr *) &Module->Update);
+	Platform_GetProcAddress(&Module->ELF, "Unload", (vptr *) &Module->Unload);
 
 	Module->Load(Platform, Module);
 
@@ -253,38 +259,36 @@ internal void
 Platform_Exit(u32 ExitCode)
 {
 	Sys_Exit(ExitCode);
-    UNREACHABLE;
+	UNREACHABLE;
 }
 
 external void
 Platform_Entry(u64 ArgCount, c08 **Args, c08 **EnvParams)
 {
 	platform_state _P = {0};
-	Platform = &_P;
+	Platform		  = &_P;
 
-	#define EXPORT(ReturnType, Namespace, Name, ...) \
+#define EXPORT(ReturnType, Namespace, Name, ...) \
 	Platform->Functions.Namespace##_##Name = Namespace##_##Name;
-	#define X PLATFORM_FUNCS
-	#include <x.h>
+#define X PLATFORM_FUNCS
+#include <x.h>
 
 	VALIDATE(Sys_GetClockRes(SYS_CLOCK_REALTIME, &ClockResolution), "Failed to get clock resolution");
 
 	elf_auxv *AuxVectors;
-	u64 EnvCount = 0, AuxCount = 0;
+	u64		  EnvCount = 0, AuxCount = 0;
 	{
 		c08 **EnvParam = EnvParams;
 		while (*EnvParam) EnvCount++, EnvParam++;
 
-		AuxVectors = (elf_auxv*) (EnvParam+1);
+		AuxVectors			= (elf_auxv *) (EnvParam + 1);
 		elf_auxv *AuxVector = AuxVectors;
 		while (AuxVector->Type != ELF_AT_NULL) AuxCount++, AuxVector++;
 	}
 
-	Platform->PageSize = 4096; // Most common page size
-	for (u64 I = 0; I < AuxCount; I++) {
-		if (AuxVectors[I].Type == ELF_AT_PAGESZ)
-			Platform->PageSize = AuxVectors[I].Value;
-	}
+	Platform->PageSize = 4096;	// Most common page size
+	for (u64 I = 0; I < AuxCount; I++)
+		if (AuxVectors[I].Type == ELF_AT_PAGESZ) Platform->PageSize = AuxVectors[I].Value;
 
 	platform_module *Util = Platform_LoadModule("util", (vptr) 0x7DB000000000);
 	platform_module *Base = Platform_LoadModule("base", (vptr) 0x7DB100000000);

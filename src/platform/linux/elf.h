@@ -7,7 +7,7 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-//CREDIT: https://refspecs.linuxfoundation.org/elf/gabi4+/contents.html
+// CREDIT: https://refspecs.linuxfoundation.org/elf/gabi4+/contents.html
 
 #if defined(_X64)
 #define ELF_CLASS 64
@@ -260,14 +260,14 @@ typedef struct elf32_section_header {
 } elf32_section_header;
 
 typedef struct elf64_section_header {
-	elf64_word  Name;
-	elf64_word  Type;
+	elf64_word	Name;
+	elf64_word	Type;
 	elf64_xword Flags;
-	elf64_addr  Address;
-	elf64_off   Offset;
+	elf64_addr	Address;
+	elf64_off	Offset;
 	elf64_xword Size;
-	elf64_word  Link;
-	elf64_word  Info;
+	elf64_word	Link;
+	elf64_word	Info;
 	elf64_xword AddressAlignment;
 	elf64_xword EntrySize;
 } elf64_section_header;
@@ -305,11 +305,11 @@ typedef struct elf32_program_header {
 } elf32_program_header;
 
 typedef struct elf64_program_header {
-	elf64_word  Type;
-	elf64_word  Flags;
-	elf64_off   Offset;
-	elf64_addr  VirtualAddress;
-	elf64_addr  PhysicalAddress;
+	elf64_word	Type;
+	elf64_word	Flags;
+	elf64_off	Offset;
+	elf64_addr	VirtualAddress;
+	elf64_addr	PhysicalAddress;
 	elf64_xword FileSize;
 	elf64_xword MemSize;
 	elf64_xword Alignment;
@@ -342,17 +342,17 @@ typedef struct elf32_symbol {
 	elf32_word Name;
 	elf32_addr Value;
 	elf32_word Size;
-	u08        Info;
-	u08        Other;
+	u08		   Info;
+	u08		   Other;
 	elf32_half SectionIndex;
 } elf32_symbol;
 
 typedef struct elf64_symbol {
-	elf64_word  Name;
-	u08         Info;
-	u08         Other;
-	elf64_half  SectionIndex;
-	elf64_addr  Value;
+	elf64_word	Name;
+	u08			Info;
+	u08			Other;
+	elf64_half	SectionIndex;
+	elf64_addr	Value;
 	elf64_xword Size;
 } elf64_symbol;
 
@@ -399,19 +399,19 @@ typedef struct elf32_relocation {
 } elf32_relocation;
 
 typedef struct elf32_relocation_a {
-	elf32_addr  Offset;
-	elf32_word  Info;
+	elf32_addr	Offset;
+	elf32_word	Info;
 	elf32_sword Addend;
 } elf32_relocation_a;
 
 typedef struct elf64_relocation {
-	elf64_addr  Offset;
+	elf64_addr	Offset;
 	elf64_xword Info;
 } elf64_relocation;
 
 typedef struct elf64_relocation_a {
-	elf64_addr   Offset;
-	elf64_xword  Info;
+	elf64_addr	 Offset;
+	elf64_xword	 Info;
 	elf64_sxword Addend;
 } elf64_relocation_a;
 
@@ -465,17 +465,17 @@ typedef struct elf64_relocation_a {
 
 typedef struct elf32_dynamic {
 	elf32_sword Tag;
-   	union {
-   		elf32_word Value;
-   		elf32_addr Pointer;
+	union {
+		elf32_word Value;
+		elf32_addr Pointer;
 	};
 } elf32_dynamic;
 
 typedef struct elf64_dynamic {
 	elf64_sxword Tag;
-   	union {
-   		elf64_xword Value;
-   		elf64_addr  Pointer;
+	union {
+		elf64_xword Value;
+		elf64_addr	Pointer;
 	};
 } elf64_dynamic;
 
@@ -519,10 +519,10 @@ typedef struct elf32_auxv {
 	u32 Type;
 	union {
 		u32 Value;
-		#if ELF_CLASS == 32
+#if ELF_CLASS == 32
 		void *Pointer;
 		void (*Function)(void);
-		#endif
+#endif
 	};
 } elf32_auxv;
 
@@ -530,10 +530,10 @@ typedef struct elf64_auxv {
 	u64 Type;
 	union {
 		u64 Value;
-		#if ELF_CLASS == 64
+#if ELF_CLASS == 64
 		void *Pointer;
 		void (*Function)(void);
-		#endif
+#endif
 	};
 } elf64_auxv;
 
@@ -566,10 +566,10 @@ typedef s32 elf_error;
 
 typedef struct elf_gnu_hash_table {
 	elf_section_header *Header;
-	u32 BucketCount;
-	u32 SymbolOffset;
-	u32 BloomSize;
-	u32 BloomShift;
+	u32					BucketCount;
+	u32					SymbolOffset;
+	u32					BloomSize;
+	u32					BloomShift;
 	union {
 		u32 *Bloom32;
 		u64 *Bloom64;
@@ -580,31 +580,31 @@ typedef struct elf_gnu_hash_table {
 
 typedef struct elf_state {
 	// General
-	u08 State;
+	u08	  State;
 	usize PageSize;
 
 	// Mapped file
-	u32 FileDescriptor;
-	u08 *File;
+	u32	  FileDescriptor;
+	u08	 *File;
 	usize FileSize;
 
 	// Quick access
 	elf_header *Header;
 
 	usize SectionHeaderCount;
-	u08 *SectionHeaderTable;
-	u08 *ProgramHeaderTable;
+	u08	 *SectionHeaderTable;
+	u08	 *ProgramHeaderTable;
 
 	elf_section_header *NullSectionHeader;
 	elf_section_header *SectionNameSectionHeader;
-	c08 *SectionNameTable;
+	c08				   *SectionNameTable;
 
-	usize LookupType;
+	usize			   LookupType;
 	elf_gnu_hash_table GnuHashTable;
 
 	// Loaded image
 	usize TextVAddr;
 	usize VAddrOffset;
-	vptr ImageAddress;
+	vptr  ImageAddress;
 	usize ImageSize;
 } elf_state;
