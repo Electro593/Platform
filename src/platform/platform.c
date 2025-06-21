@@ -18,7 +18,6 @@
 #ifdef _OPENGL
 #define INCLUDE_HEADER
 #include <renderer_opengl/opengl.h>
-// #include <renderer/opengl/mesh.h>
 #undef INCLUDE_HEADER
 #endif
 

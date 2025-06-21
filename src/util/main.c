@@ -38,15 +38,15 @@ extern struct util_funcs _F;
 
 #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
 #define UTIL_FUNCS \
-         SCALAR_FUNCS \
-         VECTOR_FUNCS \
-         MEMORY_FUNCS \
-         BIGINT_FUNCS \
-         STRING_FUNCS \
-         SET_FUNCS \
-         MSDF_FUNCS \
-         FONT_FUNCS \
-         FILE_FUNCS
+    SCALAR_FUNCS   \
+    VECTOR_FUNCS   \
+    MEMORY_FUNCS   \
+    BIGINT_FUNCS   \
+    STRING_FUNCS   \
+    SET_FUNCS      \
+    MSDF_FUNCS     \
+    FONT_FUNCS     \
+    FILE_FUNCS
 
 typedef struct util_state {
 	stack *Stack;
@@ -83,11 +83,11 @@ Load(platform_state *Platform, platform_module *Module)
 #define X PLATFORM_FUNCS
 #include <x.h>
 
-	_F = (util_funcs){
+	_F = (util_funcs) {
 #define EXPORT(R, N, ...) N,
 #define X UTIL_FUNCS
 #include <x.h>
-         };
+	};
 
 	Module->Data  = &_G;
 	Module->Funcs = &_F;

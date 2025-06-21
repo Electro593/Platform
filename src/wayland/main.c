@@ -22,47 +22,47 @@
 #undef INCLUDE_SOURCE
 #else
 #ifdef INCLUDE_SOURCE
-extern $module$_state _G;
-extern $module$_funcs _F;
+extern wayland_state _G;
+extern wayland_funcs _F;
 #endif
 
-// #include <...>
+#include <wayland/wayland.c>
 
 #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
-#define $MODULE$_FUNCS
 
-typedef struct $module$_state {
-} $module$_state;
+typedef struct wayland_state {
+	b08 Initialized;
+} wayland_state;
 
-typedef struct $module$_funcs {
+typedef struct wayland_funcs {
 #define EXPORT(R, N, ...) R (*N)(__VA_ARGS__);
-#define X $MODULE$_FUNCS
+#define X WAYLAND_FUNCS
 #include <x.h>
-} $module$_funcs;
+} wayland_funcs;
 
-#if defined(_$MODULE$_MODULE)
+#if defined(_WAYLAND_MODULE)
 #define EXPORT(R, N, ...) \
             internal R N(__VA_ARGS__);
-#define X $MODULE$_FUNCS
+#define X WAYLAND_FUNCS
 #include <x.h>
 #else
 #define EXPORT(R, N, ...) \
             global R (*N)(__VA_ARGS__);
-#define X $MODULE$_FUNCS
+#define X WAYLAND_FUNCS
 #include <x.h>
 #endif
 #endif
 
 #ifdef INCLUDE_SOURCE
-$module$_state _G;
-$module$_funcs _F;
+wayland_state _G;
+wayland_funcs _F;
 
 external API_EXPORT void
 Load(platform_state *Platform, platform_module *Module)
 {
-	_F = ($module$_funcs) {
+	_F = (wayland_funcs) {
 #define EXPORT(R, N, ...) N,
-#define X $MODULE$_FUNCS
+#define X WAYLAND_FUNCS
 #include <x.h>
 	};
 
@@ -80,19 +80,5 @@ Load(platform_state *Platform, platform_module *Module)
 #include <x.h>
 }
 
-external API_EXPORT void
-Init(platform_state *Platform)
-{
-}
-
-external API_EXPORT void
-Update(platform_state *Platform)
-{
-}
-
-external API_EXPORT void
-Unload(platform_state *Platform)
-{
-}
 #endif
 #endif
