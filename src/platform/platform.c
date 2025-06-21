@@ -71,6 +71,16 @@ _Mem_BytesUntil(u08 *P, c08 B)
 	return Count;
 }
 
+internal s08
+_Str_Cmp(c08 *A, c08 *B)
+{
+	usize L1 = _Mem_BytesUntil((u08 *) A, 0);
+	usize L2 = _Mem_BytesUntil((u08 *) B, 0);
+	if (L1 > L2) L1 = L2;
+	L1++;
+	return _Mem_Cmp((u08 *) A, (u08 *) B, L1);
+}
+
 internal string
 _CString(c08 *Chars)
 {
@@ -148,11 +158,13 @@ Platform_ReloadModule(platform_module *Module)
 	Module->Load(Platform, Module);
 	if (Platform->UtilIsLoaded) Stack_Set(Stack);
 
+	if (_Str_Cmp(Module->Name, "util") == EQUAL) Platform_LoadUtilFuncs(Module);
+
 	return TRUE;
 }
 
 internal platform_module *
-Platform_LoadModule(c08 *Name, vptr DebugLoadAddress)
+Platform_LoadModule(c08 *Name)
 {
 	u32				 NameLen = _Mem_BytesUntil((u08 *) Name, 0);
 	platform_module *Module	 = Platform_GetModule(Name);
@@ -208,10 +220,12 @@ Platform_LoadModule(c08 *Name, vptr DebugLoadAddress)
 	Module->Name	 = Name;
 	Module->FileName = Path;
 
-#ifdef _DEBUG
-	Module->DebugLoadAddress = DebugLoadAddress;
-#else
 	Module->DebugLoadAddress = NULL;
+#ifdef _DEBUG
+	if (_Str_Cmp(Name, "util") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB000000000;
+	else if (_Str_Cmp(Name, "base") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB100000000;
+	else if (_Str_Cmp(Name, "renderer_opengl") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB200000000;
+	else if (_Str_Cmp(Name, "wayland") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB300000000;
 #endif
 
 	Platform_ReloadModule(Module);

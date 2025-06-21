@@ -288,7 +288,7 @@ typedef enum file_mode {
 	EXPORT(r64,              Platform, GetTime,               void) \
 	EXPORT(void,             Platform, UnloadModule,          platform_module *Module) \
 	EXPORT(b08,              Platform, ReloadModule,          platform_module *Module) \
-	EXPORT(platform_module*, Platform, LoadModule,            c08 *Name, vptr DebugLoadAddress) \
+	EXPORT(platform_module*, Platform, LoadModule,            c08 *Name) \
 	INTERN(vptr,             Platform, GetProcAddress,        platform_module *Module, c08 *Name) \
 	INTERN(b08,              Platform, IsModuleBackendOpened, platform_module *Module) \
 	INTERN(void,             Platform, OpenModuleBackend,     platform_module *Module) \

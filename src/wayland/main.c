@@ -73,7 +73,7 @@ Load(platform_state *Platform, platform_module *Module)
 #define X PLATFORM_FUNCS
 #include <x.h>
 
-	platform_module *UtilModule = Platform_LoadModule("util", (vptr) 0x7DB000000000);
+	platform_module *UtilModule = Platform_LoadModule("util");
 	util_funcs		*UtilFuncs	= UtilModule->Funcs;
 #define EXPORT(R, N, ...) N = UtilFuncs->N;
 #define X UTIL_FUNCS
@@ -83,7 +83,7 @@ Load(platform_state *Platform, platform_module *Module)
 external API_EXPORT void
 Init(platform_state *Platform)
 {
-	
+	_G.NextObjectId = 1;
 }
 
 #endif

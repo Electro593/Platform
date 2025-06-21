@@ -707,7 +707,7 @@ Platform_Entry(void)
 	Platform_LoadWin32();
 	Platform_ParseCommandLine();
 	Win32_QueryPerformanceFrequency(&CounterFrequency);
-	Platform_LoadUtilFuncs(Platform_LoadModule("util"));
+	Platform_LoadModule("util");
 
 	u32	 Size = 16 * 1024 * 1024;
 	vptr Mem  = Platform_AllocateMemory(Size);
@@ -727,8 +727,6 @@ Platform_Entry(void)
 		for (u32 I = 0; I < Platform->ModuleCount; I++) {
 			platform_module *Module	  = Platform->Modules + I;
 			b08				 Reloaded = Platform_ReloadModule(Module);
-
-			if (Reloaded && _Mem_Cmp(Module->Name, "util", 5) == EQUAL) Platform_LoadUtilFuncs(Module);
 		}
 
 		win32_message Message;

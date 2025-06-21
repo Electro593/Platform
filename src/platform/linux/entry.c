@@ -275,16 +275,16 @@ Platform_Entry(u64 ArgCount, c08 **Args, c08 **EnvParams)
 	for (u64 I = 0; I < AuxCount; I++)
 		if (AuxVectors[I].Type == ELF_AT_PAGESZ) Platform->PageSize = AuxVectors[I].Value;
 
-	Platform_LoadUtilFuncs(Platform_LoadModule("util", (vptr) 0x7DB000000000));
+	Platform_LoadModule("util");
 
 	u32	 Size = 16 * 1024 * 1024;
 	vptr Mem  = Platform_AllocateMemory(Size);
 	Stack_Init(Mem, Size);
 	Stack_Push();
 
-	Platform_LoadModule("base", (vptr) 0x7DB100000000);
+	Platform_LoadModule("base");
 
-	for (usize I = 0; I < Platform->ModuleCount; I++) Platform_UnloadModule(Platform->Modules+I);
+	for (usize I = 0; I < Platform->ModuleCount; I++) Platform_UnloadModule(Platform->Modules + I);
 
 	Stack_Pop();
 
