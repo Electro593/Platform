@@ -285,6 +285,10 @@ typedef struct elf64_section_header {
 #define ELF_SEGMENT_TYPE_PHDR    6
 #define ELF_SEGMENT_TYPE_TLS     7
 
+#define ELF_SEGMENT_TYPE_GNU_EH_FRAME 0x6474e550
+#define ELF_SEGMENT_TYPE_GNU_STACK    0x6474e551
+#define ELF_SEGMENT_TYPE_GNU_RELRO    0x6474e552
+
 #define ELF_SEGMENT_FLAG_EXEC  0x1
 #define ELF_SEGMENT_FLAG_WRITE 0x2
 #define ELF_SEGMENT_FLAG_READ  0x4
@@ -451,6 +455,8 @@ typedef struct elf64_relocation_a {
 #define ELF_DYNAMIC_TAG_PREINIT_ARRAY   32
 #define ELF_DYNAMIC_TAG_PREINIT_ARRAYSZ 33
 
+#define ELF_DYNAMIC_TAG_GNU_HASH        0x6ffffef5
+
 #define ELF_DYNAMIC_FLAG_ORIGIN     0x01
 #define ELF_DYNAMIC_FLAG_SYMBOLIC   0x02
 #define ELF_DYNAMIC_FLAG_TEXTREL    0x04
@@ -533,6 +539,8 @@ typedef struct elf64_auxv {
 
 #define elf_auxv ELF_CAT3(elf, ELF_CLASS, _auxv)
 
+/* ========== HASH TABLE ========== */
+
 /* ========== IMPLEMENTATION ========== */
 
 #define ELF_ERROR_SUCCESS           0
@@ -548,35 +556,55 @@ typedef struct elf64_auxv {
 
 #define ELF_STATE_CLOSED           0
 #define ELF_STATE_OPENED           1
-#define ELF_STATE_LOADED_NORELOC   2
-#define ELF_STATE_LOADED           3
+#define ELF_STATE_LOADED           2
+
+#define ELF_LOOKUP_LINEAR   0
+#define ELF_LOOKUP_HASH     1
+#define ELF_LOOKUP_GNU_HASH 2
 
 typedef s32 elf_error;
+
+typedef struct elf_gnu_hash_table {
+	elf_section_header *Header;
+	u32 BucketCount;
+	u32 SymbolOffset;
+	u32 BloomSize;
+	u32 BloomShift;
+	union {
+		u32 *Bloom32;
+		u64 *Bloom64;
+	};
+	u32 *Buckets;
+	u32 *Chain;
+} elf_gnu_hash_table;
 
 typedef struct elf_state {
 	// General
 	u08 State;
-	u64 PageSize;
+	usize PageSize;
 
 	// Mapped file
 	u32 FileDescriptor;
 	u08 *File;
-	u64 FileSize;
+	usize FileSize;
 
 	// Quick access
 	elf_header *Header;
 
-	u64 SectionHeaderCount;
+	usize SectionHeaderCount;
 	u08 *SectionHeaderTable;
 	u08 *ProgramHeaderTable;
 
 	elf_section_header *NullSectionHeader;
-	elf_section_header *GnuHashTableHeader;
 	elf_section_header *SectionNameSectionHeader;
 	c08 *SectionNameTable;
 
+	usize LookupType;
+	elf_gnu_hash_table GnuHashTable;
+
 	// Loaded image
+	usize TextVAddr;
 	usize VAddrOffset;
 	vptr ImageAddress;
-	u64 ImageSize;
+	usize ImageSize;
 } elf_state;

@@ -227,7 +227,7 @@ Platform_ReloadModule(platform_module *Module)
 
 	s32 Error = Elf_Open(&Module->ELF, Module->FileName, Platform->PageSize);
 	Assert(!Error, "Failed to read elf");
-	Error = Elf_LoadProgram(&Module->ELF);
+	Error = Elf_LoadProgram(&Module->ELF, Module->DebugLoadAddress);
 	Assert(!Error, "Failed to load elf");
 
 	Platform_GetProcAddress(&Module->ELF, "Load", (vptr*) &Module->Load);
@@ -277,7 +277,7 @@ Platform_Entry(u64 ArgCount, c08 **Args, c08 **EnvParams)
 			Platform->PageSize = AuxVectors[I].Value;
 	}
 
-	Platform_LoadUtilFuncs(Platform_LoadModule("util"));
+	Platform_LoadUtilFuncs(Platform_LoadModule("util", (vptr) 0x7DB000000000));
 
 	Platform_Exit(0);
 }

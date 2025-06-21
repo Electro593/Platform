@@ -115,7 +115,7 @@ Platform_GetModule(c08 *Name)
 }
 
 internal platform_module *
-Platform_LoadModule(c08 *Name)
+Platform_LoadModule(c08 *Name, vptr DebugLoadAddress)
 {
    u32 NameLen = _Mem_BytesUntil((u08*) Name, 0);
    platform_module *Module = Platform_GetModule(Name);
@@ -170,6 +170,12 @@ Platform_LoadModule(c08 *Name)
    _Mem_Set((vptr)Module, 0, sizeof(platform_module));
    Module->Name = Name;
    Module->FileName = Path;
+
+   #ifdef _DEBUG
+   Module->DebugLoadAddress = DebugLoadAddress;
+   #else
+   Module->DebugLoadAddress = NULL;
+   #endif
 
    Platform_ReloadModule(Module);
 

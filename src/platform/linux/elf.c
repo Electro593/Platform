@@ -39,6 +39,66 @@ Elf_CheckName(c08 *Name, c08 *Expected)
 	return Same && Ending;
 }
 
+internal u32
+Elf_GnuHash(c08 *Name)
+{
+	u32 Hash = 5381;
+	while (*Name) {
+		Hash = (Hash << 5) + Hash + *Name;
+		Name++;
+	}
+	return Hash;
+}
+
+internal vptr
+Elf_LookupSymbol_Linear(elf_state *State, c08 *Name)
+{
+	return NULL;
+}
+
+internal vptr
+Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
+{
+	elf_gnu_hash_table *Table = &State->GnuHashTable;
+
+	u32 Hash = Elf_GnuHash(Name);
+	u32 Hash2 = Hash >> Table->BloomShift;
+
+	if (State->Header->Ident.FileClass == 32) {
+		u32 N = Table->Bloom32[(Hash >> 5) & (Table->BloomSize - 1)];
+		u32 B = (1 << (Hash & 31)) | (1 << (Hash2 & 31));
+		if ((N & B) != B) return NULL;
+	} else {
+		u64 N = Table->Bloom64[(Hash >> 6) & (Table->BloomSize - 1)];
+		u64 B = (1ull << (Hash & 63)) | (1ull << (Hash2 & 63));
+		if ((N & B) != B) return NULL;
+	}
+
+	elf_section_header *SymtabHeader = Elf_GetSectionHeader(State, Table->Header->Link);
+	elf_symbol *Symtab = (vptr) State->File + SymtabHeader->Offset;
+
+	elf_section_header *StrtabHeader = Elf_GetSectionHeader(State, SymtabHeader->Link);
+	c08 *Strtab = (vptr) State->File + StrtabHeader->Offset;
+
+	u32 SymIndex = Table->Buckets[Hash % Table->BucketCount];
+	u32 *ChainEntry = Table->Chain + SymIndex - Table->SymbolOffset;
+
+	while (1) {
+		if ((Hash >> 1) == (*ChainEntry >> 1)) {
+			elf_symbol *Symbol = Symtab + SymIndex;
+			c08 *SymName = Strtab + Symbol->Name;
+			if (Elf_CheckName(SymName, Name)) {
+				return State->ImageAddress - State->VAddrOffset + Symbol->Value;
+			}
+		}
+
+		if (*ChainEntry & 1) break;
+		ChainEntry++, SymIndex++;
+	}
+
+	return NULL;
+}
+
 internal usize
 Elf_ExtractAddend(elf_state *State, usize Type)
 {
@@ -82,9 +142,6 @@ Elf_ApplyRelocation(elf_state *State, vptr Target, usize Type, usize Value)
 internal elf_error
 Elf_HandleRelocations(elf_state *State)
 {
-	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_LOADED_NORELOC) return ELF_ERROR_INVALID_OPERATION;
-
 	for (usize I = 0; I < State->SectionHeaderCount; I++) {
 		elf_section_header *Header = Elf_GetSectionHeader(State, I);
 		vptr Data = State->File + Header->Offset;
@@ -151,7 +208,109 @@ Elf_HandleRelocations(elf_state *State)
 			Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
 	}
 
-	State->State = ELF_STATE_LOADED;
+	return ELF_ERROR_SUCCESS;
+}
+
+internal elf_error
+Elf_LoadSections(elf_state *State, vptr LoadAddress)
+{
+	if (State->Header->Type == ELF_TYPE_DYNAMIC) {
+		usize MinVAddr = (usize)-1;
+		usize MaxVAddr = 0;
+
+		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
+			elf_program_header *Header = Elf_GetProgramHeader(State, I);
+			switch (Header->Type) {
+				case ELF_SEGMENT_TYPE_LOAD: {
+					if (MinVAddr > Header->VirtualAddress)
+						MinVAddr = Header->VirtualAddress;
+					if (MaxVAddr < Header->VirtualAddress + Header->MemSize)
+						MaxVAddr = Header->VirtualAddress + Header->MemSize;
+				} break;
+			}
+		}
+
+		if (MinVAddr == (usize)-1) return ELF_ERROR_INVALID_FORMAT;
+
+		// Reserve the overall space
+		usize PageMask = State->PageSize - 1;
+		MinVAddr &= ~PageMask;
+		State->VAddrOffset = MinVAddr;
+		State->ImageSize = MaxVAddr - MinVAddr;
+		LoadAddress = (vptr) (((usize) LoadAddress - State->TextVAddr) & ~PageMask);
+		vptr Base = State->ImageAddress = Sys_MemMap(
+			LoadAddress, (State->ImageSize + PageMask) & ~PageMask,
+			SYS_PROT_NONE, SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS | SYS_MAP_NORESERVE,
+			-1, 0
+		);
+		if ((usize)Base & PageMask) return ELF_ERROR_OUT_OF_MEMORY;
+
+		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
+			elf_program_header *Header = Elf_GetProgramHeader(State, I);
+			switch (Header->Type) {
+				case ELF_SEGMENT_TYPE_LOAD: {
+					usize Padding = Header->VirtualAddress & PageMask;
+					vptr ProgBase = Base + (Header->VirtualAddress - MinVAddr);
+					s32 Prot = 0
+						| ((Header->Flags & ELF_SEGMENT_FLAG_READ ) ? SYS_PROT_READ  : 0)
+						| ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE : 0)
+						| ((Header->Flags & ELF_SEGMENT_FLAG_EXEC ) ? SYS_PROT_EXEC  : 0);
+					s32 Flags = SYS_MAP_PRIVATE | SYS_MAP_FIXED;
+
+					// Try to map the file portion into memory
+					if (Header->FileSize > 0) {
+						vptr Addr = Sys_MemMap(
+							(vptr)((usize)ProgBase & ~PageMask),
+							(Header->FileSize + Padding + PageMask) & ~PageMask,
+							Prot, Flags,
+							State->FileDescriptor, Header->Offset - Padding
+						);
+						if ((usize)Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
+					}
+
+					// Try to map the nobits portion into memory
+					if (Header->MemSize > Header->FileSize) {
+						usize NoBitsPadding = State->PageSize - (((usize)ProgBase + Header->FileSize) & PageMask);
+						_Mem_Set(ProgBase + Header->FileSize, 0, NoBitsPadding);
+
+						if (Header->MemSize > Header->FileSize + NoBitsPadding) {
+							vptr NoBitsBase = (vptr)(((usize)ProgBase + Header->FileSize + PageMask) & ~PageMask);
+							usize NoBitsExtra = Header->MemSize - Header->FileSize - NoBitsPadding;
+							vptr Addr = Sys_MemMap(
+								NoBitsBase, NoBitsExtra,
+								Prot, Flags | SYS_MAP_ANONYMOUS,
+								-1, 0
+							);
+							if ((usize)Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
+							_Mem_Set(NoBitsBase, 0, NoBitsExtra);
+						}
+					}
+				} break;
+			}
+		}
+	} else {
+		return ELF_ERROR_NOT_SUPPORTED;
+	}
+
+	return ELF_ERROR_SUCCESS;
+}
+
+internal elf_error
+Elf_FixPermsAfterReloc(elf_state *State)
+{
+	// for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
+	// 	elf_program_header *Header = Elf_GetProgramHeader(State, I);
+	// 	if (Header->Type == ELF_SEGMENT_TYPE_GNU_RELRO) {
+	// 		usize PageMask = State->PageSize - 1;
+	// 		u32 *Data = (vptr) State->ImageAddress - State->VAddrOffset + Header->VirtualAddress;
+	// 		vptr Addr = Sys_MemMap(
+	// 			(vptr) ((usize) Data & ~PageMask), (Header->MemSize + PageMask) & ~PageMask,
+	// 			SYS_PROT_READ, SYS_MAP_PRIVATE | SYS_MAP_FIXED | SYS_MAP_ANONYMOUS,
+	// 			-1, 0
+	// 		);
+	// 	}
+	// }
+
 	return ELF_ERROR_SUCCESS;
 }
 
@@ -199,7 +358,28 @@ Elf_SetupAndValidate(elf_state *State)
 		for (usize I = 0; I < State->SectionHeaderCount; I++) {
 			elf_section_header *Header = Elf_GetSectionHeader(State, I);
 			c08 *Name = State->SectionNameTable + Header->Name;
-			if (Elf_CheckName(Name, ".gnu.hash")) State->GnuHashTableHeader = Header;
+			vptr Data = State->File + Header->Offset;
+
+			if (Elf_CheckName(Name, ".text")) {
+				State->TextVAddr = Header->Address;
+			} else if (Elf_CheckName(Name, ".gnu.hash")) {
+				if (State->LookupType < ELF_LOOKUP_GNU_HASH) {
+					State->LookupType = ELF_LOOKUP_GNU_HASH;
+
+					State->GnuHashTable.Header = Header;
+					State->GnuHashTable.BucketCount = ((u32*)Data)[0];
+					State->GnuHashTable.SymbolOffset = ((u32*)Data)[1];
+					State->GnuHashTable.BloomSize = ((u32*)Data)[2];
+					State->GnuHashTable.BloomShift = ((u32*)Data)[3];
+					State->GnuHashTable.Bloom32 = (u32*)Data + 4;
+
+					usize BloomWords = State->GnuHashTable.BloomSize
+						* ((State->Header->Ident.FileClass == ELF_CLASS_32) ? 1 : 2);
+
+					State->GnuHashTable.Buckets = State->GnuHashTable.Bloom32 + BloomWords;
+					State->GnuHashTable.Chain = State->GnuHashTable.Buckets + State->GnuHashTable.BucketCount;
+				}
+			}
 		}
 	} else {
 		if (State->Header->SectionNameTableIndex != ELF_SECTION_INDEX_UNDEF) return ELF_ERROR_INVALID_FORMAT;
@@ -286,90 +466,18 @@ Elf_Open(elf_state *State, c08 *FileName, usize PageSize)
 }
 
 internal elf_error
-Elf_LoadProgram(elf_state *State)
+Elf_LoadProgram(elf_state *State, vptr LoadAddress)
 {
 	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
 	if (State->State != ELF_STATE_OPENED) return ELF_ERROR_INVALID_OPERATION;
 
-	if (State->Header->Type == ELF_TYPE_DYNAMIC) {
-		usize MinVAddr = (usize)-1;
-		usize MaxVAddr = 0;
+	elf_error Error = Elf_LoadSections(State, LoadAddress);
+	if (Error) return Error;
 
-		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
-			elf_program_header *Header = Elf_GetProgramHeader(State, I);
-			switch (Header->Type) {
-				case ELF_SEGMENT_TYPE_LOAD: {
-					if (MinVAddr > Header->VirtualAddress)
-						MinVAddr = Header->VirtualAddress;
-					if (MaxVAddr < Header->VirtualAddress + Header->MemSize)
-						MaxVAddr = Header->VirtualAddress + Header->MemSize;
-				} break;
-			}
-		}
+	Error = Elf_HandleRelocations(State);
+	if (Error) return Error;
 
-		if (MinVAddr == (usize)-1) return ELF_ERROR_INVALID_FORMAT;
-
-		// Reserve the overall space
-		usize PageMask = State->PageSize - 1;
-		MinVAddr &= ~PageMask;
-		State->VAddrOffset = MinVAddr;
-		State->ImageSize = MaxVAddr - MinVAddr;
-		vptr Base = State->ImageAddress = Sys_MemMap(
-			NULL, (State->ImageSize + PageMask) & ~PageMask,
-			SYS_PROT_NONE, SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS | SYS_MAP_NORESERVE,
-			-1, 0
-		);
-		if ((usize)Base & PageMask) return ELF_ERROR_OUT_OF_MEMORY;
-
-		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
-			elf_program_header *Header = Elf_GetProgramHeader(State, I);
-			switch (Header->Type) {
-				case ELF_SEGMENT_TYPE_LOAD: {
-					usize Padding = Header->VirtualAddress & PageMask;
-					vptr ProgBase = Base + (Header->VirtualAddress - MinVAddr);
-					s32 Prot = 0
-						| ((Header->Flags & ELF_SEGMENT_FLAG_READ ) ? SYS_PROT_READ  : 0)
-						| ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE : 0)
-						| ((Header->Flags & ELF_SEGMENT_FLAG_EXEC ) ? SYS_PROT_EXEC  : 0);
-					s32 Flags = SYS_MAP_PRIVATE | SYS_MAP_FIXED;
-
-					// Try to map the file portion into memory
-					if (Header->FileSize > 0) {
-						vptr Addr = Sys_MemMap(
-							(vptr)((usize)ProgBase & ~PageMask),
-							(Header->FileSize + Padding + PageMask) & ~PageMask,
-							Prot, Flags,
-							State->FileDescriptor, Header->Offset - Padding
-						);
-						if ((usize)Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
-					}
-
-					// Try to map the nobits portion into memory
-					if (Header->MemSize > Header->FileSize) {
-						usize NoBitsPadding = State->PageSize - (((usize)ProgBase + Header->FileSize) & PageMask);
-						_Mem_Set(ProgBase + Header->FileSize, 0, NoBitsPadding);
-
-						if (Header->MemSize > Header->FileSize + NoBitsPadding) {
-							vptr NoBitsBase = (vptr)(((usize)ProgBase + Header->FileSize + PageMask) & ~PageMask);
-							usize NoBitsExtra = Header->MemSize - Header->FileSize - NoBitsPadding;
-							vptr Addr = Sys_MemMap(
-								NoBitsBase, NoBitsExtra,
-								Prot, Flags | SYS_MAP_ANONYMOUS,
-								-1, 0
-							);
-							if ((usize)Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
-							_Mem_Set(NoBitsBase, 0, NoBitsExtra);
-						}
-					}
-				} break;
-			}
-		}
-	} else {
-		return ELF_ERROR_NOT_SUPPORTED;
-	}
-
-	State->State = ELF_STATE_LOADED_NORELOC;
-	elf_error Error = Elf_HandleRelocations(State);
+	Error = Elf_FixPermsAfterReloc(State);
 	if (Error) return Error;
 
 	State->State = ELF_STATE_LOADED;
@@ -382,6 +490,15 @@ Elf_GetProcAddress(elf_state *State, c08 *ProcName, vptr *ProcOut)
 	if (!State || !ProcName || !ProcOut) return ELF_ERROR_INVALID_ARGUMENT;
 	if (State->State != ELF_STATE_LOADED) return ELF_ERROR_INVALID_OPERATION;
 
+	vptr Addr = NULL;
+	switch (State->LookupType) {
+		case ELF_LOOKUP_LINEAR: Addr = Elf_LookupSymbol_Linear(State, ProcName); break;
+		case ELF_LOOKUP_GNU_HASH: Addr = Elf_LookupSymbol_GnuHash(State, ProcName); break;
+	}
+
+	if (!Addr) return ELF_ERROR_NOT_FOUND;
+
+	*ProcOut = Addr;
 	return ELF_ERROR_SUCCESS;
 }
 
@@ -408,5 +525,3 @@ Elf_Close(elf_state *State)
 	State->State = ELF_STATE_CLOSED;
 	return ELF_ERROR_SUCCESS;
 }
-
-#undef MAYBE_SWAP
