@@ -295,6 +295,7 @@ typedef enum file_mode {
 	EXPORT(void,             Platform, GetFileTime,    c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
 	EXPORT(r64,              Platform, GetTime,        void) \
 	EXPORT(platform_module*, Platform, LoadModule,     c08 *Name, vptr DebugLoadAddress) \
+	INTERN(b08,              Platform, UnloadModule,   platform_module *Module) \
 	INTERN(b08,              Platform, ReloadModule,   platform_module *Module) \
 	EXPORT(s08,              Platform, CmpFileTime,    datetime A, datetime B) \
 	EXPORT(b08,              Platform, OpenFile,       file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \

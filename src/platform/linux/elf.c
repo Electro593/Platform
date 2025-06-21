@@ -115,9 +115,10 @@ Elf_ComputeRelocation(elf_state *State, usize Type, usize A, usize S, usize B)
 	switch (State->Header->Machine) {
 		case ELF_MACHINE_X86_64: {
 			switch (Type) {
-				case ELF_RELOCATION_X86_64_GLOB_DAT: V = S; break;
-				case ELF_RELOCATION_X86_64_RELATIVE: V = B + A; break;
-				default: Platform_Exit(1); break;
+				case ELF_RELOCATION_X86_64_GLOB_DAT:  V = S;     break;
+				case ELF_RELOCATION_X86_64_JUMP_SLOT: V = S;     break;
+				case ELF_RELOCATION_X86_64_RELATIVE:  V = B + A; break;
+				default: Assert(FALSE);
 			}
 		} break;
 	}
@@ -131,9 +132,9 @@ Elf_ApplyRelocation(elf_state *State, vptr Target, usize Type, usize Value)
 	switch (State->Header->Machine) {
 		case ELF_MACHINE_X86_64: {
 			switch (Type) {
-				case ELF_RELOCATION_X86_64_GLOB_DAT: *V64 = Value; break;
-				case ELF_RELOCATION_X86_64_RELATIVE: *V64 = Value; break;
-				default: Platform_Exit(1); break;
+				case ELF_RELOCATION_X86_64_GLOB_DAT:  *V64 = Value; break;
+				case ELF_RELOCATION_X86_64_JUMP_SLOT: *V64 = Value; break;
+				case ELF_RELOCATION_X86_64_RELATIVE:  *V64 = Value; break;
 			}
 		} break;
 	}
