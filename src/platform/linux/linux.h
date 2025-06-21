@@ -88,17 +88,18 @@ typedef struct sys_timespec {
 } sys_timespec;
 
 #define LINUX_SYSCALLS \
-	SYSCALL(0,   Read,         s64,  u32 FileDescriptor, c08 *Buffer, u64 Count) \
-	SYSCALL(1,   Write,        s64,  u32 FileDescriptor, c08 *Buffer, u64 Count) \
-	SYSCALL(2,   Open,         s32,  c08 *Filename, s32 Flags, u16 Mode) \
-	SYSCALL(3,   Close,        s32,  u32 FileDescriptor) \
-	SYSCALL(5,   FileStat,     s32,  u32 FileDescriptor, sys_stat *Stat) \
-	SYSCALL(8,   Seek,         s64,  u32 FileDescriptor, s64 Offset, s32 Whence) \
-	SYSCALL(9,   MemMap,       vptr, vptr Address, u64 Length, s32 Protection, s32 Flags, u32 FileDescriptor, s64 Offset) \
-	SYSCALL(11,  MemUnmap,     s32,  vptr Address, u64 Length) \
-	SYSCALL(60,  Exit,         void, s32 ErrorCode) \
-	SYSCALL(228, GetClockTime, s32,  s32 ClockID, sys_timespec *Timespec) \
-	SYSCALL(229, GetClockRes,  s32,  s32 ClockID, sys_timespec *Timespec) \
+	SYSCALL(0,   Read,         ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
+	SYSCALL(1,   Write,        ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
+	SYSCALL(2,   Open,         s32,   c08 *Filename, s32 Flags, u16 Mode) \
+	SYSCALL(3,   Close,        s32,   u32 FileDescriptor) \
+	SYSCALL(5,   FileStat,     s32,   u32 FileDescriptor, sys_stat *Stat) \
+	SYSCALL(8,   Seek,         ssize, u32 FileDescriptor, ssize Offset, s32 Whence) \
+	SYSCALL(9,   MemMap,       vptr,  vptr Address, usize Length, s32 Protection, s32 Flags, u32 FileDescriptor, s64 Offset) \
+	SYSCALL(10,  MemProtect,   s32,   vptr Address, usize Length, s32 Protection) \
+	SYSCALL(11,  MemUnmap,     s32,   vptr Address, usize Length) \
+	SYSCALL(60,  Exit,         void,  s32 ErrorCode) \
+	SYSCALL(228, GetClockTime, s32,   s32 ClockID, sys_timespec *Timespec) \
+	SYSCALL(229, GetClockRes,  s32,   s32 ClockID, sys_timespec *Timespec) \
 
 // rdi, rsi, rdx, rcx, r8, r9 -> rdi, rsi, rdx, r10, r8, r9
 #define SYSCALL(ID, Name, ReturnType, ...) \

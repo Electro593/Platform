@@ -299,18 +299,22 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 internal elf_error
 Elf_FixPermsAfterReloc(elf_state *State)
 {
-	// for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
-	// 	elf_program_header *Header = Elf_GetProgramHeader(State, I);
-	// 	if (Header->Type == ELF_SEGMENT_TYPE_GNU_RELRO) {
-	// 		usize PageMask = State->PageSize - 1;
-	// 		u32 *Data = (vptr) State->ImageAddress - State->VAddrOffset + Header->VirtualAddress;
-	// 		vptr Addr = Sys_MemMap(
-	// 			(vptr) ((usize) Data & ~PageMask), (Header->MemSize + PageMask) & ~PageMask,
-	// 			SYS_PROT_READ, SYS_MAP_PRIVATE | SYS_MAP_FIXED | SYS_MAP_ANONYMOUS,
-	// 			-1, 0
-	// 		);
-	// 	}
-	// }
+	for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
+		elf_program_header *Header = Elf_GetProgramHeader(State, I);
+		if (Header->Type == ELF_SEGMENT_TYPE_GNU_RELRO) {
+			usize PageMask = State->PageSize - 1;
+			u32 *Data = (vptr) State->ImageAddress - State->VAddrOffset + Header->VirtualAddress;
+			s32 Prot = 0
+				| ((Header->Flags & ELF_SEGMENT_FLAG_READ ) ? SYS_PROT_READ  : 0)
+				| ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE : 0)
+				| ((Header->Flags & ELF_SEGMENT_FLAG_EXEC ) ? SYS_PROT_EXEC  : 0);
+			Sys_MemProtect(
+				(vptr) ((usize) Data & ~PageMask),
+				(Header->MemSize + PageMask) & ~PageMask,
+				Prot
+			);
+		}
+	}
 
 	return ELF_ERROR_SUCCESS;
 }
