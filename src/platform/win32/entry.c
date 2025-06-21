@@ -499,34 +499,32 @@ Platform_CmpFileTime(datetime A, datetime B)
 	return EQUAL;
 }
 
-internal b08
-Platform_ReloadModule(platform_module *Module)
+internal vptr
+Platform_GetProcAddress(platform_module *Module, c08 *Name)
 {
-	datetime LastWriteTime;
-	Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
-	if (Module->DLL) {
-		if (Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS) return FALSE;
+	vptr ProcAddress = (vptr) Win32_GetProcAddress(Module->DLL, Name);
+	if (!*ProcAddress) ProcAddress = (vptr) Platform_Stub;
+	else Assert(!Error, "Failed to get proc address");
+	return ProcAddress;
+}
 
-		Module->Unload(Platform);
-		Win32_FreeLibrary(Module->DLL);
-	}
-	Module->LastWriteTime = LastWriteTime;
+internal b08
+Platform_IsModuleBackendOpened(platform_module *Module)
+{
+	return !!Module->DLL;
+}
 
+internal void
+Platform_OpenModuleBackend(platform_module *Module)
+{
 	Module->DLL = Win32_LoadLibraryA(Module->FileName);
+}
 
-	Module->Load   = (func_Module_Load *) Win32_GetProcAddress(Module->DLL, "Load");
-	Module->Init   = (func_Module_Init *) Win32_GetProcAddress(Module->DLL, "Init");
-	Module->Update = (func_Module_Update *) Win32_GetProcAddress(Module->DLL, "Update");
-	Module->Unload = (func_Module_Unload *) Win32_GetProcAddress(Module->DLL, "Unload");
-
-	if (!Module->Load) Module->Load = (vptr) Platform_Stub;
-	if (!Module->Init) Module->Init = (vptr) Platform_Stub;
-	if (!Module->Update) Module->Update = (vptr) Platform_Stub;
-	if (!Module->Unload) Module->Unload = (vptr) Platform_Stub;
-
-	Module->Load(Platform, Module);
-
-	return TRUE;
+internal void
+Platform_CloseModuleBackend(platform_module *Module)
+{
+	Win32_FreeLibrary(Module->DLL);
+	Module->DLL = NULL;
 }
 
 internal void
@@ -718,12 +716,6 @@ Platform_Entry(void)
 
 	Platform_LoadModule("base");
 
-	for (u32 I = 0; I < Platform->ModuleCount; I++) {
-		stack Stack = Stack_Get();
-		Platform->Modules[I].Init(Platform);
-		Stack_Set(Stack);
-	}
-
 	s64 CountsPerSecond;
 	Win32_QueryPerformanceFrequency(&CountsPerSecond);
 
@@ -787,14 +779,7 @@ Platform_Entry(void)
 		Platform->FPS = CountsPerSecond / (r64) ElapsedTime;
 	}
 
-	// TODO deinit, where we free the allocated memory and clear up files
-	//  Also free the modules dlls
-
-	for (u32 I = 0; I < Platform->ModuleCount; I++) {
-		vptr Cursor = Stack_GetCursor();
-		Platform->Modules[I].Unload(Platform);
-		Stack_SetCursor(Cursor);
-	}
+	for (usize I = 0; I < Platform->ModuleCount; I++) Platform_UnloadModule(Platform->Modules[I]);
 
 	Stack_Pop();
 

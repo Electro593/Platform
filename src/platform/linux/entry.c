@@ -206,53 +206,38 @@ Platform_CmpFileTime(datetime A, datetime B)
 	return 0;
 }
 
-internal void
-Platform_GetProcAddress(elf_state *State, c08 *Name, vptr *ProcAddress)
+internal vptr
+Platform_GetProcAddress(platform_module *Module, c08 *Name)
 {
-	elf_error Error = Elf_GetProcAddress(State, Name, ProcAddress);
-	if (Error == ELF_ERROR_NOT_FOUND) *ProcAddress = (vptr) Platform_Stub;
+	vptr	  ProcAddress;
+	elf_error Error = Elf_GetProcAddress(&Module->ELF, Name, &ProcAddress);
+	if (Error == ELF_ERROR_NOT_FOUND) ProcAddress = (vptr) Platform_Stub;
 	else Assert(!Error, "Failed to get proc address");
+	return ProcAddress;
 }
 
 internal b08
-Platform_UnloadModule(platform_module *Module)
+Platform_IsModuleBackendOpened(platform_module *Module)
 {
-	if (Module->ELF.State == ELF_STATE_LOADED) {
-		Module->Unload(Platform);
-		s32 Error = Elf_Unload(&Module->ELF);
-		Assert(!Error, "Failed to unload elf");
-		Error = Elf_Close(&Module->ELF);
-		Assert(!Error, "Failed to close elf");
-		return TRUE;
-	}
-	return FALSE;
+	return Module->ELF.State == ELF_STATE_LOADED;
 }
 
-internal b08
-Platform_ReloadModule(platform_module *Module)
+internal void
+Platform_OpenModuleBackend(platform_module *Module)
 {
-	datetime LastWriteTime;
-	Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
-	if (Module->ELF.State == ELF_STATE_LOADED) {
-		if (Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS) return FALSE;
-
-		Platform_UnloadModule(Module);
-	}
-	Module->LastWriteTime = LastWriteTime;
-
 	s32 Error = Elf_Open(&Module->ELF, Module->FileName, Platform->PageSize);
 	Assert(!Error, "Failed to read elf");
 	Error = Elf_LoadProgram(&Module->ELF, Module->DebugLoadAddress);
 	Assert(!Error, "Failed to load elf");
+}
 
-	Platform_GetProcAddress(&Module->ELF, "Load", (vptr *) &Module->Load);
-	Platform_GetProcAddress(&Module->ELF, "Init", (vptr *) &Module->Init);
-	Platform_GetProcAddress(&Module->ELF, "Update", (vptr *) &Module->Update);
-	Platform_GetProcAddress(&Module->ELF, "Unload", (vptr *) &Module->Unload);
-
-	Module->Load(Platform, Module);
-
-	return TRUE;
+internal void
+Platform_CloseModuleBackend(platform_module *Module)
+{
+	s32 Error = Elf_Unload(&Module->ELF);
+	Assert(!Error, "Failed to unload elf");
+	Error = Elf_Close(&Module->ELF);
+	Assert(!Error, "Failed to close elf");
 }
 
 internal void
@@ -290,16 +275,18 @@ Platform_Entry(u64 ArgCount, c08 **Args, c08 **EnvParams)
 	for (u64 I = 0; I < AuxCount; I++)
 		if (AuxVectors[I].Type == ELF_AT_PAGESZ) Platform->PageSize = AuxVectors[I].Value;
 
-	platform_module *Util = Platform_LoadModule("util", (vptr) 0x7DB000000000);
-	platform_module *Base = Platform_LoadModule("base", (vptr) 0x7DB100000000);
+	Platform_LoadUtilFuncs(Platform_LoadModule("util", (vptr) 0x7DB000000000));
 
-	Platform_LoadUtilFuncs(Util);
+	u32	 Size = 16 * 1024 * 1024;
+	vptr Mem  = Platform_AllocateMemory(Size);
+	Stack_Init(Mem, Size);
+	Stack_Push();
 
-	Util->Init(Platform);
-	Base->Init(Platform);
+	Platform_LoadModule("base", (vptr) 0x7DB100000000);
 
-	Platform_UnloadModule(Util);
-	Platform_UnloadModule(Base);
+	for (usize I = 0; I < Platform->ModuleCount; I++) Platform_UnloadModule(Platform->Modules+I);
+
+	Stack_Pop();
 
 	Platform_Exit(0);
 }

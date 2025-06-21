@@ -277,24 +277,28 @@ typedef enum file_mode {
 
 #define PLATFORM_FUNCS \
 	PLATFORM_OPENGL_FUNCS \
-	EXPORT(void,             Platform, Exit,           u32 ExitCode) \
-	EXPORT(void,             Platform, CreateWindow,   void) \
-	EXPORT(void,             Platform, Assert,         c08 *File, u32 Line, c08 *Expression, c08 *Message) \
-	EXPORT(vptr,             Platform, AllocateMemory, u64 Size) \
-	EXPORT(void,             Platform, CloseFile,      file_handle FileHandle) \
-	EXPORT(void,             Platform, FreeMemory,     vptr Base, u64 Size) \
-	EXPORT(u64,              Platform, GetFileLength,  file_handle FileHandle) \
-	EXPORT(void,             Platform, GetFileTime,    c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
-	EXPORT(r64,              Platform, GetTime,        void) \
-	EXPORT(platform_module*, Platform, LoadModule,     c08 *Name, vptr DebugLoadAddress) \
-	INTERN(b08,              Platform, UnloadModule,   platform_module *Module) \
-	INTERN(b08,              Platform, ReloadModule,   platform_module *Module) \
-	EXPORT(s08,              Platform, CmpFileTime,    datetime A, datetime B) \
-	EXPORT(b08,              Platform, OpenFile,       file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \
-	EXPORT(u64,              Platform, ReadFile,       file_handle FileHandle, vptr Dest, u64 Length, u64 Offset) \
-	EXPORT(void,             Platform, WriteConsole,   string Message) \
-	EXPORT(void,             Platform, WriteError,     string Message, u32 Exit) \
-	EXPORT(u64,              Platform, WriteFile,      file_handle FileHandle, vptr Src, u64 Length, u64 Offset)
+	EXPORT(void,             Platform, Exit,                  u32 ExitCode) \
+	EXPORT(void,             Platform, CreateWindow,          void) \
+	EXPORT(void,             Platform, Assert,                c08 *File, u32 Line, c08 *Expression, c08 *Message) \
+	EXPORT(vptr,             Platform, AllocateMemory,        u64 Size) \
+	EXPORT(void,             Platform, CloseFile,             file_handle FileHandle) \
+	EXPORT(void,             Platform, FreeMemory,            vptr Base, u64 Size) \
+	EXPORT(u64,              Platform, GetFileLength,         file_handle FileHandle) \
+	EXPORT(void,             Platform, GetFileTime,           c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
+	EXPORT(r64,              Platform, GetTime,               void) \
+	EXPORT(void,             Platform, UnloadModule,          platform_module *Module) \
+	EXPORT(b08,              Platform, ReloadModule,          platform_module *Module) \
+	EXPORT(platform_module*, Platform, LoadModule,            c08 *Name, vptr DebugLoadAddress) \
+	INTERN(vptr,             Platform, GetProcAddress,        platform_module *Module, c08 *Name) \
+	INTERN(b08,              Platform, IsModuleBackendOpened, platform_module *Module) \
+	INTERN(void,             Platform, OpenModuleBackend,     platform_module *Module) \
+	INTERN(void,             Platform, CloseModuleBackend,    platform_module *Module) \
+	EXPORT(s08,              Platform, CmpFileTime,           datetime A, datetime B) \
+	EXPORT(b08,              Platform, OpenFile,              file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \
+	EXPORT(u64,              Platform, ReadFile,              file_handle FileHandle, vptr Dest, u64 Length, u64 Offset) \
+	EXPORT(void,             Platform, WriteConsole,          string Message) \
+	EXPORT(void,             Platform, WriteError,            string Message, u32 Exit) \
+	EXPORT(u64,              Platform, WriteFile,             file_handle FileHandle, vptr Src, u64 Length, u64 Offset)
 
 #define EXPORT(ReturnType, Namespace, Name, ...) \
 	typedef ReturnType func_##Namespace##_##Name(__VA_ARGS__);
@@ -326,7 +330,8 @@ struct platform_exports {
 struct platform_state {
 	b08 CursorIsDisabled : 1;
 	b08 WindowedApp		 : 1;
-	b08 _Unused			 : 6;
+	b08 UtilIsLoaded	 : 1;
+	b08 _Unused			 : 5;
 
 	v2s32  RestoreCursorPos;
 	v2s32  CursorPos;

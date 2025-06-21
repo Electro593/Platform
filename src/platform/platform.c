@@ -88,6 +88,8 @@ Platform_LoadUtilFuncs(platform_module *UtilModule)
 #define EXPORT(R, N, ...) N = Funcs.N;
 #define X UTIL_FUNCS
 #include <x.h>
+
+	Platform->UtilIsLoaded = TRUE;
 }
 
 internal platform_module *
@@ -109,6 +111,44 @@ Platform_GetModule(c08 *Name)
 	}
 
 	return NULL;
+}
+
+internal void
+Platform_UnloadModule(platform_module *Module)
+{
+	stack Stack;
+	if (Platform->UtilIsLoaded) Stack = Stack_Get();
+	Module->Unload(Platform);
+	if (Platform->UtilIsLoaded) Stack_Set(Stack);
+
+	Platform_CloseModuleBackend(Module);
+}
+
+internal b08
+Platform_ReloadModule(platform_module *Module)
+{
+	datetime LastWriteTime;
+	Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
+	if (Platform_IsModuleBackendOpened(Module)) {
+		if (Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS) return FALSE;
+
+		Platform_UnloadModule(Module);
+	}
+	Module->LastWriteTime = LastWriteTime;
+
+	Platform_OpenModuleBackend(Module);
+
+	*(vptr *) Module->Load	 = Platform_GetProcAddress(Module, "Load");
+	*(vptr *) Module->Init	 = Platform_GetProcAddress(Module, "Init");
+	*(vptr *) Module->Update = Platform_GetProcAddress(Module, "Update");
+	*(vptr *) Module->Unload = Platform_GetProcAddress(Module, "Unload");
+
+	stack Stack;
+	if (Platform->UtilIsLoaded) Stack = Stack_Get();
+	Module->Load(Platform, Module);
+	if (Platform->UtilIsLoaded) Stack_Set(Stack);
+
+	return TRUE;
 }
 
 internal platform_module *
@@ -175,6 +215,11 @@ Platform_LoadModule(c08 *Name, vptr DebugLoadAddress)
 #endif
 
 	Platform_ReloadModule(Module);
+
+	stack Stack;
+	if (Platform->UtilIsLoaded) Stack = Stack_Get();
+	Module->Init(Platform);
+	if (Platform->UtilIsLoaded) Stack_Set(Stack);
 
 	return Module;
 }

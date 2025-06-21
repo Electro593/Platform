@@ -31,7 +31,7 @@ extern wayland_funcs _F;
 #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
 
 typedef struct wayland_state {
-	b08 Initialized;
+	u32 NextObjectId;
 } wayland_state;
 
 typedef struct wayland_funcs {
@@ -78,6 +78,12 @@ Load(platform_state *Platform, platform_module *Module)
 #define EXPORT(R, N, ...) N = UtilFuncs->N;
 #define X UTIL_FUNCS
 #include <x.h>
+}
+
+external API_EXPORT void
+Init(platform_state *Platform)
+{
+	
 }
 
 #endif
