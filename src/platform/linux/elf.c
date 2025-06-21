@@ -30,12 +30,12 @@ Elf_GetProgramHeader(elf_state *State, u64 Index)
 	return (vptr) (State->ProgramHeaderTable + State->Header->ProgramHeaderSize * Index);
 }
 
-internal bool
+internal b08
 Elf_CheckName(c08 *Name, c08 *Expected)
 {
 	usize Bytes = _Mem_BytesUntil((u08*) Expected, 0);
-	bool Same = _Mem_Cmp((u08*) Name, (u08*) Expected, Bytes) == 0;
-	bool Ending = Name[Bytes] == '.' || Name[Bytes] == '\0';
+	b08 Same = _Mem_Cmp((u08*) Name, (u08*) Expected, Bytes) == 0;
+	b08 Ending = Name[Bytes] == '.' || Name[Bytes] == '\0';
 	return Same && Ending;
 }
 
@@ -148,8 +148,8 @@ Elf_HandleRelocations(elf_state *State)
 		vptr Data = State->File + Header->Offset;
 		char *Name = (char*)(State->SectionNameTable + Header->Name);
 
-		bool IsRela = Elf_CheckName(Name, ".rela");
-		bool IsRel = !IsRela && Elf_CheckName(Name, ".rel");
+		b08 IsRela = Elf_CheckName(Name, ".rela");
+		b08 IsRel = !IsRela && Elf_CheckName(Name, ".rel");
 
 		if (!IsRela && !IsRel) continue;
 

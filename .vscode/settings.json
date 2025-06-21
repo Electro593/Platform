@@ -58,7 +58,7 @@
     "C_Cpp.errorSquiggles": "disabled",
     "todo-tree.tree.showCountsInTree": false,
     "todo-tree.tree.showBadges": false,
+    "editor.indentSize": "tabSize",
     "editor.tabSize": 4,
-    "editor.insertSpaces": false,
-    "C_Cpp.clang_format_style": "{ BasedOnStyle: LLVM, AlignConsecutiveDeclarations: true }"
+    "editor.insertSpaces": false
 }
