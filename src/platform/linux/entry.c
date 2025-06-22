@@ -47,8 +47,7 @@ Platform_LoadOpenGL(void)
 
 internal void
 Platform_CreateWindow(void)
-{
-}
+{ }
 
 internal void
 Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message)
@@ -206,14 +205,12 @@ Platform_CmpFileTime(datetime A, datetime B)
 	return 0;
 }
 
-internal vptr
-Platform_GetProcAddress(platform_module *Module, c08 *Name)
+internal void
+Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 {
-	vptr	  ProcAddress;
-	elf_error Error = Elf_GetProcAddress(&Module->ELF, Name, &ProcAddress);
-	if (Error == ELF_ERROR_NOT_FOUND) ProcAddress = (vptr) Platform_Stub;
+	elf_error Error = Elf_GetProcAddress(&Module->ELF, Name, ProcOut);
+	if (Error == ELF_ERROR_NOT_FOUND) *ProcOut = (vptr) Platform_Stub;
 	else Assert(!Error, "Failed to get proc address");
-	return ProcAddress;
 }
 
 internal b08
@@ -247,8 +244,37 @@ Platform_Exit(u32 ExitCode)
 	UNREACHABLE;
 }
 
+internal void
+Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
+{
+	Platform->EnvTable = HashMap_InitCustom(
+		Platform->Heap,
+		sizeof(string),
+		sizeof(string),
+		EnvCount * 2,
+		0.5f,
+		2.0f,
+		(hash_func) String_HashPtr,
+		NULL,
+		(cmp_func) String_CmpPtr,
+		NULL
+	);
+
+	for (usize I = 0; I < EnvCount; I++) {
+		c08 *Param = EnvParams[I];
+
+		usize  KeySize = Mem_BytesUntil((u08 *) Param, '=');
+		string Key	   = CLString(Param, KeySize);
+
+		usize  ValueSize = Mem_BytesUntil((u08 *) Param + KeySize + 2, '\0');
+		string Value	 = CLString(Param + KeySize + 2, ValueSize);
+
+		HashMap_Add(&Platform->EnvTable, &Key, &Value);
+	}
+}
+
 external void
-Platform_Entry(u64 ArgCount, c08 **Args, c08 **EnvParams)
+Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
 	platform_state _P = {0};
 	Platform		  = &_P;
@@ -277,10 +303,16 @@ Platform_Entry(u64 ArgCount, c08 **Args, c08 **EnvParams)
 
 	Platform_LoadModule("util");
 
-	u32	 Size = 16 * 1024 * 1024;
-	vptr Mem  = Platform_AllocateMemory(Size);
-	Stack_Init(Mem, Size);
+	usize StackSize = 64 * 1024 * 1024;
+	usize HeapSize	= 8 * 1024 * 1024;
+	vptr  Mem		= Platform_AllocateMemory(StackSize + HeapSize);
+	Stack_Init(Mem, StackSize);
 	Stack_Push();
+	Mem += StackSize;
+
+	Platform->Heap = Heap_Init(Mem, HeapSize);
+	Platform_SetupEnvTable(EnvCount, EnvParams);
+	Platform->UtilIsLoaded = TRUE;
 
 	Platform_LoadModule("base");
 

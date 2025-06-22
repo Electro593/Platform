@@ -499,13 +499,12 @@ Platform_CmpFileTime(datetime A, datetime B)
 	return EQUAL;
 }
 
-internal vptr
-Platform_GetProcAddress(platform_module *Module, c08 *Name)
+internal void
+Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 {
-	vptr ProcAddress = (vptr) Win32_GetProcAddress(Module->DLL, Name);
-	if (!*ProcAddress) ProcAddress = (vptr) Platform_Stub;
+	*ProcOut = (vptr) Win32_GetProcAddress(Module->DLL, Name);
+	if (!*ProcOut) *ProcOut = (vptr) Platform_Stub;
 	else Assert(!Error, "Failed to get proc address");
-	return ProcAddress;
 }
 
 internal b08
@@ -749,7 +748,8 @@ Platform_Entry(void)
 
 			if (Platform->FocusState == FOCUS_CLIENT
 				&& !Platform->CursorIsDisabled
-				&& Platform->Buttons[Button_Left] == PRESSED) {
+				&& Platform->Buttons[Button_Left] == PRESSED)
+			{
 				Platform_HideCursor(PrimaryWindow);
 				Platform->Updates		   |= CURSOR_DISABLED;
 				Platform->CursorIsDisabled	= TRUE;

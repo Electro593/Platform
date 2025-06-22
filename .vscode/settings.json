@@ -60,5 +60,6 @@
     "todo-tree.tree.showBadges": false,
     "editor.indentSize": "tabSize",
     "editor.tabSize": 4,
-    "editor.insertSpaces": false
+	"editor.insertSpaces": false,
+	"C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }

@@ -37,6 +37,7 @@
                 "_GAME_MODULE",
                 "_PLATFORM_MODULE",
                 "_RENDERER_MODULE",
+                "_WAYLAND_MODULE",
                 "INCLUDE_HEADER",
                 "INCLUDE_SOURCE"
             ],

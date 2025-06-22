@@ -92,6 +92,7 @@ typedef struct random {
    EXPORT(u08, U08_Lerp, u08 A, u08 B, r32 T) \
    EXPORT(u32, U32_Min, u32 A, u32 B) \
    EXPORT(u32, U32_Max, u32 A, u32 B) \
+   EXPORT(u32, U32_RoundUpPow2, u32 N) \
    EXPORT(random, Rand_Init, u32 Seed) \
    EXPORT(u32, Rand_Next, random *Random) \
    EXPORT(s32, S32_RandRange, random *Random, s32 Min, s32 Max) \
@@ -487,6 +488,19 @@ U32_Min(u32 A, u32 B)
 internal u32
 U32_Abs(u32 N)
 {
+	return N;
+}
+
+internal u32
+U32_RoundUpPow2(u32 N)
+{
+	N--;
+	N |= N >> 1;
+	N |= N >> 2;
+	N |= N >> 4;
+	N |= N >> 8;
+	N |= N >> 16;
+	N++;
 	return N;
 }
 

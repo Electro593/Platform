@@ -14,12 +14,10 @@
 #define CFStringL(Literal, ...) FString(CLStringL(Literal), __VA_ARGS__)
 
 typedef struct string {
-	u64 Length;
-	u64 Capacity;
-
-	b08 Resizable;
-
-	c08 *Text;
+	usize Length;
+	usize Capacity;
+	b08	  Resizable;
+	c08	 *Text;
 } string;
 
 #define STRING_FUNCS \
@@ -33,6 +31,9 @@ typedef struct string {
 	EXPORT(string, String_Cat,       string A, string B) \
 	EXPORT(string, String_Terminate, string A) \
 	EXPORT(s08,    String_Cmp,       string A, string B) \
+	EXPORT(s08,    String_CmpPtr,    string *A, string *B, vptr _) \
+	EXPORT(usize,  String_Hash,      string S) \
+	EXPORT(usize,  String_HashPtr,   string *S, vptr _) \
 	\
 	EXPORT(string, U64_ToString,     u64 N, u08 Radix) \
 	EXPORT(string, U32_ToString,     u32 N, u08 Radix) \
@@ -50,6 +51,9 @@ typedef struct string {
 
 persist c08 *BaseChars = "0123456789abcdef0123456789ABCDEF";
 
+/*
+ * Construct an immutable string view with C-string backing
+ */
 internal string
 CLString(c08 *Chars, u64 Length)
 {
@@ -60,16 +64,28 @@ CLString(c08 *Chars, u64 Length)
 	String.Text		 = Chars;
 	return String;
 }
+
+/*
+ * Construct an immutable string with C-string backing
+ */
 internal string
 CString(c08 *Chars)
 {
 	return CLString(Chars, Mem_BytesUntil((u08 *) Chars, 0));
 }
+
+/*
+ * Construct an immutable string with C-string backing, including the null terminator
+ */
 internal string
 CNString(c08 *Chars)
 {
 	return CLString(Chars, Mem_BytesUntil((u08 *) Chars, 0) + 1);
 }
+
+/*
+ * Construct an uninitialized string with stack backing with a given length
+ */
 internal string
 LString(u64 Length)
 {
@@ -905,25 +921,40 @@ _String_CmpCaseInsensitive(string *A, string *B)
 	return GREATER;
 }
 
-internal s08
-String_Cmp(string A, string B)
+internal usize
+String_Hash(string S)
 {
-	if (A.Length < B.Length) return LESS;
-	if (A.Length > B.Length) return GREATER;
-	Assert(A.Text && B.Text);
+	u32 Hash = 5381;
+	for (usize I = 0; I < S.Length; I++) Hash = (Hash << 5) + Hash + S.Text[I];
+	return Hash;
+}
 
-	u32 I = 0;
-	while (I < A.Length && A.Text[I] == B.Text[I]) I++;
-
-	if (I == A.Length) return EQUAL;
-	if (A.Text[I] < B.Text[I]) return LESS;
-	return GREATER;
+internal usize
+String_HashPtr(string *S, vptr _)
+{
+	if (!S) return 5381;
+	return String_Hash(*S);
 }
 
 internal s08
-_String_Cmp(string *A, string *B)
+String_Cmp(string A, string B)
 {
-	Assert(A && B);
+	usize L1 = A.Length, L2 = B.Length;
+	usize L	  = L1 < L2 ? L1 : L2;
+	s08	  Cmp = Mem_Cmp((u08 *) A.Text, (u08 *) B.Text, L);
+
+	if (L1 == L2 || Cmp) return Cmp;
+	if (L1 < L2) return -1;
+	return 1;
+}
+
+internal s08
+String_CmpPtr(string *A, string *B, vptr _)
+{
+	if (!A) {
+		if (!B) return 0;
+		return -1;
+	} else if (!B) return 1;
 	return String_Cmp(*A, *B);
 }
 

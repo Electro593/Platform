@@ -21,6 +21,12 @@ typedef struct wayland_message_header {
 
 #ifdef INCLUDE_SOURCE
 
+internal u32
+Wayland_AllocateObjectId()
+{
+	return _G.NextObjectId++;
+}
+
 internal wayland_message_header
 Wayland_MakeMessageHeader(u32 ObjectId, u16 ContentSize, u16 Opcode)
 {

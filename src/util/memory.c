@@ -9,6 +9,8 @@
 
 #ifdef INCLUDE_HEADER
 
+//TODO Make an actual document explaining how this mess works
+
 #define HEAP(Type) heap_handle *
 
 typedef vptr heap;
@@ -28,16 +30,16 @@ typedef struct heap_handle {
 } heap_handle;
 
 typedef struct stack {
-	u64	  Size;
+	usize Size;
 	u08	 *Cursor;
 	vptr *FirstMarker;
 } stack;
 
 #define MEMORY_FUNCS \
-   EXPORT(vptr,         Mem_Set,            vptr Dest, s32 Data, u64 Size) \
-   EXPORT(vptr,         Mem_Cpy,            vptr Dest, vptr Src, u64 Size) \
-   EXPORT(s32,          Mem_Cmp,            vptr A, vptr B, u64 Size) \
-   EXPORT(u64,          Mem_BytesUntil,     u08 *Data, u08 Byte) \
+   EXPORT(vptr,         Mem_Set,            vptr Dest, s32 Data, usize Size) \
+   EXPORT(vptr,         Mem_Cpy,            vptr Dest, vptr Src, usize Size) \
+   EXPORT(s32,          Mem_Cmp,            vptr A, vptr B, usize Size) \
+   EXPORT(usize,        Mem_BytesUntil,     u08 *Data, u08 Byte) \
    \
    EXPORT(heap*,        Heap_GetHeap,       heap_handle *Handle) \
    EXPORT(heap_handle*, Heap_GetHandleA,    vptr Data) \
@@ -54,7 +56,7 @@ typedef struct stack {
    EXPORT(void,         Heap_FreeA,         vptr Data) \
    EXPORT(void,         Heap_Dump,          heap *Heap) \
    \
-   EXPORT(stack*,       Stack_Init,         vptr Mem, u64 Size) \
+   EXPORT(stack*,       Stack_Init,         vptr Mem, usize Size) \
    EXPORT(stack,        Stack_Get,          void) \
    EXPORT(void,         Stack_Set,          stack Stack) \
    EXPORT(void,         Stack_Push,         void) \
@@ -68,7 +70,7 @@ typedef struct stack {
 #ifdef INCLUDE_SOURCE
 
 internal vptr
-Mem_Set(vptr Dest, s32 Data, u64 Size)
+Mem_Set(vptr Dest, s32 Data, usize Size)
 {
 	u08 *Dest08 = (u08 *) Dest;
 	u08	 Data08 = (u08) Data;
@@ -77,7 +79,7 @@ Mem_Set(vptr Dest, s32 Data, u64 Size)
 }
 
 internal vptr
-Mem_Cpy(vptr Dest, vptr Src, u64 Size)
+Mem_Cpy(vptr Dest, vptr Src, usize Size)
 {
 	if (Size == 0) return Dest;
 	if (Dest == Src) return Dest;
@@ -102,20 +104,20 @@ Mem_Cpy(vptr Dest, vptr Src, u64 Size)
 }
 
 internal s32
-Mem_Cmp(vptr A, vptr B, u64 Size)
+Mem_Cmp(vptr A, vptr B, usize Size)
 {
 	u08 *APtr = A;
 	u08 *BPtr = B;
 	while (Size && *APtr++ == *BPtr++) Size--;
 	if (!Size) return EQUAL;
-	if ((u64) APtr > (u64) BPtr) return GREATER;
+	if ((usize) APtr > (usize) BPtr) return GREATER;
 	return LESS;
 }
 
-internal u64
+internal usize
 Mem_BytesUntil(u08 *Data, u08 Byte)
 {
-	u64 Length = 0;
+	usize Length = 0;
 	while (*Data++ != Byte) Length++;
 	return Length;
 }
@@ -528,7 +530,7 @@ Heap_Dump(heap *Heap)
 }
 
 internal stack *
-Stack_Init(vptr Mem, u64 Size)
+Stack_Init(vptr Mem, usize Size)
 {
 	stack *Result		= Mem;
 	Result->Size		= Size - sizeof(stack);
@@ -574,7 +576,7 @@ Stack_Set(stack Stack)
 }
 
 internal vptr
-Stack_Allocate(u64 Size)
+Stack_Allocate(usize Size)
 {
 	vptr Result		  = _G.Stack->Cursor;
 	_G.Stack->Cursor += Size;

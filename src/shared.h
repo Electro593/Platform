@@ -182,6 +182,9 @@ MakeMemberType(type_id TypeID, u16 Size, u32 Offset)
 	return (type) {TYPEID_MEMBER | ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK) | TypeID, Size};
 }
 
+typedef s08 (*cmp_func)(vptr A, vptr B, vptr Param);
+typedef usize (*hash_func)(vptr Data, vptr Param);
+
 #ifdef _WIN32
 s32 _fltused;
 #endif

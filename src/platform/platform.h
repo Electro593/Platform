@@ -289,7 +289,7 @@ typedef enum file_mode {
 	EXPORT(void,             Platform, UnloadModule,          platform_module *Module) \
 	EXPORT(b08,              Platform, ReloadModule,          platform_module *Module) \
 	EXPORT(platform_module*, Platform, LoadModule,            c08 *Name) \
-	INTERN(vptr,             Platform, GetProcAddress,        platform_module *Module, c08 *Name) \
+	INTERN(void,             Platform, GetProcAddress,        platform_module *Module, c08 *Name, vptr *ProcOut) \
 	INTERN(b08,              Platform, IsModuleBackendOpened, platform_module *Module) \
 	INTERN(void,             Platform, OpenModuleBackend,     platform_module *Module) \
 	INTERN(void,             Platform, CloseModuleBackend,    platform_module *Module) \
@@ -335,7 +335,7 @@ struct platform_state {
 
 	v2s32  RestoreCursorPos;
 	v2s32  CursorPos;
-	stack *Stack;
+	heap  *Heap;
 
 	usize			 ModuleCount;
 	usize			 ModulesSize;
@@ -354,8 +354,7 @@ struct platform_state {
 	usize ArgCount;
 	c08 **Args;
 
-	usize EnvParamCount;
-	c08 **EnvParams;
+	hashmap EnvTable;
 
 	usize PageSize;
 };

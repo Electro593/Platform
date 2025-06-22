@@ -25,8 +25,7 @@ global platform_state *Platform;
 
 internal void
 Platform_Stub(void)
-{
-}
+{ }
 
 // These are simple implementations of various util functions that we need
 // to have access to before we load the util module.
@@ -98,8 +97,6 @@ Platform_LoadUtilFuncs(platform_module *UtilModule)
 #define EXPORT(R, N, ...) N = Funcs.N;
 #define X UTIL_FUNCS
 #include <x.h>
-
-	Platform->UtilIsLoaded = TRUE;
 }
 
 internal platform_module *
@@ -148,10 +145,10 @@ Platform_ReloadModule(platform_module *Module)
 
 	Platform_OpenModuleBackend(Module);
 
-	*(vptr *) Module->Load	 = Platform_GetProcAddress(Module, "Load");
-	*(vptr *) Module->Init	 = Platform_GetProcAddress(Module, "Init");
-	*(vptr *) Module->Update = Platform_GetProcAddress(Module, "Update");
-	*(vptr *) Module->Unload = Platform_GetProcAddress(Module, "Unload");
+	Platform_GetProcAddress(Module, "Load", (vptr *) &Module->Load);
+	Platform_GetProcAddress(Module, "Init", (vptr *) &Module->Init);
+	Platform_GetProcAddress(Module, "Update", (vptr *) &Module->Update);
+	Platform_GetProcAddress(Module, "Unload", (vptr *) &Module->Unload);
 
 	stack Stack;
 	if (Platform->UtilIsLoaded) Stack = Stack_Get();
