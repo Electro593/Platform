@@ -321,6 +321,11 @@ Platform_GetFileLength(file_handle FileHandle)
 internal b08
 Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 {
+	Stack_Push();
+	string Name = SString(CNString(FileName));
+	for (usize I = 0; I < Name.Length; I++)
+		if (Name.Text[I] == '/') Name.Text[I] = '\\';
+
 	u32 DesiredAccess		= 0;
 	u32 CreationDisposition = 0;
 
@@ -346,7 +351,7 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 	}
 
 	win32_handle GivenHandle = Win32_CreateFileA(
-		FileName,
+		Name.Text,
 		DesiredAccess,
 		FILE_SHARE_READ,
 		NULL,

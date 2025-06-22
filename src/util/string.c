@@ -96,6 +96,17 @@ LString(u64 Length)
 	return CLString(Stack_Allocate(Length), Length);
 }
 
+/*
+ * Construct a string with stack backing and copy the given string's contents
+ */
+internal string
+SString(string String)
+{
+	string Result = LString(String.Length);
+	Mem_Cpy(Result.Text, String.Text, String.Length);
+	return Result;
+}
+
 // internal arg
 // ReadArgAtIndex(va_args *Args, u32 Index, type Type) {
 // 	//NOTE: Referring to the same argument with multiple types will always use the first one

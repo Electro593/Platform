@@ -20,7 +20,8 @@ internal string
 File_Read(c08 *FileName, u64 Length, u64 Offset)
 {
 	file_handle FileHandle;
-	Assert(Platform_OpenFile(&FileHandle, FileName, FILE_READ), "Invalid file name!");
+	b08 Opened = Platform_OpenFile(&FileHandle, FileName, FILE_READ);
+	Assert(Opened, "Invalid file name!");
 
 	if (Length == 0) Length = Platform_GetFileLength(FileHandle);
 

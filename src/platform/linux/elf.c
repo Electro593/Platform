@@ -242,6 +242,7 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 			0
 		);
 		if ((usize) Base & PageMask) return ELF_ERROR_OUT_OF_MEMORY;
+		if (Base && Base != LoadAddress) return ELF_ERROR_INVALID_MEM_MAP;
 
 		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);

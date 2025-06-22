@@ -135,8 +135,7 @@ Platform_ReloadModule(platform_module *Module)
 internal platform_module *
 Platform_LoadModule(string Name)
 {
-	HEAP(platform_module) ModuleHandle;
-	platform_module	 _UtilModule;
+	platform_module	 _UtilModule = {0};
 	platform_module *Module;
 
 #ifdef _WIN32
@@ -147,16 +146,14 @@ Platform_LoadModule(string Name)
 
 	Assert(Platform->UtilIsLoaded || _Str_Cmp(Name.Text, "util") == 0);
 	if (Platform->UtilIsLoaded) {
-		if (HashMap_Get(&Platform->ModuleTable, &Name, &ModuleHandle)) return ModuleHandle->Data;
+		if (HashMap_Get(&Platform->ModuleTable, &Name, &Module)) return Module;
 
 		Module = Heap_AllocateA(
 			Platform->Heap,
 			sizeof(platform_module) + Name.Length + sizeof(PLATFORM_DYNLIB_SUFFIX)
 		);
-		ModuleHandle = Heap_GetHandleA(Module);
-		HashMap_Add(&Platform->ModuleTable, &Name, &ModuleHandle);
+		HashMap_Add(&Platform->ModuleTable, &Name, &Module);
 
-		Module			 = ModuleHandle->Data;
 		Module->FileName = (c08 *) (Module + 1);
 		Mem_Cpy(Module->FileName, Name.Text, Name.Length);
 		Mem_Cpy(Module->FileName + Name.Length, PLATFORM_DYNLIB_SUFFIX, sizeof(PLATFORM_DYNLIB_SUFFIX));
@@ -188,7 +185,7 @@ Platform_LoadModule(string Name)
 		Platform->ModuleTable = HashMap_InitCustom(
 			Platform->Heap,
 			sizeof(string),
-			sizeof(HEAP(platform_module)),
+			sizeof(platform_module *),
 			32,
 			0.5f,
 			2.0f,
@@ -198,14 +195,13 @@ Platform_LoadModule(string Name)
 			NULL
 		);
 
-		Module		 = Heap_AllocateA(Platform->Heap, sizeof(platform_module));
-		ModuleHandle = Heap_GetHandleA(Module);
+		Module = Heap_AllocateA(Platform->Heap, sizeof(platform_module));
 		Mem_Cpy(Module, &_UtilModule, sizeof(platform_module));
-		HashMap_Add(&Platform->ModuleTable, &Name, &ModuleHandle);
+		HashMap_Add(&Platform->ModuleTable, &Name, &Module);
 		Platform->UtilIsLoaded = TRUE;
 	}
 
-	return ModuleHandle->Data;
+	return Module;
 }
 
 internal string

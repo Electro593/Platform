@@ -26,9 +26,9 @@ typedef void func_Module_Init(platform_state *State);
 typedef void func_Module_Update(platform_state *State);
 typedef void func_Module_Unload(platform_state *State);
 
-#define FONTS_DIR    "assets\\fonts\\"
-#define SHADERS_DIR  "assets\\shaders\\"
-#define TEXTURES_DIR "assets\\textures\\"
+#define FONTS_DIR    "assets/fonts/"
+#define SHADERS_DIR  "assets/shaders/"
+#define TEXTURES_DIR "assets/textures/"
 
 #if defined(_WIN32)
 #include <platform/win32/win32.h>

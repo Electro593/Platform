@@ -76,6 +76,7 @@ Wayland_CreateWindow(c08 *Title, usize Width, usize Height)
 	file_handle Socket;
 	if (!Wayland_ConnectToServerSocket(&Socket)) return FALSE;
 
+	Platform_CloseFile(Socket);
 	return TRUE;
 }
 

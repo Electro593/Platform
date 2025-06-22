@@ -63,4 +63,6 @@ if [[ -e *.obj ]]; then rm *.obj > /dev/null; fi
 if [[ -e *.exp ]]; then rm *.exp > /dev/null; fi
 popd > /dev/null
 
+cp -r assets build/assets
+
 exit $Result

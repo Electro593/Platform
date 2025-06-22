@@ -157,8 +157,8 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 	if ((OpenMode & FILE_APPEND) == FILE_APPEND) Flags |= SYS_OPEN_APPEND;
 	if ((OpenMode & FILE_CLEAR) == FILE_CLEAR) Flags |= SYS_OPEN_TRUNCATE;
 
-	u32 FD		= Sys_Open(FileName, Flags, Mode);
-	b08 Success = CHECK((s32) FD);
+	s32 FD		= Sys_Open(FileName, Flags, Mode);
+	b08 Success = CHECK(FD);
 
 	FileHandle->FileDescriptor = Success ? FD : SYS_FILE_NONE;
 
@@ -330,17 +330,15 @@ Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	Platform_LoadModule(CStringL("base"));
 
-	HASHMAP_FOREACH(I, Hash, string, Key, HEAP(platform_module), Value, &Platform->ModuleTable)
-	{
+	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
 		stack Stack;
 		if (Platform->UtilIsLoaded) Stack = Stack_Get();
-		((platform_module *) Value->Data)->Init(Platform);
+		Module->Init(Platform);
 		if (Platform->UtilIsLoaded) Stack_Set(Stack);
 	}
 
-	HASHMAP_FOREACH(I, Hash, string, Key, HEAP(platform_module), Value, &Platform->ModuleTable)
-	{
-		Platform_UnloadModule((platform_module *) Value->Data);
+	HASHMAP_FOREACH (I, Hash, string, Key, platform_module*, Module, &Platform->ModuleTable) {
+		Platform_UnloadModule(Module);
 	}
 
 	Stack_Pop();
