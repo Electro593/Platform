@@ -108,6 +108,30 @@ Platform_GetFileLength(file_handle FileHandle)
 }
 
 internal b08
+Platform_ConnectToLocalSocket(string Name, file_handle *FileHandleOut)
+{
+	Assert(FileHandleOut);
+	if (Name.Length >= sizeof((sys_sockaddr_unix) {}.Data)) return FALSE;
+
+	s32 FileDescriptor = Sys_Socket(SYS_ADDRESS_FAMILY_UNIX, SYS_SOCKET_STREAM, 0);
+	if (FileDescriptor < 0) return FALSE;
+
+	sys_sockaddr_unix Address;
+	Address.Family = SYS_ADDRESS_FAMILY_UNIX;
+	Mem_Cpy(Address.Data, Name.Text, Name.Length);
+	Address.Data[Name.Length] = 0;
+
+	s32 Result = Sys_Connect(FileDescriptor, (sys_sockaddr *) &Address, sizeof(sys_sockaddr_unix));
+	if (Result < 0) {
+		Sys_Close(FileDescriptor);
+		return FALSE;
+	}
+
+	FileHandleOut->FileDescriptor = FileDescriptor;
+	return TRUE;
+}
+
+internal b08
 Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 {
 	s32 Flags = 0;
@@ -115,23 +139,23 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 
 	// TODO Append is incorrect, need to handle offsets better with win32
 
-	switch (OpenMode) {
-		case FILE_READ: {
-			Flags |= SYS_OPEN_READONLY;
-		} break;
-		case FILE_WRITE: {
-			Flags |= SYS_OPEN_WRITEONLY | SYS_OPEN_CREATE | SYS_OPEN_TRUNCATE;
-			Mode  |= SYS_CREATE_USER_READ
-				  | SYS_CREATE_USER_WRITE
-				  | SYS_CREATE_GROUP_READ
-				  | SYS_CREATE_GROUP_WRITE
-				  | SYS_CREATE_OTHERS_READ
-				  | SYS_CREATE_OTHERS_WRITE;
-		} break;
-		case FILE_APPEND: {
-			Flags |= SYS_OPEN_WRITEONLY | SYS_OPEN_CREATE | SYS_OPEN_APPEND;
-		} break;
+	if ((OpenMode & FILE_READ) && (OpenMode & FILE_WRITE)) Flags |= SYS_OPEN_READWRITE;
+	else if (OpenMode & FILE_READ) Flags |= SYS_OPEN_READONLY;
+	else if (OpenMode & FILE_WRITE) Flags |= SYS_OPEN_WRITEONLY;
+	else return FALSE;
+
+	if (OpenMode & FILE_CREATE) {
+		Flags |= SYS_OPEN_CREATE;
+		Mode  |= SYS_CREATE_USER_READ
+			  | SYS_CREATE_USER_WRITE
+			  | SYS_CREATE_GROUP_READ
+			  | SYS_CREATE_GROUP_WRITE
+			  | SYS_CREATE_OTHERS_READ
+			  | SYS_CREATE_OTHERS_WRITE;
 	}
+
+	if ((OpenMode & FILE_APPEND) == FILE_APPEND) Flags |= SYS_OPEN_APPEND;
+	if ((OpenMode & FILE_CLEAR) == FILE_CLEAR) Flags |= SYS_OPEN_TRUNCATE;
 
 	u32 FD		= Sys_Open(FileName, Flags, Mode);
 	b08 Success = CHECK((s32) FD);
@@ -266,8 +290,8 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 		usize  KeySize = Mem_BytesUntil((u08 *) Param, '=');
 		string Key	   = CLString(Param, KeySize);
 
-		usize  ValueSize = Mem_BytesUntil((u08 *) Param + KeySize + 2, '\0');
-		string Value	 = CLString(Param + KeySize + 2, ValueSize);
+		usize  ValueSize = Mem_BytesUntil((u08 *) Param + KeySize + 1, '\0');
+		string Value	 = CLString(Param + KeySize + 1, ValueSize);
 
 		HashMap_Add(&Platform->EnvTable, &Key, &Value);
 	}
@@ -315,6 +339,13 @@ Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	Platform->UtilIsLoaded = TRUE;
 
 	Platform_LoadModule("base");
+
+	for (usize I = 0; I < Platform->ModuleCount; I++) {
+		stack Stack;
+		if (Platform->UtilIsLoaded) Stack = Stack_Get();
+		Platform->Modules[I].Init(Platform);
+		if (Platform->UtilIsLoaded) Stack_Set(Stack);
+	}
 
 	for (usize I = 0; I < Platform->ModuleCount; I++) Platform_UnloadModule(Platform->Modules + I);
 

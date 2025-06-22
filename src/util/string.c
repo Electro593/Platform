@@ -9,9 +9,10 @@
 
 #ifdef INCLUDE_HEADER
 
-#define EString() CLStringL("")
-#define CLStringL(Literal) CLString(Literal, sizeof(Literal)-1)
-#define CFStringL(Literal, ...) FString(CLStringL(Literal), __VA_ARGS__)
+#define EString() CStringL("")
+#define CStringL(Literal) CLString(Literal, sizeof(Literal)-1)
+#define CNStringL(Literal) CLString(Literal, sizeof(Literal))
+#define CFStringL(Literal, ...) FString(CStringL(Literal), __VA_ARGS__)
 
 typedef struct string {
 	usize Length;
@@ -34,6 +35,8 @@ typedef struct string {
 	EXPORT(s08,    String_CmpPtr,    string *A, string *B, vptr _) \
 	EXPORT(usize,  String_Hash,      string S) \
 	EXPORT(usize,  String_HashPtr,   string *S, vptr _) \
+	\
+	EXPORT(b08,    String_TryParseS32, string S, s32 *NumOut) \
 	\
 	EXPORT(string, U64_ToString,     u64 N, u08 Radix) \
 	EXPORT(string, U32_ToString,     u32 N, u08 Radix) \
@@ -346,7 +349,7 @@ WriteString(c08 **Out, string Value, vstring_format Format)
 {
 	if (Format.CustomTypeSize && Format.TypeSize == 2) Assert(FALSE, "Wide strings not implemented!");
 
-	if (!Value.Text) Value = CLStringL("(null)");
+	if (!Value.Text) Value = CStringL("(null)");
 
 	c08 *In	   = Value.Text;
 	c08 *Start = *Out;
@@ -371,7 +374,7 @@ WritePointer(c08 **Out, vptr Value, vstring_format Format)
 	NewFormat.HasSeparatorChar = Format.HasSeparatorChar;
 
 	if (!Value) {
-		WriteString(Out, CLStringL("(nil)"), NewFormat);
+		WriteString(Out, CStringL("(nil)"), NewFormat);
 	} else {
 		*(*Out)++ = '0';
 		*(*Out)++ = 'x';
@@ -389,16 +392,15 @@ WriteSpecialtyFloat(c08 **Out, r64 Value, vstring_format Format)
 	StringFormat.AlignLeft		= Format.AlignLeft;
 
 	if (Value == R64_INF) {
-		WriteString(Out, Format.Caps ? CLStringL("INF") : CLStringL("inf"), StringFormat);
+		WriteString(Out, Format.Caps ? CStringL("INF") : CStringL("inf"), StringFormat);
 	} else if (Value == R64_NINF) {
-		WriteString(Out, Format.Caps ? CLStringL("-INF") : CLStringL("-inf"), StringFormat);
+		WriteString(Out, Format.Caps ? CStringL("-INF") : CStringL("-inf"), StringFormat);
 	} else if (Value != Value) {
 		u64 Binary	= FORCE_CAST(u64, Value);
 		u32 FracMax = (R64_MANTISSA_BITS + 3) / 4;
 		u32 Offset	= Format.Caps * 16;
 
-		string String
-			= Format.Caps ? CLStringL("-SNAN[0XFFFFFFFFFFFFF]") : CLStringL("-snan[0xfffffffffffff]");
+		string String = Format.Caps ? CStringL("-SNAN[0XFFFFFFFFFFFFF]") : CStringL("-snan[0xfffffffffffff]");
 		String.Text[1] = (Binary & R64_QUIET_MASK) ? (Format.Caps ? 'Q' : 'q') : (Format.Caps ? 'S' : 's');
 
 		u32 Len			 = 8;
@@ -1072,11 +1074,32 @@ String_ToS64(string String)
 	b08 Negative = 2 * (String.Text[0] == '-');
 
 	s64 Total = 0;
-	if (Negative) Total = -(String.Text[1] + '0');
+	if (Negative) Total = -(String.Text[1] - '0');
 
 	for (u32 I = Negative; I < String.Length; I++) Total = Total * 10 + String.Text[I] - '0';
 
 	return Total;
+}
+
+internal b08
+String_TryParseS32(string String, s32 *NumOut)
+{
+	if (!String.Text || !String.Length) return FALSE;
+
+	s32 Total = 0;
+
+	b08 Negative = String.Text[0] == '-';
+	if (Negative && String.Length == 1) return FALSE;
+	for (usize I = Negative; I < String.Length; I++)
+		if (String.Text[I] < '0' || String.Text[I] > '9') return FALSE;
+
+	if (Negative)
+		for (usize I = Negative; I < String.Length; I++) Total = Total * 10 - (String.Text[I] - '0');
+	else
+		for (usize I = Negative; I < String.Length; I++) Total = Total * 10 + (String.Text[I] - '0');
+
+	*NumOut = Total;
+	return TRUE;
 }
 
 internal s16

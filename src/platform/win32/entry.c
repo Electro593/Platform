@@ -499,6 +499,12 @@ Platform_CmpFileTime(datetime A, datetime B)
 	return EQUAL;
 }
 
+internal b08
+Platform_ConnectToLocalSocket(string Name, file_handle *FileHandleOut)
+{
+	return FALSE;
+}
+
 internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 {
@@ -706,14 +712,21 @@ Platform_Entry(void)
 	Platform_LoadWin32();
 	Platform_ParseCommandLine();
 	Win32_QueryPerformanceFrequency(&CounterFrequency);
+
 	Platform_LoadModule("util");
+	Platform_LoadModule("base");
 
 	u32	 Size = 16 * 1024 * 1024;
 	vptr Mem  = Platform_AllocateMemory(Size);
 	Stack_Init(Mem, Size);
 	Stack_Push();
 
-	Platform_LoadModule("base");
+	for (usize I = 0; I < Platform->ModuleCount; I++) {
+		stack Stack;
+		if (Platform->UtilIsLoaded) Stack = Stack_Get();
+		Platform->Modules[I].Init(Platform);
+		if (Platform->UtilIsLoaded) Stack_Set(Stack);
+	}
 
 	s64 CountsPerSecond;
 	Win32_QueryPerformanceFrequency(&CountsPerSecond);

@@ -227,10 +227,13 @@ Platform_LoadModule(c08 *Name)
 
 	Platform_ReloadModule(Module);
 
-	stack Stack;
-	if (Platform->UtilIsLoaded) Stack = Stack_Get();
-	Module->Init(Platform);
-	if (Platform->UtilIsLoaded) Stack_Set(Stack);
-
 	return Module;
+}
+
+internal string
+Platform_GetEnvParam(string Name)
+{
+	string Value;
+	if (HashMap_Get(&Platform->EnvTable, &Name, &Value)) return Value;
+	return EString();
 }

@@ -233,7 +233,6 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 		MinVAddr		   &= ~PageMask;
 		State->VAddrOffset	= MinVAddr;
 		State->ImageSize	= MaxVAddr - MinVAddr;
-		LoadAddress			= (vptr) (((usize) LoadAddress - State->TextVAddr) & ~PageMask);
 		vptr Base = State->ImageAddress = Sys_MemMap(
 			LoadAddress,
 			(State->ImageSize + PageMask) & ~PageMask,

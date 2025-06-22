@@ -258,9 +258,11 @@ typedef enum key_state {
 } key_state;
 
 typedef enum file_mode {
-	FILE_READ,
-	FILE_WRITE,
-	FILE_APPEND,
+	FILE_READ	= 0x0001,
+	FILE_WRITE	= 0x0002,
+	FILE_CREATE = 0x0004,				// If the file doesn't exist, create it
+	FILE_APPEND = 0x0008 | FILE_WRITE,	// If writing, all writes seek to the end of the file
+	FILE_CLEAR	= 0x0010 | FILE_WRITE,	// If writing, empty the file if it already exists
 } file_mode;
 
 #ifdef _OPENGL
@@ -293,6 +295,8 @@ typedef enum file_mode {
 	INTERN(b08,              Platform, IsModuleBackendOpened, platform_module *Module) \
 	INTERN(void,             Platform, OpenModuleBackend,     platform_module *Module) \
 	INTERN(void,             Platform, CloseModuleBackend,    platform_module *Module) \
+	EXPORT(b08,              Platform, ConnectToLocalSocket,  string Name, file_handle *FileHandleOut) \
+	EXPORT(string,           Platform, GetEnvParam,           string Name) \
 	EXPORT(s08,              Platform, CmpFileTime,           datetime A, datetime B) \
 	EXPORT(b08,              Platform, OpenFile,              file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \
 	EXPORT(u64,              Platform, ReadFile,              file_handle FileHandle, vptr Dest, u64 Length, u64 Offset) \
@@ -333,9 +337,9 @@ struct platform_state {
 	b08 UtilIsLoaded	 : 1;
 	b08 _Unused			 : 5;
 
-	v2s32  RestoreCursorPos;
-	v2s32  CursorPos;
-	heap  *Heap;
+	v2s32 RestoreCursorPos;
+	v2s32 CursorPos;
+	heap *Heap;
 
 	usize			 ModuleCount;
 	usize			 ModulesSize;

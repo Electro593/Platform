@@ -56,7 +56,24 @@
 #define SYS_CREATE_USER_WRITE   0x00200
 #define SYS_CREATE_USER_READ    0x00400
 
+#define SYS_ADDRESS_FAMILY_UNIX 1
+
+#define SYS_SOCKET_STREAM 1
+
 #define SYS_CLOCK_REALTIME 0
+
+typedef struct sys_sockaddr_unix {
+	u16 Family;
+	c08 Data[108];
+} sys_sockaddr_unix;
+
+typedef struct sys_sockaddr {
+	u16 Family;
+	union {
+		c08 MinData[14];
+		char Data[];
+	};
+} sys_sockaddr;
 
 typedef struct sys_stat {
 	u64 DeviceID;
@@ -97,6 +114,8 @@ typedef struct sys_timespec {
 	SYSCALL(9,   MemMap,       vptr,  vptr Address, usize Length, s32 Protection, s32 Flags, u32 FileDescriptor, s64 Offset) \
 	SYSCALL(10,  MemProtect,   s32,   vptr Address, usize Length, s32 Protection) \
 	SYSCALL(11,  MemUnmap,     s32,   vptr Address, usize Length) \
+	SYSCALL(41,  Socket,       s32,   s32 Domain, s32 Type, s32 Protocol) \
+	SYSCALL(42,  Connect,      s32,   s32 SocketFileDescriptor, sys_sockaddr *Address, u32 AddressLength) \
 	SYSCALL(60,  Exit,         void,  s32 ErrorCode) \
 	SYSCALL(228, GetClockTime, s32,   s32 ClockID, sys_timespec *Timespec) \
 	SYSCALL(229, GetClockRes,  s32,   s32 ClockID, sys_timespec *Timespec)
