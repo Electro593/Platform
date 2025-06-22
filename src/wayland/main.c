@@ -30,6 +30,8 @@ extern wayland_funcs _F;
 
 #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
 
+#define WAYLAND_MODULE_NAME CStringL("wayland")
+
 typedef struct wayland_state {
 	u32 NextObjectId;
 } wayland_state;
@@ -73,7 +75,7 @@ Load(platform_state *Platform, platform_module *Module)
 #define X PLATFORM_FUNCS
 #include <x.h>
 
-	platform_module *UtilModule = Platform_LoadModule("util");
+	platform_module *UtilModule = Platform_LoadModule(UTIL_MODULE_NAME);
 	util_funcs		*UtilFuncs	= UtilModule->Funcs;
 #define EXPORT(R, N, ...) N = UtilFuncs->N;
 #define X UTIL_FUNCS

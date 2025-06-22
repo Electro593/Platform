@@ -29,6 +29,9 @@ extern $module$_funcs _F;
 // #include <...>
 
 #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
+
+#define $MODULE$_MODULE_NAME CStringL("$module$")
+
 #define $MODULE$_FUNCS
 
 typedef struct $module$_state {
@@ -82,17 +85,14 @@ Load(platform_state *Platform, platform_module *Module)
 
 external API_EXPORT void
 Init(platform_state *Platform)
-{
-}
+{ }
 
 external API_EXPORT void
 Update(platform_state *Platform)
-{
-}
+{ }
 
 external API_EXPORT void
 Unload(platform_state *Platform)
-{
-}
+{ }
 #endif
 #endif

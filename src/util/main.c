@@ -37,6 +37,9 @@ extern struct util_funcs _F;
 #include <util/file.c>
 
 #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
+
+#define UTIL_MODULE_NAME CStringL("util")
+
 #define UTIL_FUNCS \
     SCALAR_FUNCS   \
     VECTOR_FUNCS   \

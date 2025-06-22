@@ -29,6 +29,12 @@ typedef struct hashmap {
 	hash_func Hash;
 } hashmap;
 
+#define HASHMAP_FOREACH(I, Hash, key, Key, value, Value, Map) \
+	for (usize I = 0; I < (Map)->Capacity; I++) \
+		for (usize Hash = *(usize*) ((Map)->Data->Data + (Map)->EntrySize * I); Hash >= 2; ) \
+		for (key Key = *(key*) ((Map)->Data->Data + (Map)->EntrySize * I + sizeof(usize)); Hash; ) \
+		for (value Value = *(value*) ((Map)->Data->Data + (Map)->EntrySize * I + sizeof(usize) + (Map)->KeySize); Hash; Hash = 0)
+
 #define SET_FUNCS \
    EXPORT(vptr,    BinarySearchArray,    vptr *Array, u32 Start, u32 End, vptr Target, type Type, cmp_func Func, vptr Param, u32 *IndexOut) \
    EXPORT(void,    QuickSort,            vptr Data, usize ElementSize, usize ElementCount, s08 (*Cmp)(vptr A, vptr B)) \

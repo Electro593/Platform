@@ -325,29 +325,23 @@ Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	for (u64 I = 0; I < AuxCount; I++)
 		if (AuxVectors[I].Type == ELF_AT_PAGESZ) Platform->PageSize = AuxVectors[I].Value;
 
-	Platform_LoadModule("util");
-
-	usize StackSize = 64 * 1024 * 1024;
-	usize HeapSize	= 8 * 1024 * 1024;
-	vptr  Mem		= Platform_AllocateMemory(StackSize + HeapSize);
-	Stack_Init(Mem, StackSize);
-	Stack_Push();
-	Mem += StackSize;
-
-	Platform->Heap = Heap_Init(Mem, HeapSize);
+	Platform_LoadModule(UTIL_MODULE_NAME);
 	Platform_SetupEnvTable(EnvCount, EnvParams);
-	Platform->UtilIsLoaded = TRUE;
 
-	Platform_LoadModule("base");
+	Platform_LoadModule(CStringL("base"));
 
-	for (usize I = 0; I < Platform->ModuleCount; I++) {
+	HASHMAP_FOREACH(I, Hash, string, Key, HEAP(platform_module), Value, &Platform->ModuleTable)
+	{
 		stack Stack;
 		if (Platform->UtilIsLoaded) Stack = Stack_Get();
-		Platform->Modules[I].Init(Platform);
+		((platform_module *) Value->Data)->Init(Platform);
 		if (Platform->UtilIsLoaded) Stack_Set(Stack);
 	}
 
-	for (usize I = 0; I < Platform->ModuleCount; I++) Platform_UnloadModule(Platform->Modules + I);
+	HASHMAP_FOREACH(I, Hash, string, Key, HEAP(platform_module), Value, &Platform->ModuleTable)
+	{
+		Platform_UnloadModule((platform_module *) Value->Data);
+	}
 
 	Stack_Pop();
 

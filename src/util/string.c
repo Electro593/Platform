@@ -10,8 +10,9 @@
 #ifdef INCLUDE_HEADER
 
 #define EString() CStringL("")
-#define CStringL(Literal) CLString(Literal, sizeof(Literal)-1)
-#define CNStringL(Literal) CLString(Literal, sizeof(Literal))
+#define CStringL(Literal) CLStringL(Literal, sizeof(Literal)-1)
+#define CNStringL(Literal) CLStringL(Literal, sizeof(Literal))
+#define CLStringL(Literal, Len) (string){ .Length = (Len), .Capacity = (Len), .Resizable = FALSE, .Text = (Literal) }
 #define CFStringL(Literal, ...) FString(CStringL(Literal), __VA_ARGS__)
 
 typedef struct string {
