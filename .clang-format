@@ -89,7 +89,7 @@ BreakBinaryOperations: RespectPrecedence
 # breakInheritanceList:
 BreakStringLiterals: true
 # BreakTemplateDeclarations:
-ColumnLimit: 110
+ColumnLimit: 100
 # CommentPragmas:
 # CompactNamespaces:
 # ConstructorInitializerIndentWidth:
@@ -146,7 +146,7 @@ MaxEmptyLinesToKeep: 1
 # ObjCSpaceBeforeProtocolList:
 PPIndentWidth: -1
 # PackConstructorInitializers:
-# PenaltyBreakAssignment:
+PenaltyBreakAssignment: 1000
 # PenaltyBreakBeforeFirstCallParameter:
 # PenaltyBreakBeforeMemberAccess:
 # PenaltyBreakComment:

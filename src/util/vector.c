@@ -9,69 +9,13 @@
 
 #ifdef INCLUDE_HEADER
 
-// CREDIT https://gitlab.inria.fr/gustedt/p99/-/blob/master/p99/p99_for.h
-
-#define MAC_CAT_2(_0, _1) _0 ## _1
-#define MAC_PASTE_2(_0, _1) MAC_CAT_2(_0, _1)
-
-#define MAC_PRED(N) _MAC_PRED(N)
-#define _MAC_PRED(N) _MAC_PRED_(MAC_PRED_ , N)
-#define _MAC_PRED_(P, N) P ## N
-#define MAC_PRED_1 0
-#define MAC_PRED_2 1
-#define MAC_PRED_3 2
-#define MAC_PRED_4 3
-
-#define _MAC_ARG(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, ...) _16
-#define _MAC_NARG_(...) _MAC_ARG(__VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,)
-#define _MAC_NARG(...) _MAC_NARG_(__VA_ARGS__)
-
-#define MAC_SKP(N, ...) MAC_PASTE_2(MAC_SKP_, N)(__VA_ARGS__)
-#define MAC_SKP_0(...) __VA_ARGS__
-#define MAC_SKP_1(_0, ...) __VA_ARGS__
-#define MAC_SKP_2(_0, ...) MAC_SKP_1(__VA_ARGS__)
-#define MAC_SKP_3(_0, ...) MAC_SKP_2(__VA_ARGS__)
-
-#define MAC_CHS(N, ...) _MAC_CHS(MAC_SKP(N, __VA_ARGS__))
-#define _MAC_CHS(...) _MAC_CHS_(__VA_ARGS__,)
-#define _MAC_CHS_(X, ...) X
-
-#define MAC_PRE_0(...)
-#define MAC_PRE_1(_0, ...) _0
-#define MAC_PRE_2(_0, ...) _0, MAC_PRE_1(__VA_ARGS__)
-#define MAC_PRE_3(_0, ...) _0, MAC_PRE_2(__VA_ARGS__)
-
-#define MAC_LAST(...) MAC_CHS(MAC_PRED(_MAC_NARG(__VA_ARGS__)), __VA_ARGS__,)
-#define MAC_ALLBUTLAST(...) MAC_PASTE_2(MAC_PRE_, MAC_PRED(_MAC_NARG(__VA_ARGS__)))(__VA_ARGS__,)
-
-#define MAC_FOR_OP_SEP_REV(NAME, ITER, PREV, CURR) CURR; PREV
-#define MAC_FOR_OP_SEQ_REV(NAME, ITER, PREV, CURR) CURR, PREV
-#define MAC_FOR_OP_NAME_REV(NAME, ITER, PREV, CURR) CURR NAME PREV
-
-#define MAC_FOR_FUNC_DECLVAR(NAME, ARG, ITER)  NAME ARG
-#define MAC_FOR_FUNC_V_ASSIGN(NAME, ARG, ITER) Result.ARG = ARG
-#define MAC_FOR_FUNC_V_OP(NAME, ARG, ITER)     Result.ARG = NAME V.ARG
-#define MAC_FOR_FUNC_VV_OP(NAME, ARG, ITER)    Result.ARG = A.ARG NAME B.ARG
-#define MAC_FOR_FUNC_VS_OP(NAME, ARG, ITER)    Result.ARG = V.ARG NAME S
-#define MAC_FOR_FUNC_VV_EQ(NAME, ARG, ITER)    A.ARG == B.ARG
-#define MAC_FOR_FUNC_VEC_DOT(NAME, ARG, ITER)  (B.ARG*A.ARG)
-#define MAC_FOR_FUNC_CLAMP(NAME, ARG, ITER)    Result.ARG = NAME##_Clamp(V.ARG, S, E)
-#define MAC_FOR_FUNC_LERP(NAME, ARG, ITER)     NAME##_Lerp(A.ARG, B.ARG, T)
-
-#define MAC_FOR(NAME, N, OP, FUNC, ...) MAC_PASTE_2(MAC_FOR_, N)(NAME, OP, FUNC, __VA_ARGS__)
-#define MAC_FOR_0(NAME, OP, FUNC, ...)
-#define MAC_FOR_1(NAME, OP, FUNC, ...) FUNC(NAME, MAC_LAST(__VA_ARGS__), 0)
-#define MAC_FOR_2(NAME, OP, FUNC, ...) OP(NAME, 1, MAC_FOR_1(NAME, OP, FUNC, MAC_ALLBUTLAST(__VA_ARGS__)), FUNC(NAME, MAC_LAST(__VA_ARGS__), 1))
-#define MAC_FOR_3(NAME, OP, FUNC, ...) OP(NAME, 2, MAC_FOR_2(NAME, OP, FUNC, MAC_ALLBUTLAST(__VA_ARGS__)), FUNC(NAME, MAC_LAST(__VA_ARGS__), 2))
-#define MAC_FOR_4(NAME, OP, FUNC, ...) OP(NAME, 3, MAC_FOR_3(NAME, OP, FUNC, MAC_ALLBUTLAST(__VA_ARGS__)), FUNC(NAME, MAC_LAST(__VA_ARGS__), 3))
-
-#define MAC_FOR_ARGS_VEC W, Z, Y, X
-#define MAC_FOR_ARGS_MAT W, Z, Y, X
+#define MAC_FOR_ARGS_VEC X, Y, Z, W
+#define MAC_FOR_ARGS_MAT X, Y, Z, W
 
 #define DECLARE_VECTOR_TYPE(Count, Type) \
    typedef union v##Count##Type {        \
       struct {                           \
-         MAC_FOR(Type, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC); \
+         MAC_FOR(Type, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC); \
       };                                 \
       Type E[Count];                     \
    } v##Count##Type;
@@ -228,10 +172,10 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
 #define DEFINE_VECTOR_INIT(Count, Type) \
    internal v##Count##Type \
    V##Count##Type( \
-      MAC_FOR(Type, Count, MAC_FOR_OP_SEQ_REV, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC)) \
+      MAC_FOR(Type, Count, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC)) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_V_ASSIGN, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_V_ASSIGN, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -241,7 +185,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                         v##Count##Type B) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(+, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(+, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -251,7 +195,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                          Type S) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(+, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(+, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -261,7 +205,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                         v##Count##Type B) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(-, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(-, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -271,7 +215,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                          Type S)                                                   \
    {                                                                               \
       v##Count##Type Result;                                                       \
-      MAC_FOR(-, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(-, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
       return Result;                                                               \
    }
 
@@ -281,7 +225,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                         v##Count##Type B) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(*, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(*, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -291,7 +235,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                          Type S) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(*, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(*, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -301,7 +245,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                         v##Count##Type B) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(/, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(/, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VV_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -311,7 +255,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                          Type S) \
    { \
       v##Count##Type Result; \
-      MAC_FOR(/, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(/, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_VS_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -328,7 +272,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                         v##Count##Type B) \
    { \
       Type Result; \
-      Result = MAC_FOR(+, Count, MAC_FOR_OP_NAME_REV, MAC_FOR_FUNC_VEC_DOT, MAC_FOR_ARGS_VEC); \
+      Result = MAC_FOR(+, Count, MAC_FOR_OP_NAME, MAC_FOR_FUNC_VEC_DOT, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -359,7 +303,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    V##Count##FromType##_ToV##Count##ToType(v##Count##FromType V) \
    { \
       v##Count##ToType Result; \
-      MAC_FOR((ToType), Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_V_OP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR((ToType), Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_V_OP, MAC_FOR_ARGS_VEC); \
       return Result; \
    }
 
@@ -368,7 +312,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    V##Count##Type##_Clamp(v##Count##Type V, Type S, Type E)                               \
    {                                                                                      \
       v##Count##Type Result = V;                                                          \
-      MAC_FOR(TypeName, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_CLAMP, MAC_FOR_ARGS_VEC); \
+      MAC_FOR(TypeName, Count, MAC_FOR_OP_SEP, MAC_FOR_FUNC_CLAMP, MAC_FOR_ARGS_VEC); \
       return Result;                                                                      \
    }
 
@@ -379,7 +323,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
                          r32 T)                                                            \
    {                                                                                       \
       return (v##Count##Type){                                                             \
-         MAC_FOR(TypeName, Count, MAC_FOR_OP_SEQ_REV, MAC_FOR_FUNC_LERP, MAC_FOR_ARGS_VEC) \
+         MAC_FOR(TypeName, Count, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_LERP, MAC_FOR_ARGS_VEC) \
       };                                                                                   \
    }
 
@@ -388,7 +332,7 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    V##Count##Type##_IsEqual(v##Count##Type A,                                               \
                             v##Count##Type B)                                               \
    {                                                                                        \
-      return MAC_FOR(&&, Count, MAC_FOR_OP_NAME_REV, MAC_FOR_FUNC_VV_EQ, MAC_FOR_ARGS_VEC); \
+      return MAC_FOR(&&, Count, MAC_FOR_OP_NAME, MAC_FOR_FUNC_VV_EQ, MAC_FOR_ARGS_VEC); \
    }
 
 #define DEFINE_VECTOR_ISZERO(Count, Type)                                      \
@@ -474,9 +418,18 @@ M4x4r32_Rotation(r32 Theta, v3r32 Axis)
 	S		= R32_sin(Theta);
 
 	m4x4r32 Result;
-	Result.V[0] = (v4r32) {X * X * (1 - C) + C, Y * X * (1 - C) - Z * S, Z * X * (1 - C) + Y * S, 0};
-	Result.V[1] = (v4r32) {X * Y * (1 - C) + Z * S, Y * Y * (1 - C) + C, Z * Y * (1 - C) - X * S, 0};
-	Result.V[2] = (v4r32) {X * Z * (1 - C) - Y * S, Y * Z * (1 - C) + X * S, Z * Z * (1 - C) + C, 0};
+	Result.V[0] = (v4r32) {X * X * (1 - C) + C,
+						   Y * X * (1 - C) - Z * S,
+						   Z * X * (1 - C) + Y * S,
+						   0};
+	Result.V[1] = (v4r32) {X * Y * (1 - C) + Z * S,
+						   Y * Y * (1 - C) + C,
+						   Z * Y * (1 - C) - X * S,
+						   0};
+	Result.V[2] = (v4r32) {X * Z * (1 - C) - Y * S,
+						   Y * Z * (1 - C) + X * S,
+						   Z * Z * (1 - C) + C,
+						   0};
 	Result.V[3] = (v4r32) {0, 0, 0, 1};
 	return Result;
 }
@@ -575,7 +528,7 @@ RayRectIntersectionA(
 }
 #endif
 
-#define DEFINE_VECTOR_INIT(N, T)      EXPORT(v##N##T,   V##N##T##_Init,        MAC_FOR(T, N, MAC_FOR_OP_SEQ_REV, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC))
+#define DEFINE_VECTOR_INIT(N, T)      EXPORT(v##N##T,   V##N##T##_Init,        MAC_FOR(T, N, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC))
 #define DEFINE_VECTOR_ADD(N, T)       EXPORT(v##N##T,   V##N##T##_Add,         v##N##T, v##N##T)
 #define DEFINE_VECTOR_ADDS(N, T)      EXPORT(v##N##T,   V##N##T##_AddS,        v##N##T, T)
 #define DEFINE_VECTOR_SUB(N, T)       EXPORT(v##N##T,   V##N##T##_Sub,         v##N##T, v##N##T)

@@ -11,11 +11,10 @@
 #include <shared.h>
 
 #define INCLUDE_HEADER
-#include "main.c"
 #include <util/main.c>
-#undef INCLUDE_HEADER
-
 #include <platform/platform.h>
+#include "main.c"
+#undef INCLUDE_HEADER
 
 #define INCLUDE_SOURCE
 #include "main.c"
@@ -33,7 +32,17 @@ extern wayland_funcs _F;
 #define WAYLAND_MODULE_NAME CStringL("wayland")
 
 typedef struct wayland_state {
+	heap *Heap;
+
+	file_handle Socket;
+
+	b08 Connected : 1;
+	b08 Attempted : 1;
+
+	// TODO Re-use deleted object ids
 	u32 NextObjectId;
+
+	wayland_registry Registry;
 } wayland_state;
 
 typedef struct wayland_funcs {
@@ -43,7 +52,7 @@ typedef struct wayland_funcs {
 } wayland_funcs;
 
 #if defined(_WAYLAND_MODULE)
-#define EXPORT(R, N, ...) \
+#define DEFAULT(R, N, ...) \
             internal R N(__VA_ARGS__);
 #define X WAYLAND_FUNCS
 #include <x.h>
@@ -83,9 +92,9 @@ Load(platform_state *Platform, platform_module *Module)
 }
 
 external API_EXPORT void
-Init(platform_state *Platform)
+Deinit(platform_state *Platform)
 {
-	_G.NextObjectId = 1;
+	Wayland_TryClose();
 }
 
 #endif

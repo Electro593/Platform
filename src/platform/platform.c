@@ -115,6 +115,7 @@ Platform_ReloadModule(platform_module *Module)
 	Platform_GetProcAddress(Module, "Load", (vptr *) &Module->Load);
 	Platform_GetProcAddress(Module, "Init", (vptr *) &Module->Init);
 	Platform_GetProcAddress(Module, "Update", (vptr *) &Module->Update);
+	Platform_GetProcAddress(Module, "Deinit", (vptr *) &Module->Deinit);
 	Platform_GetProcAddress(Module, "Unload", (vptr *) &Module->Unload);
 
 	stack Stack;
@@ -152,6 +153,7 @@ Platform_LoadModule(string Name)
 			Platform->Heap,
 			sizeof(platform_module) + Name.Length + sizeof(PLATFORM_DYNLIB_SUFFIX)
 		);
+		Mem_Set(Module, 0, sizeof(platform_module));
 		HashMap_Add(&Platform->ModuleTable, &Name, &Module);
 
 		Module->FileName = (c08 *) (Module + 1);

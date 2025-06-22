@@ -168,7 +168,8 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 internal u64
 Platform_ReadFile(file_handle FileHandle, vptr Dest, u64 Length, u64 Offset)
 {
-	VALIDATE(Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING), "Failed to seek file");
+	if (Offset != (usize) -1)
+		VALIDATE(Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING), "Failed to seek file");
 	s64 BytesRead = Sys_Read(FileHandle.FileDescriptor, Dest, Length);
 	VALIDATE(BytesRead, "Failed to read file");
 	return BytesRead;
@@ -177,7 +178,8 @@ Platform_ReadFile(file_handle FileHandle, vptr Dest, u64 Length, u64 Offset)
 internal u64
 Platform_WriteFile(file_handle FileHandle, vptr Src, u64 Length, u64 Offset)
 {
-	VALIDATE(Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING), "Failed to seek file");
+	if (Offset != (usize) -1)
+		VALIDATE(Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING), "Failed to seek file");
 	s64 BytesWritten = Sys_Write(FileHandle.FileDescriptor, Src, Length);
 	VALIDATE(BytesWritten, "Failed to write file");
 	return BytesWritten;
@@ -337,7 +339,11 @@ Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (Platform->UtilIsLoaded) Stack_Set(Stack);
 	}
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module*, Module, &Platform->ModuleTable) {
+	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+		stack Stack;
+		if (Platform->UtilIsLoaded) Stack = Stack_Get();
+		Module->Deinit(Platform);
+		if (Platform->UtilIsLoaded) Stack_Set(Stack);
 		Platform_UnloadModule(Module);
 	}
 

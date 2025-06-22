@@ -24,6 +24,7 @@ typedef struct opengl_funcs	   opengl_funcs;
 typedef void func_Module_Load(platform_state *State, platform_module *Module);
 typedef void func_Module_Init(platform_state *State);
 typedef void func_Module_Update(platform_state *State);
+typedef void func_Module_Deinit(platform_state *State);
 typedef void func_Module_Unload(platform_state *State);
 
 #define FONTS_DIR    "assets/fonts/"
@@ -59,6 +60,7 @@ struct platform_module {
 	func_Module_Load   *Load;
 	func_Module_Init   *Init;
 	func_Module_Update *Update;
+	func_Module_Deinit *Deinit;
 	func_Module_Unload *Unload;
 
 	vptr Data;

@@ -24,6 +24,7 @@ DLLCompilerSwitches="$DLLCompilerSwitches $CompilerSwitches -fPIC"
 DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
 
 if [[ -e *.pdb ]]; then rm *.pdb > /dev/null 2> /dev/null; fi
+if [[ -e *.i ]]; then rm *.i > /dev/null; fi
 
 Result=0
 
@@ -35,7 +36,7 @@ build_module() {
       echo Skipping $Module
    elif [ "$ModuleName" = "platform" ]; then
       echo Building $Module as an executable
-      # gcc $CompilerSwitches $LinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}linux/entry.c
+    #   gcc $CompilerSwitches $LinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}linux/entry.c
       gcc $CompilerSwitches $LinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName ${Module}linux/entry.c
       if [[ -e $ModuleName ]]; then
          objdump --source-comment -M intel $ModuleName > $ModuleName.dump.asm
@@ -45,7 +46,7 @@ build_module() {
       fi
    else
       echo Building $Module as a library
-      # gcc $DLLCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}main.c
+    #   gcc $DLLCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.i ${Module}main.c
       gcc $DLLCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAMEC=$ModuleName -D_${CapitalName}_MODULE -I ../src -I ../Platform/src -o $ModuleName.so ${Module}main.c
       if [[ -e $ModuleName.so ]]; then
          objdump --source-comment -M intel $ModuleName.so > $ModuleName.dump.asm

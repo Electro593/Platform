@@ -128,6 +128,8 @@ Heap_GetHeap(heap_handle *Handle)
 	return (heap *) (Handle - Handle->Index);
 }
 
+//TODO Resizeable heap
+
 internal heap_handle *
 Heap_GetHandleA(vptr Data)
 {

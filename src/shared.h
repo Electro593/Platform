@@ -37,8 +37,7 @@
 #define FLAG_SET(Value, Flag) (((Value) & (Flag)) == (Flag))
 #define ALIGN_UP(Value, Size) (((Value) + ((Size) - 1)) & ~((Size) - 1))
 
-#define _STRINGIFY(X) #X
-#define STRINGIFY(X) _STRINGIFY(X)
+#include <macro.h>
 
 #define Error(Message) Platform_Assert(__FILE__, __LINE__, "", Message)
 #define Assert(Expression, ...) \
