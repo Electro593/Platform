@@ -25,11 +25,16 @@ extern wayland_state _G;
 extern wayland_funcs _F;
 #endif
 
+#include <wayland/api.c>
 #include <wayland/wayland.c>
 
 #if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
 
 #define WAYLAND_MODULE_NAME CStringL("wayland")
+
+#define WAYLAND_FUNCS \
+	WAYLAND_API_FUNCS \
+	WAYLAND_USER_FUNCS
 
 typedef struct wayland_state {
 	heap *Heap;
