@@ -69,5 +69,33 @@
     "editor.indentSize": "tabSize",
     "editor.tabSize": 4,
 	"editor.insertSpaces": false,
-	"C_Cpp.default.compilerPath": "/usr/bin/gcc"
+	"C_Cpp.default.compilerPath": "/usr/bin/gcc",
+	"terminal.integrated.profiles.windows": {
+		"PowerShell": {
+			"source": "PowerShell",
+			"icon": "terminal-powershell"
+		},
+		"Command Prompt": {
+			"path": [
+				"${env:windir}\\Sysnative\\cmd.exe",
+				"${env:windir}\\System32\\cmd.exe"
+			],
+			"args": [],
+			"icon": "terminal-cmd"
+		},
+		"Git Bash": {
+			"source": "Git Bash"
+		},
+		"MSYS2": {
+			"path": "D:\\Programs\\MSYS2\\usr\\bin\\bash.exe",
+			"args": [
+				"--login",
+				"-i"
+			],
+			"env": {
+				"MSYSTEM": "UCRT64",
+				"CHERE_INVOKING": "1"
+			}
+		}
+	},
 }

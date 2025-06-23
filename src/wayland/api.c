@@ -823,6 +823,7 @@ struct wayland_fixes {
 
 #endif
 
+#ifdef _LINUX
 #ifdef INCLUDE_SOURCE
 
 static wayland_display WaylandDisplayPrototype = {
@@ -1388,4 +1389,5 @@ Wayland_Callback_HandleEvent(wayland_callback *This, wayland_message *Message)
 
 #undef TRYCALL
 
+#endif
 #endif

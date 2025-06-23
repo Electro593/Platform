@@ -158,9 +158,8 @@ typedef enum type_id {
 	TYPES
 #undef ENUM
 
-		TYPEID_EXTRA_EXP
-	= 8,
-	TYPEID_MOD_EXP = 4,
+		TYPEID_EXTRA_EXP = 8,
+	TYPEID_MOD_EXP		 = 4,
 
 	TYPEID_TYPE_MASK  = (1 << TYPEID_EXTRA_EXP) - 1,
 	TYPEID_MOD_MASK	  = ~((1 << (32 - TYPEID_MOD_EXP)) - 1),
@@ -176,7 +175,7 @@ typedef struct type {
 
 #ifndef NO_SYMBOLS
 
-global type TYPE_NONE = {TYPEID_NONE, 0};
+global type TYPE_NONE = { TYPEID_NONE, 0 };
 #define ENUM(Name, Type) \
     global type TYPE_##Name = {TYPEID_##Name, sizeof(Type)};
 TYPES
@@ -185,15 +184,25 @@ TYPES
 #endif
 
 // TODO fix this whole mess up
-inline type
+internal type
 MakeMemberType(type_id TypeID, u16 Size, u32 Offset)
 {
-	return (type) {TYPEID_MEMBER | ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK) | TypeID, Size};
+	return (type) { TYPEID_MEMBER | ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK) | TypeID,
+					Size };
 }
 
 typedef s08 (*cmp_func)(vptr A, vptr B, vptr Param);
 typedef usize (*hash_func)(vptr Data, vptr Param);
 
 #ifdef _WIN32
+// Win32 depends on some weird symbols, so we add them here
 s32 _fltused;
+#endif
+
+#ifdef __MINGW32__
+s32
+DllMainCRTStartup()
+{
+	return TRUE;
+}
 #endif

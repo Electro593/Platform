@@ -4,9 +4,9 @@
         {
             "label": "Build Program (MS)",
             "type": "shell",
-            "command": ".\\Platform\\scripts\\build.bat",
+            "command": "chmod +rwx ./Platform/scripts/build.sh && ./Platform/scripts/build.sh --platform=win32 --arch=amd64",
             "group": "build",
-            "problemMatcher": "$msCompile"
+            "problemMatcher": "$gcc"
         },
         {
             "type": "shell",
@@ -17,7 +17,7 @@
         {
             "label": "Build Program (SH)",
             "type": "shell",
-            "command": "chmod +rwx ./Platform/scripts/build.sh && ./Platform/scripts/build.sh",
+            "command": "chmod +rwx ./Platform/scripts/build.sh && ./Platform/scripts/build.sh --platform=linux --arch=amd64",
             "group": "build",
             "problemMatcher": "$gcc"
         },

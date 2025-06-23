@@ -29,6 +29,7 @@ typedef struct string {
 	EXPORT(string, LString,          u64 Length) \
 	EXPORT(string, FString,          string Format, ...) \
 	EXPORT(string, CFString,         c08 *Format, ...) \
+	EXPORT(string, SString,          string String) \
 	\
 	EXPORT(string, String_Cat,       string A, string B) \
 	EXPORT(string, String_Terminate, string A) \
@@ -141,8 +142,6 @@ SString(string String)
 // 	#endif
 // }
 
-typedef enum vstring_format_radix { } vstring_format_radix;
-
 typedef enum vstring_format_type {
 	VSTRING_FORMAT_INVALID,
 	VSTRING_FORMAT_INITIAL,
@@ -194,12 +193,12 @@ typedef enum vstring_format_type {
 	VSTRING_FORMAT_FLAG_CHR_WIDE = 0x020,
 
 	VSTRING_FORMAT_FLAG_UPPERCASE = 0x100,
-	VSTIRNG_FORMAT_FLAG_QUERY	  = 0x200,
+	VSTRING_FORMAT_FLAG_QUERY	  = 0x200,
 } vstring_format_type;
 
 // clang-format off
-#define S(C, TYPE) [C - A] = VSTRING_FORMAT_##TYPE
-static vstring_format_type VStringFormatTypeStateMachine[]['z' - 'A' + 1] = {
+#define S(C, TYPE) [C - '1'] = VSTRING_FORMAT_##TYPE
+static vstring_format_type VStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 	[VSTRING_FORMAT_INITIAL] = {
 		S('h', SIZE_HALF),
 		S('l', SIZE_LONG),
@@ -209,7 +208,7 @@ static vstring_format_type VStringFormatTypeStateMachine[]['z' - 'A' + 1] = {
 		S('j', SIZE_SIZE),
 		S('z', SIZE_SIZE),
 		S('Z', SIZE_SIZE),
-		S('w', SIZE_SPECIFIC),
+		S('w', SIZE_SPEC),
 		S('d', S32 | VSTRING_FORMAT_FLAG_INT_DEC),
 		S('i', S32 | VSTRING_FORMAT_FLAG_INT_DEC),
 		S('b', U32 | VSTRING_FORMAT_FLAG_INT_BIN),
@@ -373,12 +372,8 @@ VString_ParseFormatType(c08 **C)
 {
 	vstring_format_type Type = VSTRING_FORMAT_INITIAL;
 
-	Type = VStringFormatTypeStateMachine[Type];
-	if (Type == VSTRING_FORMAT_INVALID) Type = VSTRING_FORMAT_SIZE_DEFAULT;
-	else *C += 1;
-
 	while (Type < VSTRING_FORMAT_DONE) {
-		Type = VStringFormatTypeStateMachine[Type];
+		Type = VStringFormatTypeStateMachine[Type][**C - '0'];
 		if (Type == VSTRING_FORMAT_INVALID) break;
 		*C += 1;
 	}
@@ -386,428 +381,428 @@ VString_ParseFormatType(c08 **C)
 	return Type;
 }
 
-internal void
-WritePadding(c08 **Out, s32 *Padding)
-{
-	while (*Padding-- > 0) *(*Out)++ = ' ';
-}
-
-internal void
-WriteSignedNumber(c08 **Out, s64 Value, vstring_format Format)
-{
-	if (!Format.CustomTypeSize) Value = (s32) Value;
-	else if (Format.TypeSize == 0) Value = (s08) Value;
-	else if (Format.TypeSize == 1) Value = (s16) Value;
-	else if (Format.TypeSize == 2) Value = (s32) Value;
-	else if (Format.TypeSize == 3) Value = (s64) Value;
-
-	s64 OriginalValue = (s64) Value;
-
-	if (!Format.CustomPrecision) Format.Precision = 1;
-
-	b08 Negative  = (Value < 0);
-	b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
-	c08 Prefix;
-	if (Negative) Prefix = '-';
-	else if (Format.PrefixPlus) Prefix = '+';
-	else if (Format.PrefixSpace) Prefix = ' ';
-
-	s32 Len = 0;
-	while (Value > 0) {
-		Value /= 10;
-		Len++;
-	}
-	Len = MAX(Len, Format.Precision);
-
-	s32 SeparatorCount = 0;
-	if (Format.HasSeparatorChar) SeparatorCount = (Len - 1) / 3;
-	s32 MinDigits = Format.MinChars - HasPrefix - SeparatorCount;
-	if (Format.PadZero && !Format.AlignLeft && !Format.CustomPrecision) Len = MAX(MinDigits, Len);
-	s32 Padding = MinDigits - Len;
-
-	Value = OriginalValue * (1 - 2 * Negative);
-
-	if (!Format.AlignLeft) WritePadding(Out, &Padding);
-
-	if (HasPrefix) *(*Out)++ = Prefix;
-
-	u32 IStart = Len + SeparatorCount - 1;
-	for (s32 I = IStart; I >= 0; I--) {
-		if (Format.HasSeparatorChar && (IStart - I + 1) % 4 == 0) {
-			(*Out)[I] = ',';
-		} else {
-			(*Out)[I]  = (Value % 10) + '0';
-			Value	  /= 10;
-		}
-	}
-	*Out += IStart + 1;
-
-	WritePadding(Out, &Padding);
-}
-
-internal void
-WriteBoolean(c08 **Out, b64 Value, vstring_format Format)
-{
-	if (!Format.CustomTypeSize) Value = (b08) Value;
-	else if (Format.TypeSize == 0) Value = (b08) Value;
-	else if (Format.TypeSize == 1) Value = (b16) Value;
-	else if (Format.TypeSize == 2) Value = (b32) Value;
-	else if (Format.TypeSize == 3) Value = (b64) Value;
-
-	c08 FalseStr[] = "False";
-	c08 TrueStr[]  = "True";
-
-	s32 Len;
-	if (Value) Len = sizeof(TrueStr) - 1;
-	else Len = sizeof(FalseStr) - 1;
-	s32 Padding = Format.MinChars - Len;
-
-	if (!Format.AlignLeft) WritePadding(Out, &Padding);
-
-	Mem_Cpy(*Out, (Value) ? TrueStr : FalseStr, Len);
-	*Out += Len;
-
-	WritePadding(Out, &Padding);
-}
-
-internal void
-WriteUnsignedNumber(c08 **Out, u64 Value, c08 Conversion, vstring_format Format)
-{
-	if (!Format.CustomTypeSize) Value = (u32) Value;
-	else if (Format.TypeSize == 0) Value = (u08) Value;
-	else if (Format.TypeSize == 1) Value = (u16) Value;
-	else if (Format.TypeSize == 2) Value = (u32) Value;
-	else if (Format.TypeSize == 3) Value = (u64) Value;
-
-	s64 OriginalValue = (u64) Value;
-
-	if (!Format.CustomPrecision) Format.Precision = 1;
-
-	u32 Radix;
-	u32 SeparatorGap;
-	c08 SeparatorChar;
-	if (Conversion == 'b' || Conversion == 'B') {
-		Radix		  = 2;
-		SeparatorGap  = 8;
-		SeparatorChar = '_';
-	} else if (Conversion == 'o') {
-		Radix		  = 8;
-		SeparatorGap  = 4;
-		SeparatorChar = '_';
-	} else if (Conversion == 'u') {
-		Radix		  = 10;
-		SeparatorGap  = 3;
-		SeparatorChar = ',';
-	} else if (Conversion == 'x' || Conversion == 'X') {
-		Radix		  = 16;
-		SeparatorGap  = 4;
-		SeparatorChar = '_';
-	}
-
-	b08 PrefixLen = Format.HashFlag * (2 * (Radix == 2) + (Radix == 8) + 2 * (Radix == 16));
-	s32 Len		  = 0;
-	while (Value > 0) {
-		Value /= Radix;
-		Len++;
-	}
-	Len = MAX(Len, Format.Precision);
-
-	s32 SeparatorCount = 0;
-	if (Format.HasSeparatorChar) SeparatorCount = (Len - 1) / SeparatorGap;
-	s32 MinDigits = Format.MinChars - PrefixLen - SeparatorCount;
-	if (Format.PadZero && !Format.AlignLeft && !Format.CustomPrecision) Len = MAX(MinDigits, Len);
-	s32 Padding = MinDigits - Len;
-
-	if (!Format.AlignLeft) WritePadding(Out, &Padding);
-
-	if (PrefixLen && Radix == 2) {
-		*(*Out)++ = '0';
-		*(*Out)++ = Conversion;
-	} else if (PrefixLen && Radix == 8) *(*Out)++ = '0';
-	else if (PrefixLen && Radix == 16) {
-		*(*Out)++ = '0';
-		*(*Out)++ = Conversion;
-	}
-
-	u32 Offset = Format.Caps * 16;
-	Value	   = OriginalValue;
-	u32 IStart = Len + SeparatorCount - 1;
-	for (s32 I = IStart; I >= 0; I--) {
-		if (Format.HasSeparatorChar && (IStart - I + 1) % (SeparatorGap + 1) == 0) {
-			(*Out)[I] = SeparatorChar;
-		} else {
-			(*Out)[I]  = BaseChars[Value % Radix + Offset];
-			Value	  /= Radix;
-		}
-	}
-	*Out += IStart + 1;
-
-	WritePadding(Out, &Padding);
-}
-
-internal void
-WriteCharacter(c08 **Out, s64 Value, vstring_format Format)
-{
-	if (Format.CustomTypeSize && Format.TypeSize == 2) Assert(FALSE, "Wide chars not implemented!");
-	else Value = (c08) Value;
-
-	s32 Len		= 1;
-	s32 Padding = Format.MinChars - Len;
-
-	if (!Format.AlignLeft) WritePadding(Out, &Padding);
-
-	*(*Out)++ = Value;
-
-	WritePadding(Out, &Padding);
-}
-
-internal void
-WriteString(c08 **Out, string Value, vstring_format Format)
-{
-	if (Format.CustomTypeSize && Format.TypeSize == 2)
-		Assert(FALSE, "Wide strings not implemented!");
-
-	if (!Value.Text) Value = CStringL("(null)");
-
-	c08 *In	   = Value.Text;
-	c08 *Start = *Out;
-
-	s32 Len = Value.Length;
-	if (Format.CustomPrecision) Len = MIN(Len, Format.Precision);
-	s32 Padding = Format.MinChars - Len;
-
-	if (!Format.AlignLeft) WritePadding(Out, &Padding);
-
-	while (Len--) *(*Out)++ = *In++;
-
-	WritePadding(Out, &Padding);
-}
-
-internal void
-WritePointer(c08 **Out, vptr Value, vstring_format Format)
-{
-	vstring_format NewFormat   = { 0 };
-	NewFormat.MinChars		   = Format.MinChars;
-	NewFormat.AlignLeft		   = Format.AlignLeft;
-	NewFormat.HasSeparatorChar = Format.HasSeparatorChar;
-
-	if (!Value) {
-		WriteString(Out, CStringL("(nil)"), NewFormat);
-	} else {
-		*(*Out)++ = '0';
-		*(*Out)++ = 'x';
-		WriteUnsignedNumber(Out, (u64) Value, 'X', NewFormat);
-	}
-}
-
-internal b08
-WriteSpecialtyFloat(c08 **Out, r64 Value, vstring_format Format)
-{
-	if (Format.CustomTypeSize && Format.TypeSize == 3)
-		Assert(FALSE, "Long doubles not implemented!");
-
-	vstring_format StringFormat = { 0 };
-	StringFormat.MinChars		= Format.MinChars;
-	StringFormat.AlignLeft		= Format.AlignLeft;
-
-	if (Value == R64_INF) {
-		WriteString(Out, Format.Caps ? CStringL("INF") : CStringL("inf"), StringFormat);
-	} else if (Value == R64_NINF) {
-		WriteString(Out, Format.Caps ? CStringL("-INF") : CStringL("-inf"), StringFormat);
-	} else if (Value != Value) {
-		u64 Binary	= FORCE_CAST(u64, Value);
-		u32 FracMax = (R64_MANTISSA_BITS + 3) / 4;
-		u32 Offset	= Format.Caps * 16;
-
-		string String =
-			Format.Caps ? CStringL("-SNAN[0XFFFFFFFFFFFFF]") : CStringL("-snan[0xfffffffffffff]");
-		String.Text[1] =
-			(Binary & R64_QUIET_MASK) ? (Format.Caps ? 'Q' : 'q') : (Format.Caps ? 'S' : 's');
-
-		u32 Len			 = 8;
-		u64 MantissaBits = Binary & R64_MANTISSA_MASK;
-		do {
-			Len++;
-		} while (MantissaBits /= 16);
-
-		MantissaBits = Binary & R64_MANTISSA_MASK;
-		for (s32 I = Len - 1; I >= 0; I--) {
-			u32 Digit		 = MantissaBits & 0xF;
-			String.Text[I]	 = BaseChars[Digit + Offset];
-			MantissaBits   >>= 4;
-		}
-		String.Text[Len] = ']';
-		String.Length	 = Len + 1;
-
-		if (Binary & R64_SIGN_MASK) {
-			String.Text++;
-			String.Length--;
-		}
-
-		WriteString(Out, String, StringFormat);
-	} else {
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
-internal void
-WriteHexadecimalFloat(c08 **Out, r64 Value, vstring_format Format)
-{
-	if (WriteSpecialtyFloat(Out, Value, Format)) return;
-
-	if (Format.CustomTypeSize && Format.TypeSize == 3)
-		Assert(FALSE, "Long doubles not implemented!");
-
-	u32 FracMax = (R64_MANTISSA_BITS + 3) / 4;
-	u32 Offset	= Format.Caps * 16;
-
-	u64 Binary = FORCE_CAST(u64, Value);
-
-	s32 Sign	 = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
-	s32 Exponent = (s32) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
-	u64 MantissaBits = Binary & R64_MANTISSA_MASK;
-
-	b08 Negative  = Sign;
-	b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
-	c08 Prefix	  = Negative ? '-' : Format.PrefixPlus ? '+' : ' ';
-
-	b08 IsDenormal = (Exponent == -R64_EXPONENT_BIAS);
-	if (IsDenormal) Exponent++;
-	if (Value == 0) Exponent = 0;
-
-	u32 Index;
-	b08 ValidIndex = Intrin_BitScanForward64(&Index, MantissaBits);
-	u32 FracLen	   = ValidIndex ? (R64_MANTISSA_BITS - Index) / 4 + 1 : 0;
-	FracLen		   = MAX(Format.Precision, FracLen);
-
-	b08 ExpIsNegative  = Exponent < 0;
-	Exponent		  *= 1 - 2 * ExpIsNegative;
-	b08 HasExpSign	   = ExpIsNegative || Format.PrefixPlus;
-	b08 ExpHasComma	   = Format.HasSeparatorChar && (Exponent > 999);
-	s32 ExpLen		   = 1 + ExpHasComma;
-	s32 ExpCpy		   = Exponent;
-	while (ExpCpy /= 10) ExpLen++;
-
-	b08 HasDecimal = FracLen || Format.HashFlag;
-	u32 TotalLen   = HasPrefix + 2 + 1 + HasDecimal + FracLen + 1 + HasExpSign + ExpLen;
-
-	s32 Padding = Format.MinChars - TotalLen;
-
-	if (!Format.AlignLeft) WritePadding(Out, &Padding);
-
-	if (HasPrefix) *(*Out)++ = Prefix;
-
-	*(*Out)++ = '0';
-	*(*Out)++ = (Format.Caps) ? 'X' : 'x';
-
-	*(*Out)++ = IsDenormal ? '0' : '1';
-
-	if (HasDecimal) *(*Out)++ = '.';
-
-	for (u32 I = 0; I < FracLen; I++) {
-		u32 Digit = (MantissaBits >> (4 * (FracMax - I - 1))) & 0xF;
-		*(*Out)++ = BaseChars[Digit + Offset];
-	}
-
-	*(*Out)++ = (Format.Caps) ? 'P' : 'p';
-
-	if (HasExpSign) *(*Out)++ = ExpIsNegative ? '-' : '+';
-
-	for (s32 I = ExpLen - 1; I >= 0; I--) {
-		if (ExpHasComma && I == 1) {
-			(*Out)[I] = ',';
-		} else {
-			(*Out)[I]  = (Exponent % 10) + '0';
-			Exponent  /= 10;
-		}
-	}
-	*Out += ExpLen;
-
-	WritePadding(Out, &Padding);
-}
-
-internal void
-WriteFloat(c08 **Out, r64 Value, vstring_format Format)
-{
-	if (WriteSpecialtyFloat(Out, Value, Format)) return;
-
-	if (Format.CustomTypeSize && Format.TypeSize == 3)
-		Assert(FALSE, "Long doubles not implemented!");
-
-	vptr Cursor = Stack_GetCursor();
-	Stack_SetCursor(*Out);
-	string String = R32_ToString((r32) Value, Format.CustomPrecision ? Format.Precision : 5);
-	Mem_Cpy(*Out, String.Text, String.Length);
-	*Out += String.Length;
-	Stack_SetCursor(Cursor);
-
-	// u64 Binary = FORCE_CAST(u64, Value);
-	//
-	// b08 Sign     = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
-	// s32 Exponent = (s32)((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
-	// u64 Mantissa = Binary & R64_MANTISSA_MASK;
-	//
-	// b08 Denormal = FALSE;
-	// if(Exponent == -R64_EXPONENT_BIAS) {
-	// 	Exponent++;
-	// 	Denormal = TRUE;
-	// }
-	//
-	// b08 Negative = Sign;
-	// b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
-	// c08 Prefix = Negative ? '-' : Format.PrefixPlus ? '+' : ' ';
-	//
-	// vptr Cursor = Stack_GetCursor();
-	// vptr TempCursor = (vptr)ALIGN_UP((u64)Out + Format.MinChars, 8);
-	// Stack_SetCursor(TempCursor);
-	//
-	// bigint Whole = BigInt_InitV(0);
-	// s32 WholeLen = 1;
-	// if(Exponent >= 0) {
-	// 	Whole = BigInt_Init(1 + Exponent / 64);
-	// 	Whole.WordCount = Whole.MaxCount;
-	//
-	// 	Whole.Words[Exponent / 64] |= !Denormal << (Exponent % 64);
-	// 	for(s32 I = 0; I <= R64_MANTISSA_BITS; I++) {
-	// 		if(Exponent + I < R64_MANTISSA_BITS) continue;
-	// 		u64 Bit = Exponent - R64_MANTISSA_BITS + I;
-	// 		u64 IsSet = (Mantissa >> I) & 1;
-	// 		if(Whole.WordCount < Bit / 64) Whole.WordCount += IsSet;
-	// 		Whole.Words[Bit / 64] |= IsSet << (Bit % 64);
-	// 	}
-	//
-	// 	TempCursor = Stack_GetCursor();
-	//
-	// 	bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
-	// 	bigint Divisor = BigInt_InitV(10);
-	// 	do {
-	// 		DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
-	// 	} while(DivMod.Quotient.WordCount && WholeLen++);
-	// }
-	//
-	// u32 TotalLen = HasPrefix;
-	//
-	// s32 Padding = Format.MinChars - TotalLen;
-	//
-	// if(!Format.AlignLeft) WritePadding(Out, &Padding);
-	//
-	// Stack_SetCursor(TempCursor);
-	//
-	// bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
-	// bigint Divisor = BigInt_InitV(10);
-	// while(WholeLen--) {
-	// 	DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
-	// 	*(*Out)++ = '0' + (DivMod.Remainder.WordCount ? DivMod.Remainder.Words[0] : 0);
-	// }
-	//
-	// if(HasPrefix) *(*Out)++ = Prefix;
-	//
-	// WritePadding(Out, &Padding);
-	//
-	// Stack_SetCursor(Cursor);
-}
+// internal void
+// WritePadding(c08 **Out, s32 *Padding)
+// {
+// 	while (*Padding-- > 0) *(*Out)++ = ' ';
+// }
+
+// internal void
+// WriteSignedNumber(c08 **Out, s64 Value, vstring_format Format)
+// {
+// 	if (!Format.CustomTypeSize) Value = (s32) Value;
+// 	else if (Format.TypeSize == 0) Value = (s08) Value;
+// 	else if (Format.TypeSize == 1) Value = (s16) Value;
+// 	else if (Format.TypeSize == 2) Value = (s32) Value;
+// 	else if (Format.TypeSize == 3) Value = (s64) Value;
+
+// 	s64 OriginalValue = (s64) Value;
+
+// 	if (!Format.CustomPrecision) Format.Precision = 1;
+
+// 	b08 Negative  = (Value < 0);
+// 	b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
+// 	c08 Prefix;
+// 	if (Negative) Prefix = '-';
+// 	else if (Format.PrefixPlus) Prefix = '+';
+// 	else if (Format.PrefixSpace) Prefix = ' ';
+
+// 	s32 Len = 0;
+// 	while (Value > 0) {
+// 		Value /= 10;
+// 		Len++;
+// 	}
+// 	Len = MAX(Len, Format.Precision);
+
+// 	s32 SeparatorCount = 0;
+// 	if (Format.HasSeparatorChar) SeparatorCount = (Len - 1) / 3;
+// 	s32 MinDigits = Format.MinChars - HasPrefix - SeparatorCount;
+// 	if (Format.PadZero && !Format.AlignLeft && !Format.CustomPrecision) Len = MAX(MinDigits, Len);
+// 	s32 Padding = MinDigits - Len;
+
+// 	Value = OriginalValue * (1 - 2 * Negative);
+
+// 	if (!Format.AlignLeft) WritePadding(Out, &Padding);
+
+// 	if (HasPrefix) *(*Out)++ = Prefix;
+
+// 	u32 IStart = Len + SeparatorCount - 1;
+// 	for (s32 I = IStart; I >= 0; I--) {
+// 		if (Format.HasSeparatorChar && (IStart - I + 1) % 4 == 0) {
+// 			(*Out)[I] = ',';
+// 		} else {
+// 			(*Out)[I]  = (Value % 10) + '0';
+// 			Value	  /= 10;
+// 		}
+// 	}
+// 	*Out += IStart + 1;
+
+// 	WritePadding(Out, &Padding);
+// }
+
+// internal void
+// WriteBoolean(c08 **Out, b64 Value, vstring_format Format)
+// {
+// 	if (!Format.CustomTypeSize) Value = (b08) Value;
+// 	else if (Format.TypeSize == 0) Value = (b08) Value;
+// 	else if (Format.TypeSize == 1) Value = (b16) Value;
+// 	else if (Format.TypeSize == 2) Value = (b32) Value;
+// 	else if (Format.TypeSize == 3) Value = (b64) Value;
+
+// 	c08 FalseStr[] = "False";
+// 	c08 TrueStr[]  = "True";
+
+// 	s32 Len;
+// 	if (Value) Len = sizeof(TrueStr) - 1;
+// 	else Len = sizeof(FalseStr) - 1;
+// 	s32 Padding = Format.MinChars - Len;
+
+// 	if (!Format.AlignLeft) WritePadding(Out, &Padding);
+
+// 	Mem_Cpy(*Out, (Value) ? TrueStr : FalseStr, Len);
+// 	*Out += Len;
+
+// 	WritePadding(Out, &Padding);
+// }
+
+// internal void
+// WriteUnsignedNumber(c08 **Out, u64 Value, c08 Conversion, vstring_format Format)
+// {
+// 	if (!Format.CustomTypeSize) Value = (u32) Value;
+// 	else if (Format.TypeSize == 0) Value = (u08) Value;
+// 	else if (Format.TypeSize == 1) Value = (u16) Value;
+// 	else if (Format.TypeSize == 2) Value = (u32) Value;
+// 	else if (Format.TypeSize == 3) Value = (u64) Value;
+
+// 	s64 OriginalValue = (u64) Value;
+
+// 	if (!Format.CustomPrecision) Format.Precision = 1;
+
+// 	u32 Radix;
+// 	u32 SeparatorGap;
+// 	c08 SeparatorChar;
+// 	if (Conversion == 'b' || Conversion == 'B') {
+// 		Radix		  = 2;
+// 		SeparatorGap  = 8;
+// 		SeparatorChar = '_';
+// 	} else if (Conversion == 'o') {
+// 		Radix		  = 8;
+// 		SeparatorGap  = 4;
+// 		SeparatorChar = '_';
+// 	} else if (Conversion == 'u') {
+// 		Radix		  = 10;
+// 		SeparatorGap  = 3;
+// 		SeparatorChar = ',';
+// 	} else if (Conversion == 'x' || Conversion == 'X') {
+// 		Radix		  = 16;
+// 		SeparatorGap  = 4;
+// 		SeparatorChar = '_';
+// 	}
+
+// 	b08 PrefixLen = Format.HashFlag * (2 * (Radix == 2) + (Radix == 8) + 2 * (Radix == 16));
+// 	s32 Len		  = 0;
+// 	while (Value > 0) {
+// 		Value /= Radix;
+// 		Len++;
+// 	}
+// 	Len = MAX(Len, Format.Precision);
+
+// 	s32 SeparatorCount = 0;
+// 	if (Format.HasSeparatorChar) SeparatorCount = (Len - 1) / SeparatorGap;
+// 	s32 MinDigits = Format.MinChars - PrefixLen - SeparatorCount;
+// 	if (Format.PadZero && !Format.AlignLeft && !Format.CustomPrecision) Len = MAX(MinDigits, Len);
+// 	s32 Padding = MinDigits - Len;
+
+// 	if (!Format.AlignLeft) WritePadding(Out, &Padding);
+
+// 	if (PrefixLen && Radix == 2) {
+// 		*(*Out)++ = '0';
+// 		*(*Out)++ = Conversion;
+// 	} else if (PrefixLen && Radix == 8) *(*Out)++ = '0';
+// 	else if (PrefixLen && Radix == 16) {
+// 		*(*Out)++ = '0';
+// 		*(*Out)++ = Conversion;
+// 	}
+
+// 	u32 Offset = Format.Caps * 16;
+// 	Value	   = OriginalValue;
+// 	u32 IStart = Len + SeparatorCount - 1;
+// 	for (s32 I = IStart; I >= 0; I--) {
+// 		if (Format.HasSeparatorChar && (IStart - I + 1) % (SeparatorGap + 1) == 0) {
+// 			(*Out)[I] = SeparatorChar;
+// 		} else {
+// 			(*Out)[I]  = BaseChars[Value % Radix + Offset];
+// 			Value	  /= Radix;
+// 		}
+// 	}
+// 	*Out += IStart + 1;
+
+// 	WritePadding(Out, &Padding);
+// }
+
+// internal void
+// WriteCharacter(c08 **Out, s64 Value, vstring_format Format)
+// {
+// 	if (Format.CustomTypeSize && Format.TypeSize == 2) Assert(FALSE, "Wide chars not implemented!");
+// 	else Value = (c08) Value;
+
+// 	s32 Len		= 1;
+// 	s32 Padding = Format.MinChars - Len;
+
+// 	if (!Format.AlignLeft) WritePadding(Out, &Padding);
+
+// 	*(*Out)++ = Value;
+
+// 	WritePadding(Out, &Padding);
+// }
+
+// internal void
+// WriteString(c08 **Out, string Value, vstring_format Format)
+// {
+// 	if (Format.CustomTypeSize && Format.TypeSize == 2)
+// 		Assert(FALSE, "Wide strings not implemented!");
+
+// 	if (!Value.Text) Value = CStringL("(null)");
+
+// 	c08 *In	   = Value.Text;
+// 	c08 *Start = *Out;
+
+// 	s32 Len = Value.Length;
+// 	if (Format.CustomPrecision) Len = MIN(Len, Format.Precision);
+// 	s32 Padding = Format.MinChars - Len;
+
+// 	if (!Format.AlignLeft) WritePadding(Out, &Padding);
+
+// 	while (Len--) *(*Out)++ = *In++;
+
+// 	WritePadding(Out, &Padding);
+// }
+
+// internal void
+// WritePointer(c08 **Out, vptr Value, vstring_format Format)
+// {
+// 	vstring_format NewFormat   = { 0 };
+// 	NewFormat.MinChars		   = Format.MinChars;
+// 	NewFormat.AlignLeft		   = Format.AlignLeft;
+// 	NewFormat.HasSeparatorChar = Format.HasSeparatorChar;
+
+// 	if (!Value) {
+// 		WriteString(Out, CStringL("(nil)"), NewFormat);
+// 	} else {
+// 		*(*Out)++ = '0';
+// 		*(*Out)++ = 'x';
+// 		WriteUnsignedNumber(Out, (u64) Value, 'X', NewFormat);
+// 	}
+// }
+
+// internal b08
+// WriteSpecialtyFloat(c08 **Out, r64 Value, vstring_format Format)
+// {
+// 	if (Format.CustomTypeSize && Format.TypeSize == 3)
+// 		Assert(FALSE, "Long doubles not implemented!");
+
+// 	vstring_format StringFormat = { 0 };
+// 	StringFormat.MinChars		= Format.MinChars;
+// 	StringFormat.AlignLeft		= Format.AlignLeft;
+
+// 	if (Value == R64_INF) {
+// 		WriteString(Out, Format.Caps ? CStringL("INF") : CStringL("inf"), StringFormat);
+// 	} else if (Value == R64_NINF) {
+// 		WriteString(Out, Format.Caps ? CStringL("-INF") : CStringL("-inf"), StringFormat);
+// 	} else if (Value != Value) {
+// 		u64 Binary	= FORCE_CAST(u64, Value);
+// 		u32 FracMax = (R64_MANTISSA_BITS + 3) / 4;
+// 		u32 Offset	= Format.Caps * 16;
+
+// 		string String =
+// 			Format.Caps ? CStringL("-SNAN[0XFFFFFFFFFFFFF]") : CStringL("-snan[0xfffffffffffff]");
+// 		String.Text[1] =
+// 			(Binary & R64_QUIET_MASK) ? (Format.Caps ? 'Q' : 'q') : (Format.Caps ? 'S' : 's');
+
+// 		u32 Len			 = 8;
+// 		u64 MantissaBits = Binary & R64_MANTISSA_MASK;
+// 		do {
+// 			Len++;
+// 		} while (MantissaBits /= 16);
+
+// 		MantissaBits = Binary & R64_MANTISSA_MASK;
+// 		for (s32 I = Len - 1; I >= 0; I--) {
+// 			u32 Digit		 = MantissaBits & 0xF;
+// 			String.Text[I]	 = BaseChars[Digit + Offset];
+// 			MantissaBits   >>= 4;
+// 		}
+// 		String.Text[Len] = ']';
+// 		String.Length	 = Len + 1;
+
+// 		if (Binary & R64_SIGN_MASK) {
+// 			String.Text++;
+// 			String.Length--;
+// 		}
+
+// 		WriteString(Out, String, StringFormat);
+// 	} else {
+// 		return FALSE;
+// 	}
+
+// 	return TRUE;
+// }
+
+// internal void
+// WriteHexadecimalFloat(c08 **Out, r64 Value, vstring_format Format)
+// {
+// 	if (WriteSpecialtyFloat(Out, Value, Format)) return;
+
+// 	if (Format.CustomTypeSize && Format.TypeSize == 3)
+// 		Assert(FALSE, "Long doubles not implemented!");
+
+// 	u32 FracMax = (R64_MANTISSA_BITS + 3) / 4;
+// 	u32 Offset	= Format.Caps * 16;
+
+// 	u64 Binary = FORCE_CAST(u64, Value);
+
+// 	s32 Sign	 = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
+// 	s32 Exponent = (s32) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
+// 	u64 MantissaBits = Binary & R64_MANTISSA_MASK;
+
+// 	b08 Negative  = Sign;
+// 	b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
+// 	c08 Prefix	  = Negative ? '-' : Format.PrefixPlus ? '+' : ' ';
+
+// 	b08 IsDenormal = (Exponent == -R64_EXPONENT_BIAS);
+// 	if (IsDenormal) Exponent++;
+// 	if (Value == 0) Exponent = 0;
+
+// 	u32 Index;
+// 	b08 ValidIndex = Intrin_BitScanForward64(&Index, MantissaBits);
+// 	u32 FracLen	   = ValidIndex ? (R64_MANTISSA_BITS - Index) / 4 + 1 : 0;
+// 	FracLen		   = MAX(Format.Precision, FracLen);
+
+// 	b08 ExpIsNegative  = Exponent < 0;
+// 	Exponent		  *= 1 - 2 * ExpIsNegative;
+// 	b08 HasExpSign	   = ExpIsNegative || Format.PrefixPlus;
+// 	b08 ExpHasComma	   = Format.HasSeparatorChar && (Exponent > 999);
+// 	s32 ExpLen		   = 1 + ExpHasComma;
+// 	s32 ExpCpy		   = Exponent;
+// 	while (ExpCpy /= 10) ExpLen++;
+
+// 	b08 HasDecimal = FracLen || Format.HashFlag;
+// 	u32 TotalLen   = HasPrefix + 2 + 1 + HasDecimal + FracLen + 1 + HasExpSign + ExpLen;
+
+// 	s32 Padding = Format.MinChars - TotalLen;
+
+// 	if (!Format.AlignLeft) WritePadding(Out, &Padding);
+
+// 	if (HasPrefix) *(*Out)++ = Prefix;
+
+// 	*(*Out)++ = '0';
+// 	*(*Out)++ = (Format.Caps) ? 'X' : 'x';
+
+// 	*(*Out)++ = IsDenormal ? '0' : '1';
+
+// 	if (HasDecimal) *(*Out)++ = '.';
+
+// 	for (u32 I = 0; I < FracLen; I++) {
+// 		u32 Digit = (MantissaBits >> (4 * (FracMax - I - 1))) & 0xF;
+// 		*(*Out)++ = BaseChars[Digit + Offset];
+// 	}
+
+// 	*(*Out)++ = (Format.Caps) ? 'P' : 'p';
+
+// 	if (HasExpSign) *(*Out)++ = ExpIsNegative ? '-' : '+';
+
+// 	for (s32 I = ExpLen - 1; I >= 0; I--) {
+// 		if (ExpHasComma && I == 1) {
+// 			(*Out)[I] = ',';
+// 		} else {
+// 			(*Out)[I]  = (Exponent % 10) + '0';
+// 			Exponent  /= 10;
+// 		}
+// 	}
+// 	*Out += ExpLen;
+
+// 	WritePadding(Out, &Padding);
+// }
+
+// internal void
+// WriteFloat(c08 **Out, r64 Value, vstring_format Format)
+// {
+// 	if (WriteSpecialtyFloat(Out, Value, Format)) return;
+
+// 	if (Format.CustomTypeSize && Format.TypeSize == 3)
+// 		Assert(FALSE, "Long doubles not implemented!");
+
+// 	vptr Cursor = Stack_GetCursor();
+// 	Stack_SetCursor(*Out);
+// 	string String = R32_ToString((r32) Value, Format.CustomPrecision ? Format.Precision : 5);
+// 	Mem_Cpy(*Out, String.Text, String.Length);
+// 	*Out += String.Length;
+// 	Stack_SetCursor(Cursor);
+
+// u64 Binary = FORCE_CAST(u64, Value);
+//
+// b08 Sign     = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
+// s32 Exponent = (s32)((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
+// u64 Mantissa = Binary & R64_MANTISSA_MASK;
+//
+// b08 Denormal = FALSE;
+// if(Exponent == -R64_EXPONENT_BIAS) {
+// 	Exponent++;
+// 	Denormal = TRUE;
+// }
+//
+// b08 Negative = Sign;
+// b08 HasPrefix = Negative || Format.PrefixSpace || Format.PrefixPlus;
+// c08 Prefix = Negative ? '-' : Format.PrefixPlus ? '+' : ' ';
+//
+// vptr Cursor = Stack_GetCursor();
+// vptr TempCursor = (vptr)ALIGN_UP((u64)Out + Format.MinChars, 8);
+// Stack_SetCursor(TempCursor);
+//
+// bigint Whole = BigInt_InitV(0);
+// s32 WholeLen = 1;
+// if(Exponent >= 0) {
+// 	Whole = BigInt_Init(1 + Exponent / 64);
+// 	Whole.WordCount = Whole.MaxCount;
+//
+// 	Whole.Words[Exponent / 64] |= !Denormal << (Exponent % 64);
+// 	for(s32 I = 0; I <= R64_MANTISSA_BITS; I++) {
+// 		if(Exponent + I < R64_MANTISSA_BITS) continue;
+// 		u64 Bit = Exponent - R64_MANTISSA_BITS + I;
+// 		u64 IsSet = (Mantissa >> I) & 1;
+// 		if(Whole.WordCount < Bit / 64) Whole.WordCount += IsSet;
+// 		Whole.Words[Bit / 64] |= IsSet << (Bit % 64);
+// 	}
+//
+// 	TempCursor = Stack_GetCursor();
+//
+// 	bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
+// 	bigint Divisor = BigInt_InitV(10);
+// 	do {
+// 		DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
+// 	} while(DivMod.Quotient.WordCount && WholeLen++);
+// }
+//
+// u32 TotalLen = HasPrefix;
+//
+// s32 Padding = Format.MinChars - TotalLen;
+//
+// if(!Format.AlignLeft) WritePadding(Out, &Padding);
+//
+// Stack_SetCursor(TempCursor);
+//
+// bigint_divmod DivMod = {Whole, BigInt_InitV(0)};
+// bigint Divisor = BigInt_InitV(10);
+// while(WholeLen--) {
+// 	DivMod = BigInt_DivMod(DivMod.Quotient, Divisor);
+// 	*(*Out)++ = '0' + (DivMod.Remainder.WordCount ? DivMod.Remainder.Words[0] : 0);
+// }
+//
+// if(HasPrefix) *(*Out)++ = Prefix;
+//
+// WritePadding(Out, &Padding);
+//
+// Stack_SetCursor(Cursor);
+// }
 
 // internal u32
 // ReadNumber(

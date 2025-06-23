@@ -7,7 +7,6 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#ifdef _LINUX
 #if !defined(INCLUDE_SOURCE) && !defined(INCLUDE_HEADER)
 #include <shared.h>
 
@@ -69,10 +68,12 @@ typedef struct wayland_funcs {
 } wayland_funcs;
 
 #if defined(_WAYLAND_MODULE)
+#ifdef _LINUX
 #define DEFAULT(R, N, ...) \
             internal R N(__VA_ARGS__);
 #define X WAYLAND_FUNCS
 #include <x.h>
+#endif
 #else
 #define EXPORT(R, N, ...) \
             global R (*N)(__VA_ARGS__);
@@ -81,6 +82,7 @@ typedef struct wayland_funcs {
 #endif
 #endif
 
+#ifdef _LINUX
 #ifdef INCLUDE_SOURCE
 wayland_state _G;
 wayland_funcs _F;

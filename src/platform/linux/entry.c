@@ -7,6 +7,10 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef _WIN32
+_WIN32
+#endif
+
 #if defined(_X64)
 
 __asm__(
@@ -348,6 +352,5 @@ Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	}
 
 	Stack_Pop();
-
 	Platform_Exit(0);
 }

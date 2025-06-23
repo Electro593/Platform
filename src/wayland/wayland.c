@@ -14,6 +14,7 @@
 
 #endif
 
+#ifdef _LINUX
 #ifdef INCLUDE_SOURCE
 
 #define CALL(Object, Func, ...) (Object)->Func((Object) __VA_OPT__(,) __VA_ARGS__)
@@ -112,4 +113,5 @@ Wayland_CreateWindow(c08 *Title, usize Width, usize Height)
 #undef INIT
 #undef CALL
 
+#endif
 #endif

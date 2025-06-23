@@ -355,8 +355,8 @@ struct platform_state {
 
 	r32 FPS;
 
-	usize ArgCount;
-	c08 **Args;
+	usize	ArgCount;
+	string *Args;
 
 	hashmap EnvTable;
 

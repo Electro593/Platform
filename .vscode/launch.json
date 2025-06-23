@@ -6,13 +6,26 @@
     "configurations": [
         {
             "name": "Debug Program (Windows)",
-            "type": "cppvsdbg",
+            "type": "cppdbg",
             "request": "launch",
-            "program": "build/platform.exe",
+            "program": "${workspaceFolder}/build/platform",
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/build",
+            "preLaunchTask": "Build Program (MS)",
             "environment": [],
-            "requireExactSource": false
+            "MIMode": "gdb",
+            "externalConsole": true,
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "text": "source ${workspaceFolder}/windows.gdbinit",
+                    "ignoreFailures": false
+                }
+            ]
         },
         {
             "name": "Debug Program (Linux)",
@@ -31,12 +44,7 @@
                     "ignoreFailures": true
                 },
                 {
-                    "description": "Set Disassembly Flavor to Intel",
-                    "text": "-gdb-set disassembly-flavor intel",
-                    "ignoreFailures": true
-                },
-                {
-                    "text": "source ${workspaceFolder}/.gdbinit",
+                    "text": "source ${workspaceFolder}/linux.gdbinit",
                     "ignoreFailures": false
                 }
             ]
