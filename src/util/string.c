@@ -141,45 +141,250 @@ SString(string String)
 // 	#endif
 // }
 
+typedef enum vstring_format_radix { } vstring_format_radix;
+
 typedef enum vstring_format_type {
-	VSTRING_FORMAT_NONE,
-	VSTRING_FORMAT_BOOL,
-	VSTRING_FORMAT_INT,
-	VSTRING_FORMAT_UINT_BIN,
-	VSTRING_FORMAT_UINT_OCT,
-	VSTRING_FORMAT_UINT_DEC,
-	VSTRING_FORMAT_UINT_HEX,
-	VSTRING_FORMAT_FLOAT,
-	VSTRING_FORMAT_FLOAT_EXP,
-	VSTRING_FORMAT_FLOAT_HEX,
-	VSTRING_FORMAT_FLOAT_EITHER,
-	VSTRING_FORMAT_CHAR,
-	VSTRING_FORMAT_STRING,
-	VSTRING_FORMAT_POINTER
+	VSTRING_FORMAT_INVALID,
+	VSTRING_FORMAT_INITIAL,
+
+	VSTRING_FORMAT_SIZE_HALFHALF,
+	VSTRING_FORMAT_SIZE_HALF,
+	VSTRING_FORMAT_SIZE_INT,
+	VSTRING_FORMAT_SIZE_LONG,
+	VSTRING_FORMAT_SIZE_LONGLONG,
+	VSTRING_FORMAT_SIZE_EXTRALONG,
+	VSTRING_FORMAT_SIZE_SIZE,
+	VSTRING_FORMAT_SIZE_SPEC,
+	VSTRING_FORMAT_SIZE_FASTSPEC,
+	VSTRING_FORMAT_SIZE_SPEC1,
+	VSTRING_FORMAT_SIZE_SPEC3,
+	VSTRING_FORMAT_SIZE_SPEC6,
+
+	VSTRING_FORMAT_DONE,
+	VSTRING_FORMAT_S08,
+	VSTRING_FORMAT_U08,
+	VSTRING_FORMAT_S16,
+	VSTRING_FORMAT_U16,
+	VSTRING_FORMAT_S32,
+	VSTRING_FORMAT_U32,
+	VSTRING_FORMAT_S64,
+	VSTRING_FORMAT_U64,
+	VSTRING_FORMAT_SSIZE,
+	VSTRING_FORMAT_USIZE,
+	VSTRING_FORMAT_R64,
+	VSTRING_FORMAT_CHR,
+	VSTRING_FORMAT_STR,
+	VSTRING_FORMAT_PTR,
+	VSTRING_FORMAT_B08,
+
+	VSTRING_FORMAT_FLAG_INT_DEC = 0x000,
+	VSTRING_FORMAT_FLAG_INT_BIN = 0x020,
+	VSTRING_FORMAT_FLAG_INT_OCT = 0x040,
+	VSTRING_FORMAT_FLAG_INT_HEX = 0x080,
+
+	VSTRING_FORMAT_FLAG_FLOAT_STD = 0x000,
+	VSTRING_FORMAT_FLAG_FLOAT_EXP = 0x020,
+	VSTRING_FORMAT_FLAG_FLOAT_FIT = 0x040,
+	VSTRING_FORMAT_FLAG_FLOAT_HEX = 0x080,
+
+	VSTRING_FORMAT_FLAG_STR_BYTE = 0x000,
+	VSTRING_FORMAT_FLAG_STR_WIDE = 0x020,
+
+	VSTRING_FORMAT_FLAG_CHR_BYTE = 0x000,
+	VSTRING_FORMAT_FLAG_CHR_WIDE = 0x020,
+
+	VSTRING_FORMAT_FLAG_UPPERCASE = 0x100,
+	VSTIRNG_FORMAT_FLAG_QUERY	  = 0x200,
 } vstring_format_type;
 
+// clang-format off
+#define S(C, TYPE) [C - A] = VSTRING_FORMAT_##TYPE
+static vstring_format_type VStringFormatTypeStateMachine[]['z' - 'A' + 1] = {
+	[VSTRING_FORMAT_INITIAL] = {
+		S('h', SIZE_HALF),
+		S('l', SIZE_LONG),
+		S('q', SIZE_LONGLONG),
+		S('L', SIZE_EXTRALONG),
+		S('t', SIZE_SIZE),
+		S('j', SIZE_SIZE),
+		S('z', SIZE_SIZE),
+		S('Z', SIZE_SIZE),
+		S('w', SIZE_SPECIFIC),
+		S('d', S32 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', S32 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', U32 | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', U32 | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', U32 | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', U32 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', U32 | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', U32 | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('f', R64 | VSTRING_FORMAT_FLAG_FLOAT_STD),
+		S('F', R64 | VSTRING_FORMAT_FLAG_FLOAT_STD | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('e', R64 | VSTRING_FORMAT_FLAG_FLOAT_EXP),
+		S('E', R64 | VSTRING_FORMAT_FLAG_FLOAT_EXP | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('g', R64 | VSTRING_FORMAT_FLAG_FLOAT_FIT),
+		S('G', R64 | VSTRING_FORMAT_FLAG_FLOAT_FIT | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('a', R64 | VSTRING_FORMAT_FLAG_FLOAT_HEX),
+		S('A', R64 | VSTRING_FORMAT_FLAG_FLOAT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('c', CHR | VSTRING_FORMAT_FLAG_CHR_BYTE),
+		S('s', STR | VSTRING_FORMAT_FLAG_STR_BYTE),
+		S('p', PTR),
+		S('T', B08),
+		S('n', S32 | VSTRING_FORMAT_FLAG_QUERY),
+		S('m', S32 | VSTRING_FORMAT_FLAG_INT_DEC),
+	},
+	[VSTRING_FORMAT_SIZE_HALFHALF] = {
+		S('d', S08 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', S08 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', U08 | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', U08 | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', U08 | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', U08 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', U08 | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', U08 | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+	},
+	[VSTRING_FORMAT_SIZE_HALF] = {
+		S('h', SIZE_HALFHALF),
+		S('d', S16 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', S16 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', U16 | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', U16 | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', U16 | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', U16 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', U16 | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', U16 | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('n', S32 | VSTRING_FORMAT_FLAG_QUERY),
+	},
+	[VSTRING_FORMAT_SIZE_INT] = {
+		S('d', S32 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', S32 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', U32 | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', U32 | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', U32 | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', U32 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', U32 | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', U32 | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+	},
+	[VSTRING_FORMAT_SIZE_LONG] = {
+		S('l', SIZE_LONGLONG),
+		S('d', S64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', S64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', U64 | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', U64 | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', U64 | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', U64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', U64 | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', U64 | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('c', CHR | VSTRING_FORMAT_FLAG_CHR_WIDE),
+		S('s', STR | VSTRING_FORMAT_FLAG_STR_WIDE),
+		S('n', S64 | VSTRING_FORMAT_FLAG_QUERY),
+	},
+	[VSTRING_FORMAT_SIZE_LONGLONG] = {
+		S('d', S64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', S64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', U64 | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', U64 | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', U64 | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', U64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', U64 | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', U64 | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+	},
+	[VSTRING_FORMAT_SIZE_EXTRALONG] = {
+		S('d', S64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', S64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', U64 | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', U64 | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', U64 | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', U64 | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', U64 | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', U64 | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('f', R64 | VSTRING_FORMAT_FLAG_FLOAT_STD),
+		S('F', R64 | VSTRING_FORMAT_FLAG_FLOAT_STD | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('e', R64 | VSTRING_FORMAT_FLAG_FLOAT_EXP),
+		S('E', R64 | VSTRING_FORMAT_FLAG_FLOAT_EXP | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('g', R64 | VSTRING_FORMAT_FLAG_FLOAT_FIT),
+		S('G', R64 | VSTRING_FORMAT_FLAG_FLOAT_FIT | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('a', R64 | VSTRING_FORMAT_FLAG_FLOAT_HEX),
+		S('A', R64 | VSTRING_FORMAT_FLAG_FLOAT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+	},
+	[VSTRING_FORMAT_SIZE_SIZE] = {
+		S('d', SSIZE | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('i', SSIZE | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('b', USIZE | VSTRING_FORMAT_FLAG_INT_BIN),
+		S('B', USIZE | VSTRING_FORMAT_FLAG_INT_BIN | VSTRING_FORMAT_FLAG_UPPERCASE),
+		S('o', USIZE | VSTRING_FORMAT_FLAG_INT_OCT),
+		S('u', USIZE | VSTRING_FORMAT_FLAG_INT_DEC),
+		S('x', USIZE | VSTRING_FORMAT_FLAG_INT_HEX),
+		S('X', USIZE | VSTRING_FORMAT_FLAG_INT_HEX | VSTRING_FORMAT_FLAG_UPPERCASE),
+	},
+	[VSTRING_FORMAT_SIZE_SPEC] = {
+		S('f', SIZE_FASTSPEC),
+		S('8', SIZE_HALFHALF),
+		S('1', SIZE_SPEC1),
+		S('3', SIZE_SPEC3),
+		S('6', SIZE_SPEC6),
+	},
+	[VSTRING_FORMAT_SIZE_FASTSPEC] = {
+		S('8', SIZE_HALFHALF),
+		S('1', SIZE_SPEC1),
+		S('3', SIZE_SPEC3),
+		S('6', SIZE_SPEC6),
+	},
+	[VSTRING_FORMAT_SIZE_SPEC1] = {
+		S('6', SIZE_HALF),
+	},
+	[VSTRING_FORMAT_SIZE_SPEC3] = {
+		S('2', SIZE_INT),
+	},
+	[VSTRING_FORMAT_SIZE_SPEC6] = {
+		S('4', SIZE_LONGLONG),
+	},
+};
+#undef S
+// clang-format on
+
 typedef struct vstring_format {
-	u64 MinChars  : 30;
-	u64 Precision : 30;
-	u64 Type	  : 4;
+	u32 Type		   : 7;
+	u32 NumberedParams : 1;
+	u32 ParamWidth	   : 1;
+	u32 ParamPrecision : 1;
+	u32 LeftJustify	   : 1;
+	u32 PrefixSign	   : 1;
+	u32 PrefixSpace	   : 1;
+	u32 SpecifyRadix   : 1;
+	u32 SeparateGroups : 1;
+	u32 PadWithZero	   : 1;
 
-	// u16 MinCharsIndex;
-	u16 PrecisionIndex;
-	u16 ConversionIndex;
+	u32 ValueParamIndex;
 
-	u08 AlignLeft			  : 1;
-	u08 PrefixPlus			  : 1;
-	u08 PrefixSpace			  : 1;
-	u08 HashFlag			  : 1;
-	u08 HasSeparatorChar	  : 1;
-	u08 PadZero				  : 1;
-	u08 Caps				  : 1;
-	u08 CustomTypeSize		  : 1;
-	u08 TypeSize			  : 2;
-	// u08 CustomMinChars        : 1;
-	u08 CustomPrecision		  : 1;
-	u08 CustomConversionIndex : 1;
+	union {
+		u32 Width;
+		u32 WidthParamIndex;
+	};
+
+	union {
+		u32 Precision;
+		u32 PrecisionParamIndex;
+	};
 } vstring_format;
+
+internal vstring_format_type
+VString_ParseFormatType(c08 **C)
+{
+	vstring_format_type Type = VSTRING_FORMAT_INITIAL;
+
+	Type = VStringFormatTypeStateMachine[Type];
+	if (Type == VSTRING_FORMAT_INVALID) Type = VSTRING_FORMAT_SIZE_DEFAULT;
+	else *C += 1;
+
+	while (Type < VSTRING_FORMAT_DONE) {
+		Type = VStringFormatTypeStateMachine[Type];
+		if (Type == VSTRING_FORMAT_INVALID) break;
+		*C += 1;
+	}
+
+	return Type;
+}
 
 internal void
 WritePadding(c08 **Out, s32 *Padding)
@@ -359,7 +564,8 @@ WriteCharacter(c08 **Out, s64 Value, vstring_format Format)
 internal void
 WriteString(c08 **Out, string Value, vstring_format Format)
 {
-	if (Format.CustomTypeSize && Format.TypeSize == 2) Assert(FALSE, "Wide strings not implemented!");
+	if (Format.CustomTypeSize && Format.TypeSize == 2)
+		Assert(FALSE, "Wide strings not implemented!");
 
 	if (!Value.Text) Value = CStringL("(null)");
 
@@ -380,7 +586,7 @@ WriteString(c08 **Out, string Value, vstring_format Format)
 internal void
 WritePointer(c08 **Out, vptr Value, vstring_format Format)
 {
-	vstring_format NewFormat   = {0};
+	vstring_format NewFormat   = { 0 };
 	NewFormat.MinChars		   = Format.MinChars;
 	NewFormat.AlignLeft		   = Format.AlignLeft;
 	NewFormat.HasSeparatorChar = Format.HasSeparatorChar;
@@ -397,9 +603,10 @@ WritePointer(c08 **Out, vptr Value, vstring_format Format)
 internal b08
 WriteSpecialtyFloat(c08 **Out, r64 Value, vstring_format Format)
 {
-	if (Format.CustomTypeSize && Format.TypeSize == 3) Assert(FALSE, "Long doubles not implemented!");
+	if (Format.CustomTypeSize && Format.TypeSize == 3)
+		Assert(FALSE, "Long doubles not implemented!");
 
-	vstring_format StringFormat = {0};
+	vstring_format StringFormat = { 0 };
 	StringFormat.MinChars		= Format.MinChars;
 	StringFormat.AlignLeft		= Format.AlignLeft;
 
@@ -412,8 +619,10 @@ WriteSpecialtyFloat(c08 **Out, r64 Value, vstring_format Format)
 		u32 FracMax = (R64_MANTISSA_BITS + 3) / 4;
 		u32 Offset	= Format.Caps * 16;
 
-		string String = Format.Caps ? CStringL("-SNAN[0XFFFFFFFFFFFFF]") : CStringL("-snan[0xfffffffffffff]");
-		String.Text[1] = (Binary & R64_QUIET_MASK) ? (Format.Caps ? 'Q' : 'q') : (Format.Caps ? 'S' : 's');
+		string String =
+			Format.Caps ? CStringL("-SNAN[0XFFFFFFFFFFFFF]") : CStringL("-snan[0xfffffffffffff]");
+		String.Text[1] =
+			(Binary & R64_QUIET_MASK) ? (Format.Caps ? 'Q' : 'q') : (Format.Caps ? 'S' : 's');
 
 		u32 Len			 = 8;
 		u64 MantissaBits = Binary & R64_MANTISSA_MASK;
@@ -448,15 +657,16 @@ WriteHexadecimalFloat(c08 **Out, r64 Value, vstring_format Format)
 {
 	if (WriteSpecialtyFloat(Out, Value, Format)) return;
 
-	if (Format.CustomTypeSize && Format.TypeSize == 3) Assert(FALSE, "Long doubles not implemented!");
+	if (Format.CustomTypeSize && Format.TypeSize == 3)
+		Assert(FALSE, "Long doubles not implemented!");
 
 	u32 FracMax = (R64_MANTISSA_BITS + 3) / 4;
 	u32 Offset	= Format.Caps * 16;
 
 	u64 Binary = FORCE_CAST(u64, Value);
 
-	s32 Sign		 = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
-	s32 Exponent	 = (s32) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
+	s32 Sign	 = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
+	s32 Exponent = (s32) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
 	u64 MantissaBits = Binary & R64_MANTISSA_MASK;
 
 	b08 Negative  = Sign;
@@ -523,7 +733,8 @@ WriteFloat(c08 **Out, r64 Value, vstring_format Format)
 {
 	if (WriteSpecialtyFloat(Out, Value, Format)) return;
 
-	if (Format.CustomTypeSize && Format.TypeSize == 3) Assert(FALSE, "Long doubles not implemented!");
+	if (Format.CustomTypeSize && Format.TypeSize == 3)
+		Assert(FALSE, "Long doubles not implemented!");
 
 	vptr Cursor = Stack_GetCursor();
 	Stack_SetCursor(*Out);
@@ -1106,9 +1317,11 @@ String_TryParseS32(string String, s32 *NumOut)
 		if (String.Text[I] < '0' || String.Text[I] > '9') return FALSE;
 
 	if (Negative)
-		for (usize I = Negative; I < String.Length; I++) Total = Total * 10 - (String.Text[I] - '0');
+		for (usize I = Negative; I < String.Length; I++)
+			Total = Total * 10 - (String.Text[I] - '0');
 	else
-		for (usize I = Negative; I < String.Length; I++) Total = Total * 10 + (String.Text[I] - '0');
+		for (usize I = Negative; I < String.Length; I++)
+			Total = Total * 10 + (String.Text[I] - '0');
 
 	*NumOut = Total;
 	return TRUE;

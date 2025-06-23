@@ -7,6 +7,7 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef _LINUX
 #if !defined(INCLUDE_SOURCE) && !defined(INCLUDE_HEADER)
 #include <shared.h>
 
@@ -49,8 +50,16 @@ typedef struct wayland_state {
 	u32		NextObjectId;
 	hashmap IdTable;
 
-	wayland_display	 *Display;
-	wayland_registry *Registry;
+	wayland_display				*Display;
+	wayland_registry			*Registry;
+	wayland_compositor			*Compositor;
+	wayland_shared_memory		*SharedMemory;
+	wayland_data_device_manager *DataDeviceManager;
+	wayland_data_device_manager *Subcompositor;
+	wayland_fixes				*Fixes;
+
+	hashmap Seats;
+	hashmap Outputs;
 } wayland_state;
 
 typedef struct wayland_funcs {
@@ -105,5 +114,6 @@ Deinit(platform_state *Platform)
 	Wayland_TryClose();
 }
 
+#endif
 #endif
 #endif

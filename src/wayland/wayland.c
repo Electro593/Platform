@@ -37,7 +37,9 @@ Wayland_Display_HandleDeleteId(wayland_display *This, u32 Id)
 
 internal void
 Wayland_Registry_HandleGlobal(wayland_registry *This, u32 Name, string Interface, u32 Version)
-{ }
+{
+	STOP;
+}
 
 internal void
 Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)

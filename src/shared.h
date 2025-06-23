@@ -96,9 +96,19 @@ static_assert(sizeof(u64) == 8, "u64 must be 8 bytes!");
 #ifdef _X64
 typedef s64 ssize;
 typedef u64 usize;
+
+#define SSIZE_MIN ((ssize)0x8000000000000000LL)
+#define SSIZE_MAX ((ssize)0x7FFFFFFFFFFFFFFFLL)
+#define USIZE_MIN ((usize)0x0000000000000000ULL)
+#define USIZE_MAX ((usize)0xFFFFFFFFFFFFFFFFULL)
 #else
 typedef s32 ssize;
 typedef u32 usize;
+
+#define SSIZE_MIN ((ssize)0x80000000)
+#define SSIZE_MAX ((ssize)0x7FFFFFFF)
+#define USIZE_MIN ((usize)0x00000000U)
+#define USIZE_MAX ((usize)0xFFFFFFFFU)
 #endif
 
 typedef float  r32;

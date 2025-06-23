@@ -19,6 +19,7 @@ typedef enum wayland_data_source_error	  wayland_data_source_error;
 typedef enum wayland_data_device_error	  wayland_data_device_error;
 typedef enum wayland_data_device_manager_drag_and_drop_action
 											 wayland_data_device_manager_drag_and_drop_action;
+typedef enum wayland_shell_error			 wayland_shell_error;
 typedef enum wayland_shell_surface_resize	 wayland_shell_surface_resize;
 typedef enum wayland_shell_surface_transient wayland_shell_surface_transient;
 typedef enum wayland_shell_surface_fullscreen_method wayland_shell_surface_fullscreen_method;
@@ -54,6 +55,7 @@ typedef struct wayland_data_offer		   wayland_data_offer;
 typedef struct wayland_data_source		   wayland_data_source;
 typedef struct wayland_data_device		   wayland_data_device;
 typedef struct wayland_data_device_manager wayland_data_device_manager;
+typedef struct wayland_shell			   wayland_shell;
 typedef struct wayland_shell_surface	   wayland_shell_surface;
 typedef struct wayland_surface			   wayland_surface;
 typedef struct wayland_seat				   wayland_seat;
@@ -64,29 +66,32 @@ typedef struct wayland_output			   wayland_output;
 typedef struct wayland_region			   wayland_region;
 typedef struct wayland_subcompositor	   wayland_subcompositor;
 typedef struct wayland_subsurface		   wayland_subsurface;
+typedef struct wayland_fixes			   wayland_fixes;
 
 typedef enum wayland_object_type : u16 {
-	WAYLAND_OBJECT_TYPE_DISPLAY				= 0,
-	WAYLAND_OBJECT_TYPE_REGISTRY			= 1,
-	WAYLAND_OBJECT_TYPE_CALLBACK			= 2,
-	WAYLAND_OBJECT_TYPE_COMPOSITOR			= 3,
-	WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL	= 4,
-	WAYLAND_OBJECT_TYPE_SHARED_MEMORY		= 5,
-	WAYLAND_OBJECT_TYPE_BUFFER				= 6,
-	WAYLAND_OBJECT_TYPE_DATA_OFFER			= 7,
-	WAYLAND_OBJECT_TYPE_DATA_SOURCE			= 8,
-	WAYLAND_OBJECT_TYPE_DATA_DEVICE			= 9,
-	WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER = 10,
-	WAYLAND_OBJECT_TYPE_SHELL_SURFACE		= 11,
-	WAYLAND_OBJECT_TYPE_SURFACE				= 12,
-	WAYLAND_OBJECT_TYPE_SEAT				= 13,
-	WAYLAND_OBJECT_TYPE_POINTER				= 14,
-	WAYLAND_OBJECT_TYPE_KEYBOARD			= 15,
-	WAYLAND_OBJECT_TYPE_TOUCH				= 16,
-	WAYLAND_OBJECT_TYPE_OUTPUT				= 17,
-	WAYLAND_OBJECT_TYPE_REGION				= 18,
-	WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR		= 19,
-	WAYLAND_OBJECT_TYPE_SUBSURFACE			= 20,
+	WAYLAND_OBJECT_TYPE_DISPLAY,
+	WAYLAND_OBJECT_TYPE_REGISTRY,
+	WAYLAND_OBJECT_TYPE_CALLBACK,
+	WAYLAND_OBJECT_TYPE_COMPOSITOR,
+	WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL,
+	WAYLAND_OBJECT_TYPE_SHARED_MEMORY,
+	WAYLAND_OBJECT_TYPE_BUFFER,
+	WAYLAND_OBJECT_TYPE_DATA_OFFER,
+	WAYLAND_OBJECT_TYPE_DATA_SOURCE,
+	WAYLAND_OBJECT_TYPE_DATA_DEVICE,
+	WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER,
+	WAYLAND_OBJECT_TYPE_SHELL,
+	WAYLAND_OBJECT_TYPE_SHELL_SURFACE,
+	WAYLAND_OBJECT_TYPE_SURFACE,
+	WAYLAND_OBJECT_TYPE_SEAT,
+	WAYLAND_OBJECT_TYPE_POINTER,
+	WAYLAND_OBJECT_TYPE_KEYBOARD,
+	WAYLAND_OBJECT_TYPE_TOUCH,
+	WAYLAND_OBJECT_TYPE_OUTPUT,
+	WAYLAND_OBJECT_TYPE_REGION,
+	WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR,
+	WAYLAND_OBJECT_TYPE_SUBSURFACE,
+	WAYLAND_OBJECT_TYPE_FIXES,
 } wayland_object_type;
 
 enum wayland_display_error {
@@ -252,6 +257,10 @@ enum wayland_data_device_manager_drag_and_drop_action {
 	WAYLAND_DATA_DEVICE_MANAGER_DRAG_AND_DROP_ACTION_COPY = 0x1,
 	WAYLAND_DATA_DEVICE_MANAGER_DRAG_AND_DROP_ACTION_MOVE = 0x2,
 	WAYLAND_DATA_DEVICE_MANAGER_DRAG_AND_DROP_ACTION_ASK  = 0x4,
+};
+
+enum wayland_shell_error {
+	WAYLAND_SHELL_ERROR_ROLE = 0,
 };
 
 enum wayland_shell_surface_resize {
@@ -544,6 +553,12 @@ struct wayland_data_device_manager {
 	wayland_data_device *(*GetDataDevice)(wayland_data_device_manager *This, wayland_seat *Seat);
 };
 
+struct wayland_shell {
+	wayland_interface Header;
+
+	wayland_shell_surface *(*GetShellSurface)(wayland_shell *This, wayland_surface *Surface);
+};
+
 struct wayland_shell_surface {
 	wayland_interface Header;
 
@@ -791,6 +806,13 @@ struct wayland_subsurface {
 	void (*SetDesync)(wayland_subsurface *This);
 };
 
+struct wayland_fixes {
+	wayland_interface Header;
+
+	void (*Destroy)(wayland_fixes *This);
+	void (*DestroyRegistry)(wayland_fixes *This, wayland_registry *Registry);
+};
+
 #define WAYLAND_API_FUNCS \
 	INTERN(void, Wayland_Display_HandleEvent, wayland_display *This, wayland_message *Message) \
 	INTERN(wayland_callback*, Wayland_Display_Sync, wayland_display *This) \
@@ -803,7 +825,7 @@ struct wayland_subsurface {
 
 #ifdef INCLUDE_SOURCE
 
-wayland_display WaylandDisplayPrototype = {
+static wayland_display WaylandDisplayPrototype = {
 	.Header			= { .Type		 = WAYLAND_OBJECT_TYPE_DISPLAY,
 						.Size		 = sizeof(wayland_display),
 						.Id			 = 0,
@@ -814,7 +836,7 @@ wayland_display WaylandDisplayPrototype = {
 	.HandleDeleteId = NULL,
 };
 
-wayland_registry WaylandRegistryPrototype = {
+static wayland_registry WaylandRegistryPrototype = {
 	.Header				= { .Type		 = WAYLAND_OBJECT_TYPE_REGISTRY,
 							.Size		 = sizeof(wayland_registry),
 							.Id			 = 0,
@@ -824,7 +846,7 @@ wayland_registry WaylandRegistryPrototype = {
 	.HandleGlobalRemove = NULL,
 };
 
-wayland_callback WaylandCallbackPrototype = {
+static wayland_callback WaylandCallbackPrototype = {
 	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_CALLBACK,
 					.Size		 = sizeof(wayland_callback),
 					.Id			 = 0,
@@ -832,7 +854,7 @@ wayland_callback WaylandCallbackPrototype = {
 	.HandleDone = NULL,
 };
 
-wayland_compositor WaylandCompositorPrototype = {
+static wayland_compositor WaylandCompositorPrototype = {
 	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_COMPOSITOR,
 					   .Size		= sizeof(wayland_compositor),
 					   .Id			= 0,
@@ -841,7 +863,7 @@ wayland_compositor WaylandCompositorPrototype = {
 	.CreateRegion  = NULL,
 };
 
-wayland_shared_memory_pool WaylandSharedMemoryPoolPrototype = {
+static wayland_shared_memory_pool WaylandSharedMemoryPoolPrototype = {
 	.Header		  = { .Type		   = WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL,
 					  .Size		   = sizeof(wayland_shared_memory_pool),
 					  .Id		   = 0,
@@ -851,7 +873,7 @@ wayland_shared_memory_pool WaylandSharedMemoryPoolPrototype = {
 	.Resize		  = NULL,
 };
 
-wayland_shared_memory WaylandSharedMemoryPrototype = {
+static wayland_shared_memory WaylandSharedMemoryPrototype = {
 	.Header		  = { .Type		   = WAYLAND_OBJECT_TYPE_SHARED_MEMORY,
 					  .Size		   = sizeof(wayland_shared_memory),
 					  .Id		   = 0,
@@ -861,7 +883,7 @@ wayland_shared_memory WaylandSharedMemoryPrototype = {
 	.HandleFormat = NULL,
 };
 
-wayland_buffer WaylandBufferPrototype = {
+static wayland_buffer WaylandBufferPrototype = {
 	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_BUFFER,
 					   .Size		= sizeof(wayland_buffer),
 					   .Id			= 0,
@@ -870,7 +892,7 @@ wayland_buffer WaylandBufferPrototype = {
 	.HandleRelease = NULL,
 };
 
-wayland_data_offer WaylandDataOfferPrototype = {
+static wayland_data_offer WaylandDataOfferPrototype = {
 	.Header				 = { .Type		  = WAYLAND_OBJECT_TYPE_DATA_OFFER,
 							 .Size		  = sizeof(wayland_data_offer),
 							 .Id		  = 0,
@@ -885,7 +907,7 @@ wayland_data_offer WaylandDataOfferPrototype = {
 	.HandleAction		 = NULL,
 };
 
-wayland_data_source WaylandDataSourcePrototype = {
+static wayland_data_source WaylandDataSourcePrototype = {
 	.Header						= { .Type		 = WAYLAND_OBJECT_TYPE_DATA_SOURCE,
 									.Size		 = sizeof(wayland_data_source),
 									.Id			 = 0,
@@ -901,7 +923,7 @@ wayland_data_source WaylandDataSourcePrototype = {
 	.HandleAction				= NULL,
 };
 
-wayland_data_device WaylandDataDevicePrototype = {
+static wayland_data_device WaylandDataDevicePrototype = {
 	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_DATA_DEVICE,
 						 .Size		  = sizeof(wayland_data_device),
 						 .Id		  = 0,
@@ -917,7 +939,7 @@ wayland_data_device WaylandDataDevicePrototype = {
 	.HandleSelection = NULL,
 };
 
-wayland_data_device_manager WaylandDataDeviceManagerPrototype = {
+static wayland_data_device_manager WaylandDataDeviceManagerPrototype = {
 	.Header			  = { .Type		   = WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER,
 						  .Size		   = sizeof(wayland_data_device_manager),
 						  .Id		   = 0,
@@ -926,7 +948,15 @@ wayland_data_device_manager WaylandDataDeviceManagerPrototype = {
 	.GetDataDevice	  = NULL,
 };
 
-wayland_shell_surface WaylandShellSurfacePrototype = {
+static wayland_shell WaylandShellPrototype = {
+	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_SHELL,
+						 .Size		  = sizeof(wayland_shell),
+						 .Id		  = 0,
+						 .HandleEvent = NULL },
+	.GetShellSurface = NULL,
+};
+
+static wayland_shell_surface WaylandShellSurfacePrototype = {
 	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_SHELL_SURFACE,
 						 .Size		  = sizeof(wayland_shell_surface),
 						 .Id		  = 0,
@@ -946,7 +976,7 @@ wayland_shell_surface WaylandShellSurfacePrototype = {
 	.HandlePopupDone = NULL,
 };
 
-wayland_surface WaylandSurfacePrototype = {
+static wayland_surface WaylandSurfacePrototype = {
 	.Header							= { .Type		 = WAYLAND_OBJECT_TYPE_SURFACE,
 										.Size		 = sizeof(wayland_surface),
 										.Id			 = 0,
@@ -968,7 +998,7 @@ wayland_surface WaylandSurfacePrototype = {
 	.HandlePreferredBufferTransform = NULL,
 };
 
-wayland_seat WaylandSeatPrototype = {
+static wayland_seat WaylandSeatPrototype = {
 	.Header				= { .Type		 = WAYLAND_OBJECT_TYPE_SEAT,
 							.Size		 = sizeof(wayland_seat),
 							.Id			 = 0,
@@ -981,7 +1011,7 @@ wayland_seat WaylandSeatPrototype = {
 	.HandleName			= NULL,
 };
 
-wayland_pointer WaylandPointerPrototype = {
+static wayland_pointer WaylandPointerPrototype = {
 	.Header						 = { .Type		  = WAYLAND_OBJECT_TYPE_POINTER,
 									 .Size		  = sizeof(wayland_pointer),
 									 .Id		  = 0,
@@ -1001,7 +1031,7 @@ wayland_pointer WaylandPointerPrototype = {
 	.HandleAxisRelativeDirection = NULL,
 };
 
-wayland_keyboard WaylandKeyboardPrototype = {
+static wayland_keyboard WaylandKeyboardPrototype = {
 	.Header			  = { .Type		   = WAYLAND_OBJECT_TYPE_KEYBOARD,
 						  .Size		   = sizeof(wayland_keyboard),
 						  .Id		   = 0,
@@ -1015,7 +1045,7 @@ wayland_keyboard WaylandKeyboardPrototype = {
 	.HandleRepeatInfo = NULL,
 };
 
-wayland_touch WaylandTouchPrototype = {
+static wayland_touch WaylandTouchPrototype = {
 	.Header			   = { .Type		= WAYLAND_OBJECT_TYPE_TOUCH,
 						   .Size		= sizeof(wayland_touch),
 						   .Id			= 0,
@@ -1030,7 +1060,7 @@ wayland_touch WaylandTouchPrototype = {
 	.HandleOrientation = NULL,
 };
 
-wayland_output WaylandOutputPrototype = {
+static wayland_output WaylandOutputPrototype = {
 	.Header			   = { .Type		= WAYLAND_OBJECT_TYPE_OUTPUT,
 						   .Size		= sizeof(wayland_output),
 						   .Id			= 0,
@@ -1044,7 +1074,7 @@ wayland_output WaylandOutputPrototype = {
 	.HandleDescription = NULL,
 };
 
-wayland_region WaylandRegionPrototype = {
+static wayland_region WaylandRegionPrototype = {
 	.Header	  = { .Type		   = WAYLAND_OBJECT_TYPE_REGION,
 				  .Size		   = sizeof(wayland_region),
 				  .Id		   = 0,
@@ -1054,7 +1084,7 @@ wayland_region WaylandRegionPrototype = {
 	.Subtract = NULL,
 };
 
-wayland_subcompositor WaylandSubcompositorPrototype = {
+static wayland_subcompositor WaylandSubcompositorPrototype = {
 	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR,
 					   .Size		= sizeof(wayland_subcompositor),
 					   .Id			= 0,
@@ -1063,7 +1093,7 @@ wayland_subcompositor WaylandSubcompositorPrototype = {
 	.GetSubsurface = NULL,
 };
 
-wayland_subsurface WaylandSubsurfacePrototype = {
+static wayland_subsurface WaylandSubsurfacePrototype = {
 	.Header		 = { .Type		  = WAYLAND_OBJECT_TYPE_SUBSURFACE,
 					 .Size		  = sizeof(wayland_subsurface),
 					 .Id		  = 0,
@@ -1076,7 +1106,16 @@ wayland_subsurface WaylandSubsurfacePrototype = {
 	.SetDesync	 = NULL,
 };
 
-wayland_interface *WaylandPrototypes[] = {
+static wayland_fixes WaylandFixesPrototype = {
+	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_FIXES,
+						 .Size		  = sizeof(wayland_fixes),
+						 .Id		  = 0,
+						 .HandleEvent = NULL },
+	.Destroy		 = NULL,
+	.DestroyRegistry = NULL,
+};
+
+static wayland_interface *WaylandPrototypes[] = {
 	[WAYLAND_OBJECT_TYPE_DISPLAY]	 = (wayland_interface *) &WaylandDisplayPrototype,
 	[WAYLAND_OBJECT_TYPE_REGISTRY]	 = (wayland_interface *) &WaylandRegistryPrototype,
 	[WAYLAND_OBJECT_TYPE_CALLBACK]	 = (wayland_interface *) &WaylandCallbackPrototype,
@@ -1090,6 +1129,7 @@ wayland_interface *WaylandPrototypes[] = {
 	[WAYLAND_OBJECT_TYPE_DATA_DEVICE]	= (wayland_interface *) &WaylandDataDevicePrototype,
 	[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] =
 		(wayland_interface *) &WaylandDataDeviceManagerPrototype,
+	[WAYLAND_OBJECT_TYPE_SHELL]			= (wayland_interface *) &WaylandShellPrototype,
 	[WAYLAND_OBJECT_TYPE_SHELL_SURFACE] = (wayland_interface *) &WaylandShellSurfacePrototype,
 	[WAYLAND_OBJECT_TYPE_SURFACE]		= (wayland_interface *) &WaylandSurfacePrototype,
 	[WAYLAND_OBJECT_TYPE_SEAT]			= (wayland_interface *) &WaylandSeatPrototype,
@@ -1100,6 +1140,7 @@ wayland_interface *WaylandPrototypes[] = {
 	[WAYLAND_OBJECT_TYPE_REGION]		= (wayland_interface *) &WaylandRegionPrototype,
 	[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR] = (wayland_interface *) &WaylandSubcompositorPrototype,
 	[WAYLAND_OBJECT_TYPE_SUBSURFACE]	= (wayland_interface *) &WaylandSubsurfacePrototype,
+	[WAYLAND_OBJECT_TYPE_FIXES]			= (wayland_interface *) &WaylandFixesPrototype,
 };
 
 internal u32
@@ -1214,8 +1255,8 @@ Wayland_HandleNextEvent(void)
 
 	wayland_interface *Object;
 	HashMap_Get(&_G.IdTable, &Message->ObjectId, &Object);
-	Assert(Object);
-	Object->HandleEvent(Object, Message);
+	if (!Object) return NULL;
+	if (Object->HandleEvent) Object->HandleEvent(Object, Message);
 
 	Stack_Pop();
 	return Object;
