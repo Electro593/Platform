@@ -54,7 +54,13 @@
 		"string": "c",
 		"*.inc": "c",
 		"unordered_map": "c",
-		"unordered_set": "c"
+		"unordered_set": "c",
+		"bit": "c",
+		"string_view": "c",
+		"fstream": "c",
+		"iomanip": "c",
+		"sstream": "c",
+		"variant": "c"
 	},
     "C_Cpp.dimInactiveRegions": true,
     "C_Cpp.errorSquiggles": "disabled",

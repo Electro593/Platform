@@ -37,6 +37,7 @@ extern wayland_funcs _F;
 	WAYLAND_USER_FUNCS
 
 typedef struct wayland_state {
+	usize HeapSize;
 	heap *Heap;
 
 	file_handle Socket;
@@ -45,9 +46,11 @@ typedef struct wayland_state {
 	b08 Attempted : 1;
 
 	// TODO Re-use deleted object ids
-	u32 NextObjectId;
+	u32		NextObjectId;
+	hashmap IdTable;
 
-	wayland_registry Registry;
+	wayland_display	 *Display;
+	wayland_registry *Registry;
 } wayland_state;
 
 typedef struct wayland_funcs {

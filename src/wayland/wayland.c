@@ -16,6 +16,48 @@
 
 #ifdef INCLUDE_SOURCE
 
+#define CALL(Object, Func, ...) (Object)->Func((Object) __VA_OPT__(,) __VA_ARGS__)
+
+internal void
+Wayland_Display_HandleError(
+	wayland_display		 *This,
+	wayland_interface	 *Object,
+	wayland_display_error Code,
+	string				  Message
+)
+{
+	STOP;
+}
+
+internal void
+Wayland_Display_HandleDeleteId(wayland_display *This, u32 Id)
+{
+	STOP;
+}
+
+internal void
+Wayland_Registry_HandleGlobal(wayland_registry *This, u32 Name, string Interface, u32 Version)
+{ }
+
+internal void
+Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)
+{
+	STOP;
+}
+
+internal void
+Wayland_SyncAndHandleEvents(void)
+{
+	wayland_callback *SyncCallback = CALL(_G.Display, Sync);
+
+	while (TRUE) {
+		vptr Object = Wayland_HandleNextEvent();
+		if (Object == SyncCallback) break;
+	}
+
+	Wayland_DeleteObject(SyncCallback);
+}
+
 internal b08
 Wayland_TryInit(void)
 {
@@ -26,26 +68,24 @@ Wayland_TryInit(void)
 	_G.Connected = Wayland_ConnectToServerSocket(&_G.Socket);
 
 	if (_G.Connected) {
-		usize HeapSize	= 16 * 1024 * 1024;
-		_G.Heap			= Heap_Init(Platform_AllocateMemory(HeapSize), HeapSize);
-		_G.NextObjectId = 2;
+		_G.HeapSize = 16 * 1024 * 1024;
+		_G.Heap		= Heap_Init(Platform_AllocateMemory(_G.HeapSize), _G.HeapSize);
 
-		_G.Registry = Wayland_Display_GetRegistry(&WaylandDisplay);
+		_G.IdTable = HashMap_Init(_G.Heap, sizeof(u32), sizeof(wayland_interface *));
 
-		wayland_callback SyncCallback = Wayland_Display_Sync(&WaylandDisplay);
+		_G.NextObjectId			   = 1;
+		_G.Display				   = Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY);
+		_G.Display->HandleError	   = Wayland_Display_HandleError;
+		_G.Display->HandleDeleteId = Wayland_Display_HandleDeleteId;
 
-		while (TRUE) {
-			wayland_message *Message = Wayland_ReadMessage();
+		_G.Registry						= CALL(_G.Display, GetRegistry);
+		_G.Registry->HandleGlobal		= Wayland_Registry_HandleGlobal;
+		_G.Registry->HandleGlobalRemove = Wayland_Registry_HandleGlobalRemove;
 
-			if (Message->ObjectId == SyncCallback.Header.Id) {
-				STOP;
-				break;
-			}
-
-			Wayland_FreeMessage(Message);
-		}
+		Wayland_SyncAndHandleEvents();
 	}
 
+	STOP;
 	return _G.Connected;
 }
 
@@ -54,6 +94,7 @@ Wayland_TryClose(void)
 {
 	if (!_G.Connected) return;
 
+	Platform_FreeMemory((vptr) _G.Heap, _G.HeapSize);
 	Platform_CloseFile(_G.Socket);
 }
 
@@ -67,5 +108,6 @@ Wayland_CreateWindow(c08 *Title, usize Width, usize Height)
 }
 
 #undef INIT
+#undef CALL
 
 #endif

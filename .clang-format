@@ -79,7 +79,7 @@ BreakAdjacentStringLiterals: true
 # BreakAfterJavaFieldAnnotations:
 BreakAfterReturnType: AllDefinitions
 # BreakArrays:
-BreakBeforeBinaryOperators: All
+BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeBraces: Custom
 # BreakBeforeConceptDeclarations:
 BreakBeforeInlineASMColon: OnlyMultiline
@@ -94,7 +94,7 @@ ColumnLimit: 100
 # CompactNamespaces:
 # ConstructorInitializerIndentWidth:
 ContinuationIndentWidth: 4
-# Cpp11BracedStyle:
+Cpp11BracedListStyle: false
 DerivePointerAlignment: false
 DisableFormat: false
 # EmptyLineAfterAccessModifier:
@@ -146,7 +146,7 @@ MaxEmptyLinesToKeep: 1
 # ObjCSpaceBeforeProtocolList:
 PPIndentWidth: -1
 # PackConstructorInitializers:
-PenaltyBreakAssignment: 1000
+# PenaltyBreakAssignment:
 # PenaltyBreakBeforeFirstCallParameter:
 # PenaltyBreakBeforeMemberAccess:
 # PenaltyBreakComment:

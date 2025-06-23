@@ -262,7 +262,7 @@ internal b08
 HashMap_Get(hashmap *Map, vptr Key, vptr ValueOut)
 {
 	vptr Value = HashMap_GetRef(Map, Key);
-	if (Value) Mem_Cpy(ValueOut, Value, Map->ValueSize);
+	if (Value && ValueOut) Mem_Cpy(ValueOut, Value, Map->ValueSize);
 	return !!Value;
 }
 
@@ -275,7 +275,7 @@ HashMap_Remove(hashmap *Map, vptr Key, vptr ValueOut)
 	usize *Hash = (usize *) (Value - Map->KeySize - sizeof(usize));
 	*Hash		= HASH_DELETED;
 
-	Mem_Cpy(ValueOut, Value, Map->ValueSize);
+	if (ValueOut) Mem_Cpy(ValueOut, Value, Map->ValueSize);
 	Mem_Set(Value - Map->KeySize, 0, Map->KeySize + Map->ValueSize);
 
 	return TRUE;
