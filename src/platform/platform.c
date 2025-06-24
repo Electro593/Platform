@@ -84,7 +84,35 @@ internal string
 _CString(c08 *Chars)
 {
 	u32 Length = _Mem_BytesUntil((u08 *) Chars, 0);
-	return (string) {.Text = Chars, .Length = Length, .Capacity = Length, .Resizable = FALSE};
+	return (string) { .Text = Chars, .Length = Length, .Capacity = Length, .Resizable = FALSE };
+}
+
+internal void
+Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message)
+{
+	c08 LineStr[11];
+	u32 Index		 = sizeof(LineStr);
+	LineStr[--Index] = 0;
+	do {
+		LineStr[--Index]  = (Line % 10) + '0';
+		Line			 /= 10;
+	} while (Line);
+
+	Platform_WriteError(_CString(File), FALSE);
+	Platform_WriteError(_CString(": "), FALSE);
+	Platform_WriteError(_CString(LineStr + Index), FALSE);
+	if (Expression[0] != 0) {
+		Platform_WriteError(_CString(": Assertion hit!\n\t("), FALSE);
+		Platform_WriteError(_CString(Expression), FALSE);
+		Platform_WriteError(_CString(") was FALSE\n"), FALSE);
+	} else {
+		Platform_WriteError(_CString(": \n"), FALSE);
+	}
+	if (Message[0] != 0) {
+		Platform_WriteError(_CString("\t"), FALSE);
+		Platform_WriteError(_CString(Message), FALSE);
+	}
+	Platform_WriteError(_CString("\n"), FALSE);
 }
 
 internal void
@@ -96,6 +124,7 @@ Platform_UnloadModule(platform_module *Module)
 	if (Platform->UtilIsLoaded) Stack_Set(Stack);
 
 	Platform_CloseModuleBackend(Module);
+	if (Module->IsUtil) Platform->UtilIsLoaded = FALSE;
 }
 
 internal b08
@@ -123,11 +152,12 @@ Platform_ReloadModule(platform_module *Module)
 	Module->Load(Platform, Module);
 	if (Platform->UtilIsLoaded) Stack_Set(Stack);
 
-	if (_Str_Cmp(Module->Name, "util") == EQUAL) {
+	if (Module->IsUtil) {
 		util_funcs Funcs = *(util_funcs *) Module->Funcs;
 #define EXPORT(R, N, ...) N = Funcs.N;
 #define X UTIL_FUNCS
 #include <x.h>
+		Platform->UtilIsLoaded = TRUE;
 	}
 
 	return TRUE;
@@ -136,7 +166,7 @@ Platform_ReloadModule(platform_module *Module)
 internal platform_module *
 Platform_LoadModule(string Name)
 {
-	platform_module	 _UtilModule = {0};
+	platform_module	 _UtilModule = { 0 };
 	platform_module *Module;
 
 #ifdef _WIN32
@@ -145,8 +175,9 @@ Platform_LoadModule(string Name)
 #define PLATFORM_DYNLIB_SUFFIX ".so"
 #endif
 
-	Assert(Platform->UtilIsLoaded || _Str_Cmp(Name.Text, "util") == 0);
-	if (Platform->UtilIsLoaded) {
+	b08 UtilIsLoaded = Platform->UtilIsLoaded;
+	Assert(UtilIsLoaded || _Str_Cmp(Name.Text, "util") == 0);
+	if (UtilIsLoaded) {
 		if (HashMap_Get(&Platform->ModuleTable, &Name, &Module)) return Module;
 
 		Module = Heap_AllocateA(
@@ -158,10 +189,15 @@ Platform_LoadModule(string Name)
 
 		Module->FileName = (c08 *) (Module + 1);
 		Mem_Cpy(Module->FileName, Name.Text, Name.Length);
-		Mem_Cpy(Module->FileName + Name.Length, PLATFORM_DYNLIB_SUFFIX, sizeof(PLATFORM_DYNLIB_SUFFIX));
+		Mem_Cpy(
+			Module->FileName + Name.Length,
+			PLATFORM_DYNLIB_SUFFIX,
+			sizeof(PLATFORM_DYNLIB_SUFFIX)
+		);
 	} else {
 		Module			 = &_UtilModule;
 		Module->FileName = "util" PLATFORM_DYNLIB_SUFFIX;
+		Module->IsUtil	 = TRUE;
 	}
 
 	Module->Name			 = Name.Text;
@@ -171,12 +207,13 @@ Platform_LoadModule(string Name)
 	else if (_Str_Cmp(Name.Text, "base") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB100000000;
 	else if (_Str_Cmp(Name.Text, "renderer_opengl") == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB200000000;
-	else if (_Str_Cmp(Name.Text, "wayland") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB300000000;
+	else if (_Str_Cmp(Name.Text, "wayland") == EQUAL)
+		Module->DebugLoadAddress = (vptr) 0x7DB300000000;
 #endif
 
 	Platform_ReloadModule(Module);
 
-	if (!Platform->UtilIsLoaded) {
+	if (!UtilIsLoaded) {
 		usize StackSize = 64 * 1024 * 1024;
 		usize HeapSize	= 8 * 1024 * 1024;
 		vptr  Mem		= Platform_AllocateMemory(StackSize + HeapSize);
@@ -200,7 +237,6 @@ Platform_LoadModule(string Name)
 		Module = Heap_AllocateA(Platform->Heap, sizeof(platform_module));
 		Mem_Cpy(Module, &_UtilModule, sizeof(platform_module));
 		HashMap_Add(&Platform->ModuleTable, &Name, &Module);
-		Platform->UtilIsLoaded = TRUE;
 	}
 
 	return Module;

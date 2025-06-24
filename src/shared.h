@@ -39,7 +39,7 @@
 
 #include <macro.h>
 
-#define Error(Message) Platform_Assert(__FILE__, __LINE__, "", Message)
+#define Error(Message) do { Platform_Assert(__FILE__, __LINE__, "", Message); STOP; } while(0)
 #define Assert(Expression, ...) \
     do { \
         if(!(Expression)) { \
@@ -185,7 +185,7 @@ TYPES
 
 // TODO fix this whole mess up
 internal type
-MakeMemberType(type_id TypeID, u16 Size, u32 Offset)
+MakeMemberType(type_id TypeID, u32 Offset, u16 Size)
 {
 	return (type) { TYPEID_MEMBER | ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK) | TypeID,
 					Size };

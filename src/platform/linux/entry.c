@@ -53,34 +53,6 @@ internal void
 Platform_CreateWindow(void)
 { }
 
-internal void
-Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message)
-{
-	c08 LineStr[11];
-	u32 Index		 = sizeof(LineStr);
-	LineStr[--Index] = 0;
-	do {
-		LineStr[--Index]  = (Line % 10) + '0';
-		Line			 /= 10;
-	} while (Line);
-
-	Platform_WriteError(_CString(File), FALSE);
-	Platform_WriteError(_CString(": "), FALSE);
-	Platform_WriteError(_CString(LineStr + Index), FALSE);
-	if (Expression[0] != 0) {
-		Platform_WriteError(_CString(": Assertion hit!\n\t("), FALSE);
-		Platform_WriteError(_CString(Expression), FALSE);
-		Platform_WriteError(_CString(") was FALSE\n"), FALSE);
-	} else {
-		Platform_WriteError(_CString(": \n"), FALSE);
-	}
-	if (Message[0] != 0) {
-		Platform_WriteError(_CString("\t"), FALSE);
-		Platform_WriteError(_CString(Message), FALSE);
-	}
-	Platform_WriteError(_CString("\n"), FALSE);
-}
-
 internal vptr
 Platform_AllocateMemory(u64 Size)
 {

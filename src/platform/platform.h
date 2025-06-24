@@ -57,6 +57,8 @@ struct platform_module {
 	c08 *FileName;
 	c08 *Name;
 
+	b08 IsUtil;
+
 	func_Module_Load   *Load;
 	func_Module_Init   *Init;
 	func_Module_Update *Update;

@@ -266,34 +266,6 @@ Platform_CreateWindow(void)
 	Platform->WindowedApp = TRUE;
 }
 
-internal void
-Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message)
-{
-	c08 LineStr[11];
-	u32 Index		 = sizeof(LineStr);
-	LineStr[--Index] = 0;
-	do {
-		LineStr[--Index]  = (Line % 10) + '0';
-		Line			 /= 10;
-	} while (Line);
-
-	Win32_OutputDebugStringA(File);
-	Win32_OutputDebugStringA(": ");
-	Win32_OutputDebugStringA(LineStr + Index);
-	if (Expression[0] != 0) {
-		Win32_OutputDebugStringA(": Assertion hit!\n\t(");
-		Win32_OutputDebugStringA(Expression);
-		Win32_OutputDebugStringA(") was FALSE\n");
-	} else {
-		Win32_OutputDebugStringA(": \n");
-	}
-	if (Message[0] != 0) {
-		Win32_OutputDebugStringA("\t");
-		Win32_OutputDebugStringA(Message);
-	}
-	Win32_OutputDebugStringA("\n");
-}
-
 internal vptr
 Platform_AllocateMemory(u64 Size)
 {
@@ -314,7 +286,8 @@ Platform_GetFileLength(file_handle FileHandle)
 	win32_large_integer Size;
 	Size.QuadPart = 0;
 
-	Assert(Win32_GetFileSizeEx(FileHandle.Handle, &Size));
+	b08 Success = Win32_GetFileSizeEx(FileHandle.Handle, &Size);
+	Assert(Success);
 
 	return Size.QuadPart;
 }
@@ -329,6 +302,7 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 	} else {
 		Name.Length = _Mem_BytesUntil((u08 *) FileName, 0);
 		Name.Text	= Platform_AllocateMemory(Name.Length);
+		_Mem_Cpy((u08 *) Name.Text, (u08 *) FileName, Name.Length + 1);
 	}
 	for (usize I = 0; I < Name.Length; I++)
 		if (Name.Text[I] == '/') Name.Text[I] = '\\';
@@ -759,7 +733,9 @@ Platform_Entry(void)
 	Platform_ParseCommandLine();
 	Win32_QueryPerformanceFrequency(&CounterFrequency);
 
-	Platform_LoadModule(UTIL_MODULE_NAME);
+	platform_module *UtilModule = Platform_LoadModule(UTIL_MODULE_NAME);
+
+	Platform_CreateWindow();
 
 	Platform_LoadModule(CStringL("base"));
 
@@ -836,6 +812,8 @@ Platform_Entry(void)
 	}
 
 	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+		if (Module->IsUtil) continue;
+
 		stack Stack;
 		if (Platform->UtilIsLoaded) Stack = Stack_Get();
 		Module->Deinit(Platform);
@@ -844,5 +822,9 @@ Platform_Entry(void)
 	}
 
 	Stack_Pop();
+
+	UtilModule->Deinit(Platform);
+	Platform_UnloadModule(UtilModule);
+
 	Platform_Exit(0);
 }
