@@ -14,13 +14,13 @@ _WIN32
 #if defined(_X64)
 
 __asm__(
-	".globl _start                 \n"
-	"_start:                       \n"
+	".globl Platform_Entry         \n"
+	"Platform_Entry:               \n"
 	"	xor %rbp, %rbp             \n"
 	"	mov  0(%rsp), %rdi         \n"
 	"	lea  8(%rsp), %rsi         \n"
 	"	lea 16(%rsp,%rdi,8), %rdx  \n"
-	"	call Platform_Entry        \n"
+	"	call Platform_CEntry       \n"
 	"	ud2                        \n"
 );
 
@@ -276,7 +276,7 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 }
 
 external void
-Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
+Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
 	platform_state _P = {0};
 	Platform		  = &_P;
@@ -292,7 +292,10 @@ Platform_Entry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	u64		  EnvCount = 0, AuxCount = 0;
 	{
 		c08 **EnvParam = EnvParams;
-		while (*EnvParam) EnvCount++, EnvParam++;
+		while (*EnvParam) {
+			EnvCount++;
+			EnvParam++;
+		}
 
 		AuxVectors			= (elf_auxv *) (EnvParam + 1);
 		elf_auxv *AuxVector = AuxVectors;

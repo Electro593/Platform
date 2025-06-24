@@ -106,7 +106,7 @@ build_module() {
       gcc $ExeCompilerSwitches $ExeLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
       if [[ -e "$ModuleName$ExeSuffix" ]]; then
          objdump --source-comment -M intel "$ModuleName$ExeSuffix" > "$ModuleName.dump.asm"
-         objdump -xrR "$ModuleName$ExeSuffix" > "$ModuleName.dump.dat" 2> /dev/nul
+         objdump -xrR "$ModuleName$ExeSuffix" > "$ModuleName.dump.dat" 2> /dev/null
          if [[ $? -ne 0 ]]; then objdump -xr "$ModuleName$ExeSuffix" > "$ModuleName.dump.dat"; fi
       else
          echo Setting result after module $Module
@@ -118,7 +118,7 @@ build_module() {
       gcc $DllCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "$ModuleName$DllSuffix" "${Module}main.c"
       if [[ -e "$ModuleName$DllSuffix" ]]; then
          objdump --source-comment -M intel "$ModuleName$DllSuffix" > "$ModuleName.dump.asm"
-         objdump -xrR "$ModuleName$DllSuffix" > "$ModuleName.dump.dat" 2> /dev/nul
+         objdump -xrR "$ModuleName$DllSuffix" > "$ModuleName.dump.dat" 2> /dev/null
          if [[ $? -ne 0 ]]; then objdump -xr "$ModuleName$DllSuffix" > "$ModuleName.dump.dat"; fi
       else
          echo Setting result after module $Module

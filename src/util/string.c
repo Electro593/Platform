@@ -176,24 +176,30 @@ typedef enum vstring_format_type {
 	VSTRING_FORMAT_PTR,
 	VSTRING_FORMAT_B08,
 
-	VSTRING_FORMAT_FLAG_INT_DEC = 0x000,
-	VSTRING_FORMAT_FLAG_INT_BIN = 0x020,
-	VSTRING_FORMAT_FLAG_INT_OCT = 0x040,
-	VSTRING_FORMAT_FLAG_INT_HEX = 0x080,
+	VSTRING_FORMAT_TYPE_MASK = 0x0001F,
 
-	VSTRING_FORMAT_FLAG_FLOAT_STD = 0x000,
-	VSTRING_FORMAT_FLAG_FLOAT_EXP = 0x020,
-	VSTRING_FORMAT_FLAG_FLOAT_FIT = 0x040,
-	VSTRING_FORMAT_FLAG_FLOAT_HEX = 0x080,
-
-	VSTRING_FORMAT_FLAG_STR_BYTE = 0x000,
-	VSTRING_FORMAT_FLAG_STR_WIDE = 0x020,
-
-	VSTRING_FORMAT_FLAG_CHR_BYTE = 0x000,
-	VSTRING_FORMAT_FLAG_CHR_WIDE = 0x020,
-
-	VSTRING_FORMAT_FLAG_UPPERCASE = 0x100,
-	VSTRING_FORMAT_FLAG_QUERY	  = 0x200,
+	VSTRING_FORMAT_FLAG_INT_DEC			= 0x00000,
+	VSTRING_FORMAT_FLAG_INT_BIN			= 0x00020,
+	VSTRING_FORMAT_FLAG_INT_OCT			= 0x00040,
+	VSTRING_FORMAT_FLAG_INT_HEX			= 0x00080,
+	VSTRING_FORMAT_FLAG_FLOAT_STD		= 0x00000,
+	VSTRING_FORMAT_FLAG_FLOAT_EXP		= 0x00020,
+	VSTRING_FORMAT_FLAG_FLOAT_FIT		= 0x00040,
+	VSTRING_FORMAT_FLAG_FLOAT_HEX		= 0x00080,
+	VSTRING_FORMAT_FLAG_STR_BYTE		= 0x00000,
+	VSTRING_FORMAT_FLAG_STR_WIDE		= 0x00020,
+	VSTRING_FORMAT_FLAG_CHR_BYTE		= 0x00000,
+	VSTRING_FORMAT_FLAG_CHR_WIDE		= 0x00020,
+	VSTRING_FORMAT_FLAG_UPPERCASE		= 0x00100,
+	VSTRING_FORMAT_FLAG_QUERY			= 0x00200,
+	VSTRING_FORMAT_FLAG_SPECIFY_RADIX	= 0x00400,
+	VSTRING_FORMAT_FLAG_SEPARATE_GROUPS = 0x00800,
+	VSTRING_FORMAT_FLAG_LEFT_JUSTIFY	= 0x01000,
+	VSTRING_FORMAT_FLAG_PAD_WITH_ZERO	= 0x02000,
+	VSTRING_FORMAT_FLAG_PREFIX_SIGN		= 0x04000,
+	VSTRING_FORMAT_FLAG_PREFIX_SPACE	= 0x08000,
+	VSTRING_FORMAT_FLAG_PARAM_WIDTH		= 0x10000,
+	VSTRING_FORMAT_FLAG_PARAM_PRECISION = 0x20000,
 } vstring_format_type;
 
 // clang-format off
@@ -343,16 +349,7 @@ static vstring_format_type VStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 // clang-format on
 
 typedef struct vstring_format {
-	u32 Type		   : 7;
-	u32 NumberedParams : 1;
-	u32 ParamWidth	   : 1;
-	u32 ParamPrecision : 1;
-	u32 LeftJustify	   : 1;
-	u32 PrefixSign	   : 1;
-	u32 PrefixSpace	   : 1;
-	u32 SpecifyRadix   : 1;
-	u32 SeparateGroups : 1;
-	u32 PadWithZero	   : 1;
+	vstring_format_type Type;
 
 	u32 ValueParamIndex;
 
@@ -365,6 +362,8 @@ typedef struct vstring_format {
 		u32 Precision;
 		u32 PrecisionParamIndex;
 	};
+
+	usize CharIndex;
 } vstring_format;
 
 internal vstring_format_type
@@ -375,10 +374,189 @@ VString_ParseFormatType(c08 **C)
 	while (Type < VSTRING_FORMAT_DONE) {
 		Type = VStringFormatTypeStateMachine[Type][**C - '0'];
 		if (Type == VSTRING_FORMAT_INVALID) break;
-		*C += 1;
+		(*C)++;
 	}
 
 	return Type;
+}
+
+internal s08
+VString_ParseFormatInt(c08 **C, u32 *Int)
+{
+	if (**C == '0' && (*(*C + 1) < '0' || *(*C + 1) > '9')) {
+		*Int = 0;
+		return 1;
+	}
+	if (**C < '1' || **C > '9') return 0;
+
+	for (*Int = 0; **C < '0' || **C > '9'; (*C)++)
+		if (*Int > 0xFFFFFFFF / 10 || 0xFFFFFFFF - *Int * 10 < **C - '0') return -1;
+		else *Int = *Int * 10 + (**C - '0');
+	return 1;
+}
+
+internal void
+VString_ParseFormat(c08 **C, vstring_format *Format, b08 *UseNumberedParams)
+{
+	*Format = { 0 };
+	u32 Int;
+
+	// Value Designator Format: [ param-no $ ]
+
+	s08 Result = VString_ParseFormatInt(C, &Int);
+	if (Result == 1) {
+		// The number might be a param designator or a width
+		if (**C == '$') {
+			if (*UseNumberedParams == 0) goto invalid;
+			(*C)++;
+			*UseNumberedParams		= 1;
+			Format->ValueParamIndex = Int;
+		} else if (*UseNumberedParams == 1) goto invalid;
+		else {
+			Format->Width = Int;
+			goto precision;
+		}
+	} else if (Result == -1 || *UseNumberedParams == 1) goto invalid;  // All or nothing
+	else *UseNumberedParams = 0;  // Otherwise, we won't be using numbered params
+
+	// Flags Format: Unique of ( - | + | <space> | # | ' | 0 ){0-6}
+
+	for (u32 I = 0; I < 6; I++) {
+		switch (**C) {
+			case '-':
+				if (Format->Type & VSTRING_FORMAT_FLAG_LEFT_JUSTIFY) goto invalid;
+				Format->Type |= VSTRING_FORMAT_FLAG_LEFT_JUSTIFY;
+				(*C)++;
+				break;
+			case '+':
+				if (Format->Type & VSTRING_FORMAT_FLAG_PREFIX_SIGN) goto invalid;
+				Format->Type |= VSTRING_FORMAT_FLAG_PREFIX_SIGN;
+				(*C)++;
+				break;
+			case ' ':
+				if (Format->Type & VSTRING_FORMAT_FLAG_PREFIX_SPACE) goto invalid;
+				Format->Type |= VSTRING_FORMAT_FLAG_PREFIX_SPACE;
+				(*C)++;
+				break;
+			case '#':
+				if (Format->Type & VSTRING_FORMAT_FLAG_SPECIFY_RADIX) goto invalid;
+				Format->Type |= VSTRING_FORMAT_FLAG_SPECIFY_RADIX;
+				(*C)++;
+				break;
+			case '\'':
+				if (Format->Type & VSTRING_FORMAT_FLAG_SEPARATE_GROUPS) goto invalid;
+				Format->Type |= VSTRING_FORMAT_FLAG_SEPARATE_GROUPS;
+				(*C)++;
+				break;
+			case '0':
+				if (Format->Type & VSTRING_FORMAT_FLAG_PAD_WITH_ZERO) goto invalid;
+				Format->Type |= VSTRING_FORMAT_FLAG_PAD_WITH_ZERO;
+				(*C)++;
+				break;
+			default: break;
+		}
+	}
+
+	// Width Format: [ width | * | * param-no $ ]
+
+	if (**C == '*') {
+		// The width is provided by an argument
+		(*C)++;
+		Format->Type |= VSTRING_FORMAT_FLAG_PARAM_WIDTH;
+
+		// Parse the designator, if applicable
+		if (*UseNumberedParams) {
+			if (VString_ParseFormatInt(C, &Int) == 1 && **C == '$') {
+				(*C)++;
+				Format->WidthParamIndex = Int;
+			} else goto invalid;
+		}
+	} else {
+		// The width is plaintext or missing
+		Result = VString_ParseFormatInt(C, &Int);
+		if (Result == 1) Format->Width = Int;
+		else if (Result == -1) goto invalid;
+	}
+
+precision:	// Precision Format: [ . [ precision | * | * param-no $ ] ]
+
+	if (**C == '.') {
+		(*C)++;
+		if (**C == '*') {
+			// The precision is provided by an argument
+			(*C)++;
+			Format->Type |= VSTRING_FORMAT_FLAG_PARAM_PRECISION;
+
+			// Parse the designator, if applicable
+			if (*UseNumberedParams) {
+				if (VString_ParseFormatInt(C, &Int) == 1 && **C == '$') {
+					(*C)++;
+					Format->PrecisionParamIndex = Int;
+				} else goto invalid;
+			}
+		} else {
+			// The precision is plaintext or missing
+			Result = VString_ParseFormatInt(C, &Int);
+			if (Result == 1) Format->Precision = Int;
+			else if (Result == -1) goto invalid;
+		}
+	}
+
+	// Type and Conversion
+
+	vstring_format_type ParsedType = VString_ParseFormatType(C);
+	if ((ParsedType & VSTRING_FORMAT_TYPE_MASK) == VSTRING_FORMAT_INVALID) goto invalid;
+	Format->Type |= ParsedType;
+	return;
+
+invalid:
+	Format->Type = VSTRING_FORMAT_INVALID;
+}
+
+/*
+ * Run through String, parsing each format specifier and placing
+ * their vstring_format structures sequentially on the stack
+ */
+internal usize
+VString_ParseFormatString(string String, usize MaxFormats, vstring_format *Formats)
+{
+	b08	  UseNumberedParams = -1;
+	usize FormatCount		= 0;
+	c08	 *C					= String.Text;
+	while (*C) {
+		if (*C == '%' && FormatCount < MaxFormats) {
+			C++;
+			if (*C == '%') {
+				C++;
+				continue;
+			}
+
+			Formats[FormatCount].CharIndex = (usize) (C - String.Text);
+			VString_ParseFormat(&C, Formats + FormatCount, &UseNumberedParams);
+			if ((Format & VSTRING_FORMAT_TYPE_MASK) != VSTRING_FORMAT_INVALID) FormatCount++;
+		} else C++;
+	}
+
+	return FormatCount;
+}
+
+internal void
+VString_BuildFormattedOutput(
+	string			String,
+	vstring_format *Formats,
+	usize			FormatCount,
+	va_list			Args
+)
+{
+	usize Offset = 0;
+
+	c08 *Out = Stack_GetCursor();
+
+	for (usize I = 0; I < FormatCount; I++) {
+		vstring_format Format	 = Formats[I];
+		c08			  *StartChar = String.Text + Format.CharIndex + Offset;
+
+		for (usize *J =) }
 }
 
 // internal void
