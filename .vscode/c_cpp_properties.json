@@ -38,11 +38,10 @@
                 "_DEBUG=1",
                 "_OPENGL=1",
                 "_GAME_MODULE",
+                "_UTIL_MODULE",
                 "_PLATFORM_MODULE",
                 "_RENDERER_MODULE",
-                "_WAYLAND_MODULE",
-                "INCLUDE_HEADER",
-                "INCLUDE_SOURCE"
+                "_WAYLAND_MODULE"
             ],
             "cStandard": "c23",
             "cppStandard": "c++23",
