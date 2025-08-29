@@ -46,12 +46,13 @@ Intrin_Sqrt_R32(r32 Value)
 
 typedef u08 *va_list;
 void		 __va_start(va_list *Args, ...);
-#define VA_Start(Args, Last) ((void)(__va_start(&Args, Last)))
-#define VA_End(Args) ((void)(Args = NULL))
+#define VA_Start(Args, Start) ((void)(__va_start(&Args, Start)))
 #define VA_Next(Args, Type) \
 	((sizeof(Type) > 8 || (sizeof(Type) & (sizeof(Type) - 1)) != 0) /*Pointer or not a power of 2*/ \
 		? **(Type**)((Args += 8) - 8) \
 		:  *(Type* )((Args += 8) - 8))
+#define VA_Copy(Dest, Src) ((Dest) = (Src))
+#define VA_End(Args) ((void)(Args = NULL))
 
 #elif defined(_GCC)
 
@@ -140,8 +141,9 @@ Intrin_Sqrt_R32(r32 Value)
 }
 
 typedef __builtin_va_list va_list;
-#define VA_Start(Args, Last) __builtin_va_start(Args, Last)
+#define VA_Start(Args, ...) __builtin_c23_va_start(Args)
 #define VA_Next(Args, Type) __builtin_va_arg(Args, Type)
+#define VA_Copy(Dest, Src) __builtin_va_copy(Dest, Src)
 #define VA_End(Args) __builtin_va_end(Args)
 
 #endif

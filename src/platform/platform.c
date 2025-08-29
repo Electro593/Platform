@@ -84,7 +84,7 @@ internal string
 _CString(c08 *Chars)
 {
 	u32 Length = _Mem_BytesUntil((u08 *) Chars, 0);
-	return (string) { .Text = Chars, .Length = Length, .Capacity = Length, .Resizable = FALSE };
+	return (string) { .Text = Chars, .Encoding = STRING_ENCODING_ASCII, .Length = Length };
 }
 
 internal void

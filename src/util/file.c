@@ -25,10 +25,11 @@ File_Read(c08 *FileName, u64 Length, u64 Offset)
 
 	if (Length == 0) Length = Platform_GetFileLength(FileHandle);
 
+	//TODO: We should auto-detect the encoding
 	c08 *Text	   = Stack_Allocate(Length + 1);
 	u64	 BytesRead = Platform_ReadFile(FileHandle, Text, Length, Offset);
-	Text[Length]   = 0;
-	string String  = {BytesRead, Length + 1, FALSE, Text};
+	Text[BytesRead]   = 0;
+	string String  = { .Length = BytesRead, .Encoding = STRING_ENCODING_ASCII, .Text = Text};
 
 	Platform_CloseFile(FileHandle);
 
