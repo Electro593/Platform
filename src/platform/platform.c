@@ -36,20 +36,6 @@ _Mem_Set(u08 *D, u08 B, u32 Bytes)
 	while (Bytes--) *D++ = B;
 }
 
-internal void
-_Mem_Cpy(u08 *D, u08 *S, u32 Bytes)
-{
-	while (Bytes--) *D++ = *S++;
-}
-
-internal void
-_Mem_CpyRev(u08 *D, u08 *S, u32 Bytes)
-{
-	D += Bytes - 1;
-	S += Bytes - 1;
-	while (Bytes--) *D-- = *S--;
-}
-
 internal s08
 _Mem_Cmp(u08 *A, u08 *B, u32 Bytes)
 {

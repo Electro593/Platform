@@ -210,17 +210,18 @@ typedef struct font_glyph {
 
 #ifdef INCLUDE_SOURCE
 
-internal u32
-Font_CalculateChecksum(u32 *Table, u32 Size)
-{
-	u32 Sum = 0;
-	Size	= (Size + 3) / 4;
-	while (Size--) {
-		u32 Value  = *Table++;
-		Sum		  += SWAPENDIAN32(Value);
-	}
-	return Sum;
-}
+//TODO: Use this
+// internal u32
+// Font_CalculateChecksum(u32 *Table, u32 Size)
+// {
+// 	u32 Sum = 0;
+// 	Size	= (Size + 3) / 4;
+// 	while (Size--) {
+// 		u32 Value  = *Table++;
+// 		Sum		  += SWAPENDIAN32(Value);
+// 	}
+// 	return Sum;
+// }
 
 internal u32
 Font_GetGlyphOffset(font Font, u32 GlyphIndex)

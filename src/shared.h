@@ -21,7 +21,8 @@
 
 #define global   static
 #define persist  static
-#define internal static inline
+#define internal static
+#define intrin   static inline
 #define external
 
 #define RETURNS(...)
@@ -186,7 +187,7 @@ TYPES
 #endif
 
 // TODO fix this whole mess up
-internal type
+internal inline type
 MakeMemberType(type_id TypeID, u32 Offset, u16 Size)
 {
 	return (type) { TYPEID_MEMBER | ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK) | TypeID,

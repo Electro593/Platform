@@ -56,7 +56,7 @@ void		 __va_start(va_list *Args, ...);
 
 #elif defined(_GCC)
 
-internal u64
+intrin u64
 Intrin_ReadGSQWord(u32 Offset)
 {
 	u64 Result;
@@ -67,35 +67,35 @@ Intrin_ReadGSQWord(u32 Offset)
 #define Intrin_DebugBreak() __asm__ ( "int3" )
 #define Intrin_Nop() __asm__ ( "nop" )
 
-internal u16
+intrin u16
 Intrin_ByteSwap16(u16 Value)
 {
 	__asm__("xchg %%al, %%ah" : "+a"(Value));
 	return Value;
 }
 
-internal u32
+intrin u32
 Intrin_ByteSwap32(u32 Value)
 {
 	__asm__("bswap %0" : "+r"(Value));
 	return Value;
 }
 
-internal u64
+intrin u64
 Intrin_ByteSwap64(u64 Value)
 {
 	__asm__("bswapq %0" : "+r"(Value));
 	return Value;
 }
 
-internal u64
+intrin u64
 Intrin_Popcount64(u64 Value)
 {
 	__asm__("popcnt %0, %0" : "+r"(Value));
 	return Value;
 }
 
-internal u64
+intrin u64
 Intrin_ReadTimeStampCounter()
 {
 	u64 Result;
@@ -108,7 +108,7 @@ Intrin_ReadTimeStampCounter()
 	return Result;
 }
 
-internal b08
+intrin b08
 Intrin_BitScanForward64(u32 *Index, u64 Value)
 {
 	u64 Index64;
@@ -117,14 +117,14 @@ Intrin_BitScanForward64(u32 *Index, u64 Value)
 	return Value != 0;
 }
 
-internal b08
+intrin b08
 Intrin_BitScanReverse32(u32 *Index, u32 Value)
 {
 	__asm__("bsr %1, %0" : "=r"(*Index) : "r"(Value));
 	return Value != 0;
 }
 
-internal b08
+intrin b08
 Intrin_BitScanReverse64(u32 *Index, u64 Value)
 {
 	u64 Index64;
@@ -133,7 +133,7 @@ Intrin_BitScanReverse64(u32 *Index, u64 Value)
 	return Value != 0;
 }
 
-internal r32
+intrin r32
 Intrin_Sqrt_R32(r32 Value)
 {
 	__asm__("sqrtss %1, %0" : "+x"(Value));

@@ -1274,16 +1274,16 @@ Wayland_HandleNextEvent(void)
 		(Handler->Name)(Handler __VA_OPT__(, MAC_FOREACH(Message, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_MAKE_PARSE_ARG, __VA_ARGS__))); \
 	}
 
-internal wayland_primitive
-Wayland_ParseSint(wayland_message *Message, usize *I)
-{
-	wayland_primitive Prim;
-
-	Prim.Sint  = (s32) Message->Data[*I];
-	*I		  += 1;
-
-	return Prim;
-}
+// internal wayland_primitive
+// Wayland_ParseSint(wayland_message *Message, usize *I)
+// {
+// 	wayland_primitive Prim;
+//
+// 	Prim.Sint  = (s32) Message->Data[*I];
+// 	*I		  += 1;
+//
+// 	return Prim;
+// }
 
 internal wayland_primitive
 Wayland_ParseUint(wayland_message *Message, usize *I)
@@ -1310,19 +1310,19 @@ Wayland_ParseString(wayland_message *Message, usize *I)
 	return Prim;
 }
 
-internal wayland_primitive
-Wayland_ParseArray(wayland_message *Message, usize *I)
-{
-	wayland_primitive Prim;
-
-	Prim.Array.Size	 = Message->Data[*I];
-	*I				+= 1;
-
-	Prim.Array.Data	 = &Message->Data[*I];
-	*I				+= (Prim.Array.Size + 3) / 4;
-
-	return Prim;
-}
+// internal wayland_primitive
+// Wayland_ParseArray(wayland_message *Message, usize *I)
+// {
+// 	wayland_primitive Prim;
+//
+// 	Prim.Array.Size	 = Message->Data[*I];
+// 	*I				+= 1;
+//
+// 	Prim.Array.Data	 = &Message->Data[*I];
+// 	*I				+= (Prim.Array.Size + 3) / 4;
+//
+// 	return Prim;
+// }
 
 internal wayland_primitive
 Wayland_ParseObject(wayland_message *Message, usize *I)
