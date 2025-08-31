@@ -1597,6 +1597,196 @@ FString_WriteSigned(fstring_format *Format, string *Buffer)
 	return FSTRING_FORMAT_VALID;
 }
 
+internal fstring_format_status
+FString_WriteHexFloat(fstring_format *Format, string *Buffer)
+{
+	Assert(Format);
+	Stack_Push();
+
+	static const string Empty		  = EString();
+	static const string NanUpper	  = CStringL("NAN");
+	static const string NanLower	  = CStringL("nan");
+	static const string InfUpper	  = CStringL("INF");
+	static const string InfLower	  = CStringL("inf");
+	static const string SignPos		  = CStringL("+");
+	static const string SignNeg		  = CStringL("-");
+	static const string SignSpace	  = CStringL(" ");
+	static const string HexUpper	  = CStringL("0X");
+	static const string HexLower	  = CStringL("0x");
+	static const string ExpHexUpper	  = CStringL("P");
+	static const string ExpHexLower	  = CStringL("p");
+	static const string Period		  = CStringL(".");
+	static const u32	DigitsUpper[] = { '0', '1', '2', '3', '4', '5', '6', '7',
+										  '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+	static const u32	DigitsLower[] = { '0', '1', '2', '3', '4', '5', '6', '7',
+										  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+
+	b08 IsLeft		 = !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
+	b08 SpecifyRadix = !!(Format->Type & FSTRING_FORMAT_FLAG_SPECIFY_RADIX);
+	b08 PrefixSign	 = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SIGN);
+	b08 PrefixSpace	 = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SPACE);
+	b08 IsGrouped	 = !!(Format->Type & FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);
+	b08 IsUpper		 = !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
+	b08 PadZero		 = !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
+
+	r64 Value  = Format->Value.Float;
+	u64 Binary = *(u64 *) &Value;
+
+	b08	  Negative = Binary >> 63;
+	ssize Exponent = (ssize) ((Binary >> 52) & 0x3FF) - 1023;
+	usize Mantissa = Binary & ((1ull << 52) - 1);
+
+	const u32 *DigitsList = IsUpper ? DigitsUpper : DigitsLower;
+
+	b08	   IsSpecial	 = Exponent == 1024;
+	string SpecialString = !IsSpecial ? Empty
+						 : Mantissa	  ? (IsUpper ? NanUpper : NanLower)
+									  : (IsUpper ? InfUpper : InfLower);
+
+	if (Exponent == -1023) Exponent = -1022;
+	else Mantissa |= 1ull << 52;
+
+	b08 NegativeExp = Exponent < 0;
+	Exponent		= NegativeExp ? -Exponent : Exponent;
+
+	s32 MantissaLSB;
+	if (!Intrin_BitScanForward64((u32 *) &MantissaLSB, Mantissa)) MantissaLSB = 52;
+
+	bigint WholePart, FracPart, Radix, WholeDivisor, FracDivisor;
+	usize  WholeDigits = 0, FracDigits = 0, ExpDigits = 0, ExpDivisor = 1;
+	if (!IsSpecial) {
+		Radix = BigInt(16);
+
+		WholePart	 = BigInt(Mantissa >> 52);
+		WholeDivisor = BigInt(1);
+		while (BigInt_Compare(WholePart, WholeDivisor) >= 0) {
+			WholeDivisor = BigInt_SMul(WholeDivisor, Radix);
+			WholeDigits++;
+		}
+		if (WholeDigits < 1) WholeDigits = 1;
+
+		FracPart	= BigInt(Mantissa & ((1ull << 52) - 1));
+		FracDivisor = BigInt(1);
+		while (BigInt_Compare(FracPart, FracDivisor) >= 0) {
+			FracDivisor = BigInt_SMul(FracDivisor, Radix);
+			FracDigits++;
+		}
+		if (Format->Precision < 0)
+			while (!BigInt_SRem(FracPart, Radix).Words[0]) FracDigits--;
+		else FracDigits = Format->Precision;
+
+		while (Exponent >= ExpDivisor) {
+			ExpDivisor *= 10;
+			ExpDigits++;
+		}
+		if (ExpDigits < 1) ExpDigits = 1;
+	}
+
+	string SignString = Negative ? SignNeg : PrefixSign ? SignPos : PrefixSpace ? SignSpace : Empty;
+	string HexString  = IsSpecial ? Empty : IsUpper ? HexUpper : HexLower;
+	string RadixString	 = IsSpecial || (!SpecifyRadix && !FracDigits) ? Empty : Period;
+	string ExpSignString = IsSpecial ? Empty : NegativeExp ? SignNeg : SignPos;
+	string ExpString	 = IsSpecial ? Empty : IsUpper ? ExpHexUpper : ExpHexLower;
+
+	if (Format->ContentLength == 0) {
+		Format->ContentLength = SignString.Length
+							  + SpecialString.Length
+							  + HexString.Length
+							  + WholeDigits
+							  + RadixString.Length
+							  + FracDigits
+							  + ExpSignString.Length
+							  + ExpString.Length
+							  + ExpDigits;
+
+		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
+	}
+
+	if (!Buffer) {
+		Stack_Pop();
+		return FSTRING_FORMAT_VALID;
+	}
+	if (!Buffer->Text || Buffer->Length < Format->ActualWidth) {
+		Stack_Pop();
+		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	}
+
+	usize PadLength = Format->ActualWidth - Format->ContentLength;
+
+	string Dest = *Buffer;
+	if (!IsLeft) {
+		u32 PadChar = ' ';
+		if (Format->Precision < 0 && PadZero) PadChar = '0';
+		for (usize I = 0; I < PadLength; I++)
+			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, PadChar));
+	}
+
+	while (SignString.Length) {
+		u32 Codepoint = String_NextCodepoint(&SignString);
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+	}
+
+	while (SpecialString.Length) {
+		u32 Codepoint = String_NextCodepoint(&SpecialString);
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+	}
+
+	while (HexString.Length) {
+		u32 Codepoint = String_NextCodepoint(&HexString);
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+	}
+
+	while (WholeDigits) {
+		bigint Quot		 = BigInt_SDiv(WholePart, WholeDivisor);
+		bigint Rem		 = BigInt_SRem(Quot, Radix);
+		u32	   Codepoint = DigitsList[Rem.Words[0]];
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		WholeDivisor = BigInt_SDiv(WholeDivisor, Radix);
+		WholeDigits--;
+	}
+
+	while (RadixString.Length) {
+		u32 Codepoint = String_NextCodepoint(&RadixString);
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+	}
+
+	while (FracDigits) {
+		bigint Quot		 = BigInt_SDiv(FracPart, FracDivisor);
+		bigint Rem		 = BigInt_SRem(Quot, Radix);
+		u32	   Codepoint = DigitsList[Rem.Words[0]];
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		FracDivisor = BigInt_SDiv(FracDivisor, Radix);
+		FracDigits--;
+	}
+
+	while (ExpSignString.Length) {
+		u32 Codepoint = String_NextCodepoint(&ExpSignString);
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+	}
+
+	while (ExpString.Length) {
+		u32 Codepoint = String_NextCodepoint(&ExpString);
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+	}
+
+	while (ExpDigits) {
+		u32 Codepoint = DigitsList[(Exponent / ExpDivisor) % 10];
+		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		ExpDivisor /= 10;
+		ExpDigits--;
+	}
+
+	if (IsLeft) {
+		Dest.Text	= Buffer->Text + Format->ContentLength;
+		Dest.Length = PadLength;
+		for (usize I = 0; I < PadLength; I++)
+			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, ' '));
+	}
+
+	Stack_Pop();
+	return FSTRING_FORMAT_VALID;
+}
+
 /// @brief Write a floating point value into the buffer, based on the format. Alignment, width,
 /// precision, signage, radixing, grouping, and 0-padding are considered.
 /// @param Format A pointer to the format being written. On return, if actual width was 0, it will
@@ -1611,108 +1801,7 @@ FString_WriteSigned(fstring_format *Format, string *Buffer)
 internal fstring_format_status
 FString_WriteFloat(fstring_format *Format, string *Buffer)
 {
-	Assert(Format);
-
-	b08 IsLeft		 = !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
-	b08 SpecifyRadix = !!(Format->Type & FSTRING_FORMAT_FLAG_SPECIFY_RADIX);
-	b08 PrefixSign	 = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SIGN);
-	b08 PrefixSpace	 = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SPACE);
-	b08 IsGrouped	 = !!(Format->Type & FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);
-	b08 IsUppercase	 = !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
-	b08 PadZero		 = !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
-
-	r64 Value  = Format->Value.Float;
-	u64 Binary = *(u64 *) &Value;
-
-	b08	  Negative = Binary >> 63;
-	ssize Exponent = (ssize) ((Binary >> 52) & 0x7F) - 127;
-	usize Mantissa = Binary & ((1ull << 52) - 1);
-
-	if (Exponent == 128) {
-		string Special = IsUppercase ? (Mantissa   ? CStringL("NAN")
-										: Negative ? CStringL("-INF")
-												   : CStringL("INF"))
-									 : (Mantissa   ? CStringL("nan")
-										: Negative ? CStringL("-inf")
-												   : CStringL("inf"));
-
-		Format->Value.String = &Special;
-		return FString_WriteString(Format, Buffer);
-	}
-
-	string SignPrefix = Negative	? CStringL("-")
-					  : PrefixSign	? CStringL("+")
-					  : PrefixSpace ? CStringL(" ")
-									: EString();
-	string HexPrefix  = (Format->Type & FSTRING_FORMAT_FLAG_FLOAT_HEX)
-						  ? (IsUppercase ? CStringL("0X") : CStringL("0x"))
-						  : EString();
-
-	usize DigitsPastRadix;
-	if (Format->Type & FSTRING_FORMAT_FLAG_FLOAT_FIT)
-		DigitsPastRadix = Format->Precision < 0 ? 0 : Format->Precision - 1;
-	else DigitsPastRadix = Format->Precision < 0 ? 6 : Format->Precision;
-
-	string RadixStr	 = (SpecifyRadix || DigitsPastRadix > 0) ? CStringL(".") : EString();
-	string GroupStr	 = IsGrouped ? CStringL(",") : EString();
-	usize  GroupSize = 3;
-
-	usize GroupCount = 0;  // TODO: Compute groupings
-
-	if (Format->ContentLength == 0) {
-		Format->ContentLength = 0;	// TODO: Compute length
-
-		Format->ContentLength += SignPrefix.Length + HexPrefix.Length;
-		Format->ContentLength += GroupCount * GroupStr.Length;
-
-		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
-	}
-
-	if (!Buffer) return FSTRING_FORMAT_VALID;
-	if (!Buffer->Text || Buffer->Length < Format->ActualWidth)
-		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
-
-	usize PadLength = Format->ActualWidth - Format->ContentLength;
-
-	string Dest = *Buffer;
-	if (!IsLeft) {
-		u32 PadChar = ' ';
-		if (Format->Precision < 0 && PadZero) PadChar = '0';
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, PadChar));
-	}
-
-	while (SignPrefix.Length) {
-		u32 Codepoint = String_NextCodepoint(&SignPrefix);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
-	}
-
-	while (HexPrefix.Length) {
-		u32 Codepoint = String_NextCodepoint(&HexPrefix);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
-	}
-
-	// TODO: Whole component + Groupings
-
-	while (RadixStr.Length) {
-		u32 Codepoint = String_NextCodepoint(&RadixStr);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
-	}
-
-	// TODO: Fractional component
-
-	// TODO: Exponent sign (if applicable)
-
-	// TODO: Exponent (if applicable)
-
-	if (IsLeft) {
-		Dest.Text	= Buffer->Text + Format->ContentLength;
-		Dest.Length = PadLength;
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, ' '));
-	}
-
-	return FSTRING_FORMAT_VALID;
+	return FString_WriteHexFloat(Format, Buffer);
 }
 
 /// @brief Write a pointer into the buffer, based on the format. Effectively the same as `%#X` unles

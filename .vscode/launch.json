@@ -32,6 +32,9 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/platform",
+			"args": [
+				"-RunTests"
+			],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "preLaunchTask": "Build Program (SH)",

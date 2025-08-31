@@ -111,6 +111,8 @@ typedef u32 usize;
 #define USIZE_MAX ((usize)0xFFFFFFFFU)
 #endif
 
+#define SIZE_BITS (sizeof(usize) * 8)
+
 typedef float  r32;
 typedef double r64;
 static_assert(sizeof(r32) == 4, "r32 must be 4 bytes!");

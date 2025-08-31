@@ -145,7 +145,10 @@ internal u64
 Platform_ReadFile(file_handle FileHandle, vptr Dest, u64 Length, u64 Offset)
 {
 	if (Offset != (usize) -1)
-		VALIDATE(Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING), "Failed to seek file");
+		VALIDATE(
+			Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING),
+			"Failed to seek file"
+		);
 	s64 BytesRead = Sys_Read(FileHandle.FileDescriptor, Dest, Length);
 	VALIDATE(BytesRead, "Failed to read file");
 	return BytesRead;
@@ -155,7 +158,10 @@ internal u64
 Platform_WriteFile(file_handle FileHandle, vptr Src, u64 Length, u64 Offset)
 {
 	if (Offset != (usize) -1)
-		VALIDATE(Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING), "Failed to seek file");
+		VALIDATE(
+			Sys_Seek(FileHandle.FileDescriptor, Offset, SYS_SEEK_BEGINNING),
+			"Failed to seek file"
+		);
 	s64 BytesWritten = Sys_Write(FileHandle.FileDescriptor, Src, Length);
 	VALIDATE(BytesWritten, "Failed to write file");
 	return BytesWritten;
@@ -184,7 +190,12 @@ Platform_CloseFile(file_handle FileHandle)
 // TODO Make this use a file handle
 
 internal void
-Platform_GetFileTime(c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime)
+Platform_GetFileTime(
+	c08		 *FileName,
+	datetime *CreationTime,
+	datetime *LastAccessTime,
+	datetime *LastWriteTime
+)
 {
 	// 	sys_stat Stat;
 	//
@@ -247,6 +258,14 @@ Platform_Exit(u32 ExitCode)
 }
 
 internal void
+Platform_SetupArgTable(usize ArgCount, c08 **Args)
+{
+	Platform->ArgCount = ArgCount;
+	Platform->Args	   = Heap_AllocateA(Platform->Heap, ArgCount * sizeof(string));
+	for (usize I = 0; I < ArgCount; I++) Platform->Args[I] = CString(Args[I]);
+}
+
+internal void
 Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 {
 	Platform->EnvTable = HashMap_InitCustom(
@@ -278,7 +297,7 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 external void
 Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
-	platform_state _P = {0};
+	platform_state _P = { 0 };
 	Platform		  = &_P;
 
 #define EXPORT(ReturnType, Namespace, Name, ...) \
@@ -286,7 +305,10 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 #define X PLATFORM_FUNCS
 #include <x.h>
 
-	VALIDATE(Sys_GetClockRes(SYS_CLOCK_REALTIME, &ClockResolution), "Failed to get clock resolution");
+	VALIDATE(
+		Sys_GetClockRes(SYS_CLOCK_REALTIME, &ClockResolution),
+		"Failed to get clock resolution"
+	);
 
 	elf_auxv *AuxVectors;
 	u64		  EnvCount = 0, AuxCount = 0;
@@ -307,6 +329,7 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (AuxVectors[I].Type == ELF_AT_PAGESZ) Platform->PageSize = AuxVectors[I].Value;
 
 	Platform_LoadModule(UTIL_MODULE_NAME);
+	Platform_SetupArgTable(ArgCount, Args);
 	Platform_SetupEnvTable(EnvCount, EnvParams);
 
 	Platform_LoadModule(CStringL("base"));
@@ -325,6 +348,9 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (Platform->UtilIsLoaded) Stack_Set(Stack);
 		Platform_UnloadModule(Module);
 	}
+
+	Heap_FreeA(Platform->Args);
+	HashMap_Free(&Platform->EnvTable);
 
 	Stack_Pop();
 	Platform_Exit(0);

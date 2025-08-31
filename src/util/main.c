@@ -51,6 +51,9 @@ extern struct util_funcs _F;
     FONT_FUNCS     \
     FILE_FUNCS
 
+#define UTIL_TESTS \
+	BIGINT_TESTS
+
 typedef struct util_state {
 	stack *Stack;
 } util_state;
@@ -94,6 +97,39 @@ Load(platform_state *Platform, platform_module *Module)
 
 	Module->Data  = &_G;
 	Module->Funcs = &_F;
+}
+
+#define TEST(FunctionName, TestName, TestCode)  \
+	static void Test_##FunctionName##_##TestName(void) \
+	{                                           \
+		MAC_UNPACKAGE(TestCode)                 \
+	}
+UTIL_TESTS
+#undef TEST
+
+external API_EXPORT void
+Init(platform_state *Platform)
+{
+	b08 RunTests = FALSE;
+	for (usize I = 1; I < Platform->ArgCount; I++) {
+		if (String_Cmp(Platform->Args[I], CStringL("-RunTests")) == 0) {
+			RunTests = TRUE;
+			break;
+		}
+	}
+
+	if (RunTests) {
+		Stack_Push();
+
+#define TEST(FunctionName, TestName, TestCode)                                           \
+		Platform_WriteConsole(CStringL("Testing " #FunctionName ": " #TestName "...\n")); \
+		Test_##FunctionName##_##TestName();
+		UTIL_TESTS
+#undef TEST
+
+		Platform_WriteConsole(CStringL("\nAll tests passed!\n"));
+		Stack_Pop();
+	}
 }
 #endif
 #endif

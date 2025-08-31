@@ -42,7 +42,8 @@ typedef struct hashmap {
    EXPORT(hashmap, HashMap_Init,         heap *Heap, u32 KeySize, u32 ValueSize) \
    EXPORT(b08,     HashMap_Get,          hashmap *Map, vptr Key, vptr ValueOut) \
    EXPORT(b08,     HashMap_Remove,       hashmap *Map, vptr Key, vptr ValueOut) \
-   EXPORT(b08,     HashMap_Add,          hashmap *Map, vptr Key, vptr Value)
+   EXPORT(b08,     HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
+   EXPORT(void,     HashMap_Free,         hashmap *Map)
 
 #endif
 
@@ -339,6 +340,13 @@ HashMap_Add(hashmap *Map, vptr Key, vptr Value)
 
 	usize Hash = Map->Hash(Key, Map->HashParam);
 	return HashMap_AddWithHash(Map, Hash, Key, Value);
+}
+
+internal void
+HashMap_Free(hashmap *Map)
+{
+	Heap_Free(Map->Data);
+	Mem_Set(Map, 0, sizeof(hashmap));
 }
 
 #endif
