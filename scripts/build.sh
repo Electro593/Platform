@@ -101,7 +101,7 @@ build_module() {
 		echo Skipping $Module
 	elif [ "$ModuleName" = "platform" ]; then
 		echo Building $Module as an executable
-		# gcc $ExeCompilerSwitches $ExeLinkerSwitches -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
+		gcc $ExeCompilerSwitches $ExeLinkerSwitches -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
 		gcc $ExeCompilerSwitches $ExeLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
 		if [[ -e "build/$ModuleName$ExeSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.asm"
@@ -113,7 +113,7 @@ build_module() {
 		fi
 	else
 		echo Building $Module as a library
-		# gcc $DllCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
 		gcc $DllCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"

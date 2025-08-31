@@ -32,10 +32,10 @@ typedef struct bigint {
 	EXPORT(bigint,        BigInt_SXor,       bigint A, bigint B) \
 	EXPORT(bigint,        BigInt_SShift,     bigint A, ssize ShiftBy) \
 	\
-	EXPORT(bigint,        BigInt_SAbs,       bigint A) \
-	EXPORT(bigint,        BigInt_SNegate,    bigint A) \
 	EXPORT(bigint,        BigInt_SAdd,       bigint A, bigint B) \
 	EXPORT(bigint,        BigInt_SSub,       bigint A, bigint B) \
+	EXPORT(bigint,        BigInt_SAbs,       bigint A) \
+	EXPORT(bigint,        BigInt_SNegate,    bigint A) \
 	EXPORT(bigint,        BigInt_SMul,       bigint A, bigint B) \
 	EXPORT(void,          BigInt_SDivRem,    bigint A, bigint B, bigint *Quot, bigint *Rem) \
 	EXPORT(bigint,        BigInt_SDiv,       bigint A, bigint B) \
@@ -92,7 +92,6 @@ BigInt_IsNegative(bigint A)
 	return (A.WordCount ? A.SWords[A.WordCount - 1] : A.Word) < 0;
 }
 
-// Returns a view of the data, does not copy
 internal bigint
 BigInt_Flatten(bigint A)
 {
@@ -108,118 +107,128 @@ BigInt_Flatten(bigint A)
 	return A;
 }
 
-internal bigint
-BigInt_SInvert(bigint A)
-{
-	return BigInt(0);
-}
+#define BIGINT_BINOP(C0, AOP, BOP, BINOP, ITER, CARRY_CODE)            \
+	bigint AP = BigInt_Flatten(A);                                     \
+	bigint BP = BigInt_Flatten(B);                                     \
+	if (!AP.WordCount) AP.Words = (usize *) &A.Word, AP.WordCount = 1; \
+	if (!BP.WordCount) BP.Words = (usize *) &B.Word, BP.WordCount = 1; \
+                                                                       \
+	usize AC = BigInt_IsNegative(AP) ? USIZE_MAX : 0;                  \
+	usize BC = BigInt_IsNegative(BP) ? USIZE_MAX : 0;                  \
+                                                                       \
+	usize Count = MAX(AP.WordCount, BP.WordCount);                     \
+	usize Carry = C0, AW, BW, DW;                                      \
+                                                                       \
+	bigint Result = BigInt(0);                                         \
+	for (usize I = 0; I < ITER; I++) {                                 \
+		AW	  = I < AP.WordCount ? AP.Words[I] : AC;                   \
+		BW	  = I < BP.WordCount ? BP.Words[I] : BC;                   \
+		DW	  = ((AOP AW) BINOP (BOP BW)) + Carry;                     \
+                                                                       \
+		MAC_UNPACKAGE(CARRY_CODE)                                      \
+                                                                       \
+		if (!I) {                                                      \
+			Result = BigInt(DW);                                       \
+			continue;                                                  \
+		}                                                              \
+		if (I == 1) {                                                  \
+			ssize First		 = Result.Word;                            \
+			Result			 = BigInt_SAllocate(ITER);                 \
+			Result.SWords[0] = First;                                  \
+		}                                                              \
+                                                                       \
+		Result.Words[I] = DW;                                          \
+	}                                                                  \
+                                                                       \
+	return BigInt_Flatten(Result);
+
+#define BIGINT_LOGICAL_BINOP(AOP, BOP, BINOP) \
+	BIGINT_BINOP(0, AOP, BOP, BINOP, Count, ())
+
+#define BIGINT_ARITHMETIC_BINOP(C0, BOP)                                                         \
+	BIGINT_BINOP(C0, , BOP, +, Count + 1, (                                                      \
+		Carry = DW < AW || (DW == AW && Carry);                                                  \
+                                                                                                 \
+		if (I == Count) {                                                                        \
+			usize Bit = (I == 1 ? (usize) Result.Word : Result.Words[I - 1]) >> (SIZE_BITS - 1); \
+			if ((DW == -1 && Bit) || (DW == 0 && !Bit)) {                                        \
+				if (Result.WordCount) Result.WordCount = Count;                                  \
+				break;                                                                           \
+			}                                                                                    \
+		}))
 
 internal bigint
 BigInt_SAnd(bigint A, bigint B)
 {
-	return BigInt(0);
+	BIGINT_LOGICAL_BINOP(, , &);
 }
 
 internal bigint
 BigInt_SOr(bigint A, bigint B)
 {
-	return BigInt(0);
+	BIGINT_LOGICAL_BINOP(, , |);
 }
 
 internal bigint
 BigInt_SXor(bigint A, bigint B)
 {
-	return BigInt(0);
+	BIGINT_LOGICAL_BINOP(, , ^);
+}
+
+internal bigint
+BigInt_SInvert(bigint A)
+{
+	return BigInt_SXor(A, BigInt(-1));
 }
 
 internal bigint
 BigInt_SShift(bigint A, ssize ShiftBy)
 {
+	// TODO
 	return BigInt(0);
-}
-
-internal bigint
-_BigInt_SAdd(bigint A, bigint B, usize C0, b08 InvB)
-{
-	bigint AP = BigInt_Flatten(A);
-	bigint BP = BigInt_Flatten(B);
-	if (!AP.WordCount) AP.Words = (usize *) &A.Word, AP.WordCount = 1;
-	if (!BP.WordCount) BP.Words = (usize *) &B.Word, BP.WordCount = 1;
-
-	usize AC = BigInt_IsNegative(AP) ? USIZE_MAX : 0;
-	usize BC = BigInt_IsNegative(BP) ? USIZE_MAX : 0;
-
-	usize Count = MAX(AP.WordCount, BP.WordCount);
-	usize Carry = C0, AW, BW, Sum;
-
-	bigint Result = BigInt(0);
-	for (usize I = 0; I < Count + 1; I++) {
-		AW	  = I < AP.WordCount ? AP.Words[I] : AC;
-		BW	  = I < BP.WordCount ? BP.Words[I] : BC;
-		Sum	  = AW + (InvB ? ~BW : BW) + Carry;
-		Carry = Sum < AW || (Sum == AW && Carry);
-
-		if (I == Count) {
-			usize Bit = (I == 1 ? (usize) Result.Word : Result.Words[I - 1]) >> (SIZE_BITS - 1);
-			if ((Sum == -1 && Bit) || (Sum == 0 && !Bit)) {
-				if (Result.WordCount) Result.WordCount = Count;
-				break;
-			}
-		}
-
-		if (!I) {
-			Result = BigInt(Sum);
-			continue;
-		}
-		if (I == 1) {
-			ssize First		 = Result.Word;
-			Result			 = BigInt_SAllocate(Count + 1);
-			Result.SWords[0] = First;
-		}
-
-		Result.Words[I] = Sum;
-	}
-
-	return BigInt_Flatten(Result);
-}
-
-internal bigint
-BigInt_SNegate(bigint A)
-{
-	return _BigInt_SAdd(BigInt(0), A, 1, TRUE);
-}
-
-internal bigint
-BigInt_SAbs(bigint A)
-{
-	return BigInt_IsNegative(A) ? BigInt_SNegate(A) : BigInt_SCopy(A);
 }
 
 internal bigint
 BigInt_SAdd(bigint A, bigint B)
 {
-	return _BigInt_SAdd(A, B, 0, FALSE);
+	BIGINT_ARITHMETIC_BINOP(0, );
 }
 
 internal bigint
 BigInt_SSub(bigint A, bigint B)
 {
-	return _BigInt_SAdd(A, B, 1, TRUE);
+	BIGINT_ARITHMETIC_BINOP(1, ~);
+}
+
+internal bigint
+BigInt_SNegate(bigint A)
+{
+	return BigInt_SSub(BigInt(0), A);
+}
+
+internal bigint
+BigInt_SAbs(bigint A)
+{
+	return BigInt_IsNegative(A) ? BigInt_SNegate(A) : A;
 }
 
 internal bigint
 BigInt_SMul(bigint A, bigint B)
 {
+	// TODO
 	return BigInt(0);
 }
 
 internal void
 BigInt_SDivRem(bigint A, bigint B, bigint *Quot, bigint *Rem)
-{ }
+{
+	// TODO
+}
 
 internal bigint
 BigInt_SDiv(bigint A, bigint B)
 {
+	// TODO: Tests
 	bigint Quot;
 	BigInt_SDivRem(A, B, &Quot, NULL);
 	return Quot;
@@ -228,6 +237,7 @@ BigInt_SDiv(bigint A, bigint B)
 internal bigint
 BigInt_SRem(bigint A, bigint B)
 {
+	// TODO: Tests
 	bigint Rem;
 	BigInt_SDivRem(A, B, NULL, &Rem);
 	return Rem;
@@ -252,6 +262,8 @@ BigInt_ToInt(bigint A)
 	);
 	return A.WordCount ? ((ssize *) A.Words)[0] : A.Word;
 }
+
+#ifndef REGION_BIGINT_TESTS
 
 #define BIGINT_TESTS                                                         \
 	TEST(BigInt, ConstructsPositives, (                                      \
@@ -351,6 +363,61 @@ BigInt_ToInt(bigint A)
 		Source.Words[3] = USIZE_MAX;                                         \
 		Assert(BigInt_Flatten(Source).WordCount == 5);                       \
 	))                                                                       \
+	TEST(BigInt_SAnd, ANDsCorrectly, (                                       \
+		bigint A = BigInt_SAllocate(2);                                      \
+		A.SWords[0] = 0x2948271534;                                          \
+		A.SWords[1] = SSIZE_MIN | 0x80192747193;                             \
+		bigint B = BigInt_SAllocate(3);                                      \
+		B.SWords[0] = 0x81acd923;                                            \
+		B.SWords[1] = 0x1a1a1a1a1a1a1a;                                      \
+		B.SWords[2] = 0x2040097021009;                                       \
+		bigint Result = BigInt_SAnd(A, B);                                   \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == (A.SWords[0] & B.SWords[0]));             \
+		Assert(Result.SWords[1] == (A.SWords[1] & B.SWords[1]));             \
+		Assert(Result.SWords[2] == B.SWords[2]);                             \
+	))                                                                       \
+	TEST(BigInt_SOr, ORsCorrectly, (                                         \
+		bigint A = BigInt_SAllocate(2);                                      \
+		A.SWords[0] = 0x2948271534;                                          \
+		A.SWords[1] = 0x80192747193;                                         \
+		bigint B = BigInt_SAllocate(3);                                      \
+		B.SWords[0] = 0x81acd923;                                            \
+		B.SWords[1] = 0x1a1a1a1a1a1a1a;                                      \
+		B.SWords[2] = 0x2040097021009;                                       \
+		bigint Result = BigInt_SOr(A, B);                                    \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == (A.SWords[0] | B.SWords[0]));             \
+		Assert(Result.SWords[1] == (A.SWords[1] | B.SWords[1]));             \
+		Assert(Result.SWords[2] == B.SWords[2]);                             \
+	))                                                                       \
+	TEST(BigInt_SXor, XORsCorrectly, (                                       \
+		bigint A = BigInt_SAllocate(2);                                      \
+		A.SWords[0] = 0x2948271534;                                          \
+		A.SWords[1] = SSIZE_MIN | 0x80192747193;                             \
+		bigint B = BigInt_SAllocate(3);                                      \
+		B.SWords[0] = 0;                                                     \
+		B.SWords[1] = -1;                                                    \
+		B.SWords[2] = 0x2040097021009;                                       \
+		bigint Result = BigInt_SXor(A, B);                                   \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == (A.SWords[0] ^ B.SWords[0]));             \
+		Assert(Result.SWords[1] == (A.SWords[1] ^ B.SWords[1]));             \
+		Assert(Result.SWords[2] == ~B.SWords[2]);                            \
+	))                                                                       \
+	TEST(BigInt_SInvert, InvertsCorrectly, (                                 \
+		bigint Source = BigInt_SAllocate(4);                                 \
+		Source.SWords[0] = 0;                                                \
+		Source.SWords[1] = -1;                                               \
+		Source.SWords[2] = SSIZE_MAX;                                        \
+		Source.SWords[3] = SSIZE_MIN;                                        \
+		bigint Result = BigInt_SInvert(Source);                              \
+		Assert(Result.WordCount == 4);                                       \
+		Assert(Result.SWords[0] == -1);                                      \
+		Assert(Result.SWords[1] == 0);                                       \
+		Assert(Result.SWords[2] == SSIZE_MIN);                               \
+		Assert(Result.SWords[3] == SSIZE_MAX);                               \
+	))                                                                       \
 	TEST(BigInt_SAdd, AddsSmallNumbers, (                                    \
 		bigint Result = BigInt_SAdd(BigInt(3), BigInt(5));                   \
 		Assert(Result.WordCount == 0);                                       \
@@ -402,6 +469,48 @@ BigInt_ToInt(bigint A)
 		Assert(Result.WordCount == 1);                                       \
 		Assert(Result.SWords[0] == 0);                                       \
 	))                                                                       \
+	TEST(BigInt_SNegate, NegatesSmallAndLargeNumbers, (                      \
+		bigint Result = BigInt_SNegate(BigInt(32));                          \
+		Assert(Result.WordCount == 0);                                       \
+		Assert(Result.Word == -32);                                          \
+		bigint Source = BigInt_SAllocate(2);                                 \
+		Source.SWords[0] = 1;                                                \
+		Source.SWords[1] = -1;                                               \
+		Result = BigInt_SNegate(Source);                                     \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.SWords[0] == -1);                                      \
+		Assert(Result.SWords[1] == 0);                                       \
+	))                                                                       \
+	TEST(BigInt_SNegate, HandlesZero, (                                      \
+		bigint Source = BigInt_SAllocate(3);                                 \
+		Source.SWords[0] = 0;                                                \
+		Source.SWords[1] = 0;                                                \
+		Source.SWords[2] = 0;                                                \
+		bigint Result = BigInt_SNegate(Source);                              \
+		Assert(Result.WordCount == 0);                                       \
+		Assert(Result.Word == 0);                                            \
+	))                                                                       \
+	TEST(BigInt_SNegate, HandlesUnderflow, (                                 \
+		bigint Source = BigInt_SAllocate(2);                                 \
+		Source.SWords[0] = 0;                                                \
+		Source.SWords[1] = SSIZE_MIN;                                        \
+		bigint Result = BigInt_SNegate(Source);                              \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == SSIZE_MIN);                               \
+		Assert(Result.SWords[2] == 0);                                       \
+	))                                                                       \
+	TEST(BigInt_SAbs, NegatesOrReturnsUnchanged, (                           \
+		bigint Result = BigInt_SAbs(BigInt(-3));                             \
+		Assert(Result.WordCount == 0);                                       \
+		Assert(Result.Word == 3);                                            \
+		bigint Source = BigInt_SAllocate(2);                                 \
+		Source.SWords[0] = 1;                                                \
+		Source.SWords[1] = 2;                                                \
+		Result = BigInt_SAbs(Source);                                        \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.SWords == Source.SWords);                              \
+	))                                                                       \
 	TEST(BigInt_Compare, ReturnsNegativeForLess, (                           \
 		bigint A = BigInt(2);                                                \
 		bigint B = BigInt_SAllocate(2);                                      \
@@ -436,5 +545,6 @@ BigInt_ToInt(bigint A)
 		Assert(Result == -345);                                              \
 	))                                                                       \
 	;
+#endif
 
 #endif
