@@ -9,6 +9,9 @@
 
 #ifdef INCLUDE_HEADER
 
+// TODO: We can track the number of 0-words at the beginning and only write the words after to
+// memory, saving space.
+
 typedef struct bigint {
 	usize WordCount;
 	union {
@@ -184,8 +187,62 @@ BigInt_SInvert(bigint A)
 internal bigint
 BigInt_SShift(bigint A, ssize ShiftBy)
 {
-	// TODO
-	return BigInt(0);
+	if (ShiftBy == 0) return BigInt_Flatten(A);
+
+	bigint AP = BigInt_Flatten(A);
+	if (!AP.WordCount) AP.Words = (usize *) &A.Word, AP.WordCount = 1;
+
+	usize AC = BigInt_IsNegative(AP) ? USIZE_MAX : 0;
+
+	ssize WordsBy = ShiftBy / (ssize) SIZE_BITS;
+	ssize BitsBy  = ShiftBy % (ssize) SIZE_BITS;
+	if ((ssize) AP.WordCount + WordsBy <= 0) return BigInt(AC);
+
+	s32	  Msb;
+	usize MsbMask = AC ? ~AP.Words[AP.WordCount - 1] : AP.Words[AP.WordCount - 1];
+	if (!Intrin_BitScanForward64((u32 *) &Msb, MsbMask)) Msb = -1;
+	Msb++;
+
+	usize  AH, AL, DW;
+	ssize  I, J, Count;
+	bigint Result;
+
+	if (ShiftBy < 0) {
+		Count = (ssize) AP.WordCount + WordsBy - (BitsBy <= -Msb - 1);
+		if (!Count) return BigInt(AC);
+
+		for (I = 0; I < Count; I++) {
+			J  = I - WordsBy;
+			AH = J + 1 < AP.WordCount ? AP.Words[J + 1] : AC;
+			AL = J < AP.WordCount ? AP.Words[J] : AC;
+			DW = (AH << (SIZE_BITS - -BitsBy)) | (AL >> -BitsBy);
+
+			if (!I) {
+				if (Count == 1) return BigInt(DW);
+				else Result = BigInt_SAllocate(Count);
+			}
+
+			Result.Words[I] = DW;
+		}
+	} else {
+		Count = (ssize) AP.WordCount + WordsBy + (BitsBy >= SIZE_BITS - Msb);
+
+		for (I = 0; I < Count; I++) {
+			J  = I - WordsBy;
+			AH = J < 0 ? 0 : AP.Words[J];
+			AL = J - 1 < 0 ? 0 : AP.Words[J - 1];
+			DW = (AH << BitsBy) | (AL >> (SIZE_BITS - BitsBy));
+
+			if (!I) {
+				if (Count == 1) return BigInt(DW);
+				else Result = BigInt_SAllocate(Count);
+			}
+
+			Result.Words[I] = DW;
+		}
+	}
+
+	return Result;
 }
 
 internal bigint
@@ -417,6 +474,73 @@ BigInt_ToInt(bigint A)
 		Assert(Result.SWords[1] == 0);                                       \
 		Assert(Result.SWords[2] == SSIZE_MIN);                               \
 		Assert(Result.SWords[3] == SSIZE_MAX);                               \
+	))                                                                       \
+	TEST(BigInt_SShift, ReturnsSourceOnZeroShift, (                          \
+		bigint Source = BigInt_SAllocate(2);                                 \
+		Source.SWords[0] = 1;                                                \
+		Source.SWords[1] = 0;                                                \
+		bigint Result = BigInt_SShift(Source, 0);                            \
+		Assert(Result.WordCount == 1);                                       \
+		Assert(Result.Words == Source.Words);                                \
+	))                                                                       \
+	TEST(BigInt_SShift, ShiftsRightMultipleWords, (                          \
+		bigint Source = BigInt_SAllocate(3);                                 \
+		Source.SWords[0] = 0;                                                \
+		Source.SWords[1] = 0;                                                \
+		Source.SWords[2] = 64;                                               \
+		bigint Result = BigInt_SShift(Source, -SIZE_BITS - 2);               \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 16);                                      \
+		Source.SWords[2] = -64;                                              \
+		Result = BigInt_SShift(Source, -(SIZE_BITS * 3));                    \
+		Assert(Result.WordCount == 0);                                       \
+		Assert(Result.Word == -1);                                           \
+	))                                                                       \
+	TEST(BigInt_SShift, ShiftsRightWordBoundary, (                           \
+		bigint Source = BigInt_SAllocate(3);                                 \
+		Source.SWords[0] = 0;                                                \
+		Source.SWords[1] = 1;                                                \
+		Source.SWords[2] = 0;                                                \
+		bigint Result = BigInt_SShift(Source, -1);                           \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.SWords[0] == SSIZE_MIN);                               \
+		Assert(Result.SWords[1] == 0);                                       \
+		Source.SWords[1] = SSIZE_MIN;                                        \
+		Result = BigInt_SShift(Source, -SIZE_BITS + 1);                      \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 1);                                       \
+	))                                                                       \
+	TEST(BigInt_SShift, ShiftsLeftMultipleWords, (                           \
+		bigint Source = BigInt_SAllocate(2);                                 \
+		Source.SWords[0] = 0;                                                \
+		Source.SWords[1] = 16;                                               \
+		bigint Result = BigInt_SShift(Source, SIZE_BITS + 2);                \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 0);                                       \
+		Assert(Result.SWords[2] == 64);                                      \
+		Source.SWords[1] = -16;                                              \
+		Result = BigInt_SShift(Source, SIZE_BITS);                           \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 0);                                       \
+		Assert(Result.SWords[2] == -16);                                     \
+	))                                                                       \
+	TEST(BigInt_SShift, ShiftsLeftWordBoundary, (                            \
+		bigint Source = BigInt_SAllocate(2);                                 \
+		Source.SWords[0] = SSIZE_MIN;                                        \
+		Source.SWords[1] = 0;                                                \
+		bigint Result = BigInt_SShift(Source, 1);                            \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 1);                                       \
+		Source.SWords[0] = 1;                                                \
+		Result = BigInt_SShift(Source, SIZE_BITS - 1);                       \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.SWords[0] == SSIZE_MIN);                               \
+		Assert(Result.SWords[1] == 0);                                       \
 	))                                                                       \
 	TEST(BigInt_SAdd, AddsSmallNumbers, (                                    \
 		bigint Result = BigInt_SAdd(BigInt(3), BigInt(5));                   \
