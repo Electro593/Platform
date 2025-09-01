@@ -41,7 +41,7 @@ done
 CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -Wall -Wextra -fno-stack-protector -Werror" # /GS- /Gs0x100000
 CompilerSwitches="$CompilerSwitches -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
-CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_OPENGL"
+CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_OPENGL -D_WORD_SIZE=64"
 
 LinkerSwitches="$LinkerSwitches -nostdlib" # /subsystem:windows /stack:0x100000,0x100000 /machine:x64
 

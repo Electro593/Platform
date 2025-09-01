@@ -64,55 +64,41 @@
 #define EQUAL   0
 #define GREATER 1
 
-#ifdef _MSVC
-typedef signed __int8  s08;
-typedef signed __int16 s16;
-typedef signed __int32 s32;
-typedef signed __int64 s64;
+typedef signed char s08;
+typedef unsigned char u08;
+static_assert(sizeof(s08) == 1, "s08 must be 8-bit!");
+static_assert(sizeof(u08) == 1, "u08 must be 8-bit!");
 
-typedef unsigned __int8	 u08;
-typedef unsigned __int16 u16;
-typedef unsigned __int32 u32;
-typedef unsigned __int64 u64;
-#else
-typedef signed char		 s08;
-typedef signed short	 s16;
-typedef signed int		 s32;
+typedef signed short s16;
+typedef unsigned short u16;
+static_assert(sizeof(s16) == 2, "s16 must be 16-bit!");
+static_assert(sizeof(u16) == 2, "u16 must be 16-bit!");
+
+typedef signed int s32;
+typedef unsigned int u32;
+static_assert(sizeof(s32) == 4, "s32 must be 32-bit!");
+static_assert(sizeof(u32) == 4, "u32 must be 32-bit!");
+
+#if _WORD_SIZE == 64
 typedef signed long long s64;
-static_assert(sizeof(s08) == 1, "s08 must be 1 byte!");
-static_assert(sizeof(s16) == 2, "s16 must be 2 bytes!");
-static_assert(sizeof(s32) == 4, "s32 must be 4 bytes!");
-static_assert(sizeof(s64) == 8, "s64 must be 8 bytes!");
-
-typedef unsigned char	   u08;
-typedef unsigned short	   u16;
-typedef unsigned int	   u32;
 typedef unsigned long long u64;
-static_assert(sizeof(u08) == 1, "u08 must be 1 byte!");
-static_assert(sizeof(u16) == 2, "u16 must be 2 bytes!");
-static_assert(sizeof(u32) == 4, "u32 must be 4 bytes!");
-static_assert(sizeof(u64) == 8, "u64 must be 8 bytes!");
+static_assert(sizeof(s64) == 8, "s64 must be 64-bit!");
+static_assert(sizeof(u64) == 8, "u64 must be 64-bit!");
 #endif
 
-#ifdef _X64
+#if _WORD_SIZE == 64
 typedef s64 ssize;
 typedef u64 usize;
 
-#define SSIZE_MIN ((ssize)0x8000000000000000LL)
-#define SSIZE_MAX ((ssize)0x7FFFFFFFFFFFFFFFLL)
-#define USIZE_MIN ((usize)0x0000000000000000ULL)
-#define USIZE_MAX ((usize)0xFFFFFFFFFFFFFFFFULL)
+typedef s32 shalf;
+typedef u32 uhalf;
 #else
 typedef s32 ssize;
 typedef u32 usize;
 
-#define SSIZE_MIN ((ssize)0x80000000)
-#define SSIZE_MAX ((ssize)0x7FFFFFFF)
-#define USIZE_MIN ((usize)0x00000000U)
-#define USIZE_MAX ((usize)0xFFFFFFFFU)
+typedef s16 shalf;
+typedef u16 uhalf;
 #endif
-
-#define SIZE_BITS (sizeof(usize) * 8)
 
 typedef float  r32;
 typedef double r64;
@@ -187,7 +173,7 @@ TYPES
 #endif
 
 // TODO fix this whole mess up
-internal inline type
+inline internal type
 MakeMemberType(type_id TypeID, u32 Offset, u16 Size)
 {
 	return (type) { TYPEID_MEMBER | ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK) | TypeID,

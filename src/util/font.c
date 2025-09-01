@@ -500,7 +500,7 @@ Font_GetGlyphIndex(font Font, u32 Codepoint)
 					GlyphIndex = Codepoint + Table->Deltas[Index];
 				}
 			}
-			GlyphIndex %= U16_MAX + 1;
+			GlyphIndex %= (u32) U16_MAX + 1;
 		} break;
 	}
 	return GlyphIndex;

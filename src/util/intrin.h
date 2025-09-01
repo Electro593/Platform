@@ -133,6 +133,9 @@ Intrin_BitScanReverse64(u32 *Index, u64 Value)
 	return Value != 0;
 }
 
+#define Intrin_BitScanForward MAC_CONCAT(Intrin_BitScanForward, _WORD_SIZE)
+#define Intrin_BitScanReverse MAC_CONCAT(Intrin_BitScanReverse, _WORD_SIZE)
+
 intrin r32
 Intrin_Sqrt_R32(r32 Value)
 {
