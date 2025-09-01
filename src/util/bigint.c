@@ -29,6 +29,9 @@ typedef struct bigint {
 	EXPORT(b08,           BigInt_IsZero,     bigint A) \
 	EXPORT(b08,           BigInt_IsNegative, bigint A) \
 	\
+	EXPORT(bigint,        BigInt_Flatten,    bigint A) \
+	EXPORT(bigint,        BigInt_Splice,     bigint *A, usize FromInclusive, usize ToExclusive) \
+	\
 	EXPORT(bigint,        BigInt_SInvert,    bigint A) \
 	EXPORT(bigint,        BigInt_SAnd,       bigint A, bigint B) \
 	EXPORT(bigint,        BigInt_SOr,        bigint A, bigint B) \
@@ -80,6 +83,21 @@ BigInt_SCopy(bigint A)
 	return Result;
 }
 
+internal bigint
+BigInt_Flatten(bigint A)
+{
+	if (!A.WordCount) return A;
+
+	while (A.WordCount >= 2) {
+		ssize W	  = A.SWords[A.WordCount - 1];
+		usize Bit = A.Words[A.WordCount - 2] >> (SIZE_BITS - 1);
+		if ((W == -1 && Bit) || (W == 0 && !Bit)) A.WordCount--;
+		else break;
+	}
+
+	return A;
+}
+
 internal b08
 BigInt_IsZero(bigint A)
 {
@@ -95,19 +113,27 @@ BigInt_IsNegative(bigint A)
 	return (A.WordCount ? A.SWords[A.WordCount - 1] : A.Word) < 0;
 }
 
-internal bigint
-BigInt_Flatten(bigint A)
-{
-	if (!A.WordCount) return A;
+global ssize BigIntBackingZero		  = 0;
+global ssize BigIntBackingNegativeOne = -1;
 
-	while (A.WordCount >= 2) {
-		ssize W	  = A.SWords[A.WordCount - 1];
-		usize Bit = A.Words[A.WordCount - 2] >> (SIZE_BITS - 1);
-		if ((W == -1 && Bit) || (W == 0 && !Bit)) A.WordCount--;
-		else break;
+internal bigint
+BigInt_Splice(bigint *A, usize FromInclusive, usize ToExclusive)
+{
+	bigint Result = *A;
+	if (!A->WordCount) {
+		Result.WordCount = 1;
+		Result.SWords	 = &A->Word;
 	}
 
-	return A;
+	if (FromInclusive >= ToExclusive || FromInclusive >= Result.WordCount) {
+		Result.SWords = BigInt_IsNegative(Result) ? &BigIntBackingNegativeOne : &BigIntBackingZero;
+		Result.WordCount = 1;
+	} else {
+		Result.SWords	 += FromInclusive;
+		Result.WordCount  = MIN(ToExclusive, Result.WordCount) - FromInclusive;
+	}
+
+	return Result;
 }
 
 #define BIGINT_BINOP(C0, AOP, BOP, BINOP, ITER, CARRY_CODE)            \
@@ -187,7 +213,7 @@ BigInt_SInvert(bigint A)
 internal bigint
 BigInt_SShift(bigint A, ssize ShiftBy)
 {
-	if (ShiftBy == 0) return BigInt_Flatten(A);
+	if (ShiftBy == 0 || BigInt_IsZero(A)) return BigInt_Flatten(A);
 
 	bigint AP = BigInt_Flatten(A);
 	if (!AP.WordCount) AP.Words = (usize *) &A.Word, AP.WordCount = 1;
@@ -242,7 +268,7 @@ BigInt_SShift(bigint A, ssize ShiftBy)
 		}
 	}
 
-	return Result;
+	return BigInt_Flatten(Result);
 }
 
 internal bigint
@@ -270,10 +296,83 @@ BigInt_SAbs(bigint A)
 }
 
 internal bigint
+_BigInt_SMul(bigint A, bigint B, usize M)
+{
+	if (M == 1) {
+		usize HalfShift = SIZE_BITS / 2;
+		usize HalfMask	= (1ull << HalfShift) - 1;
+
+		usize A0 = A.Words[0] & HalfMask;
+		usize A1 = A.Words[0] >> HalfShift;
+		usize B0 = B.Words[0] & HalfMask;
+		usize B1 = B.Words[0] >> HalfShift;
+
+		usize P00 = A0 * B0;
+		usize P01 = A0 * B1;
+		usize P10 = A1 * B0;
+		usize P11 = A1 * B1;
+
+		usize Cross = (P00 >> HalfShift) + (P10 & HalfMask) + P01;
+		usize Upper = (P10 >> HalfShift) + (Cross >> HalfShift) + P11;
+		usize Lower = (Cross << HalfShift) | (P00 & HalfMask);
+
+		bigint Result	= BigInt_SAllocate(2);
+		Result.Words[0] = Lower;
+		Result.Words[1] = Upper;
+		return BigInt_Flatten(Result);
+	} else {
+		bigint A0 = BigInt_Splice(&A, 0, M / 2);
+		bigint B0 = BigInt_Splice(&B, 0, M / 2);
+		bigint A1 = BigInt_Splice(&A, M / 2, M);
+		bigint B1 = BigInt_Splice(&B, M / 2, M);
+
+		bigint P00 = _BigInt_SMul(A0, B0, M / 2);
+		bigint P01 = _BigInt_SMul(A0, B1, M - M / 2);
+		bigint P10 = _BigInt_SMul(A1, B0, M - M / 2);
+		bigint P11 = _BigInt_SMul(A1, B1, M - M / 2);
+
+		bigint Cross = BigInt_SAdd(P01, P10);
+		Cross		 = BigInt_SShift(Cross, M / 2 * SIZE_BITS);
+		P11			 = BigInt_SShift(P11, 2 * (M / 2) * SIZE_BITS);
+
+		bigint Result = BigInt_SAdd(P00, Cross);
+		Result		  = BigInt_SAdd(Result, P11);
+		return BigInt_Flatten(Result);
+	}
+}
+
+internal bigint
 BigInt_SMul(bigint A, bigint B)
 {
-	// TODO
-	return BigInt(0);
+	bigint AP = BigInt_Flatten(A);
+	bigint BP = BigInt_Flatten(B);
+	if (!AP.WordCount) AP.Words = (usize *) &A.Word, AP.WordCount = 1;
+	if (!BP.WordCount) BP.Words = (usize *) &B.Word, BP.WordCount = 1;
+
+	Stack_Push();
+
+	b08 IsNegative = FALSE;
+	if (BigInt_IsNegative(AP)) {
+		AP		   = BigInt_SNegate(AP);
+		IsNegative = !IsNegative;
+	}
+	if (BigInt_IsNegative(BP)) {
+		BP		   = BigInt_SNegate(BP);
+		IsNegative = !IsNegative;
+	}
+
+	bigint Result = _BigInt_SMul(AP, BP, MAX(AP.WordCount, BP.WordCount));
+
+	if (IsNegative) Result = BigInt_SNegate(Result);
+
+	Stack_Pop();
+
+	if (Result.WordCount == 1) return BigInt(Result.SWords[0]);
+
+	vptr OldWords = Result.Words;
+	Result.Words  = Stack_Allocate(Result.WordCount * sizeof(usize));
+	Mem_Cpy(Result.Words, OldWords, Result.WordCount * sizeof(usize));
+	return Result;
 }
 
 internal void
@@ -419,6 +518,40 @@ BigInt_ToInt(bigint A)
 		Assert(BigInt_Flatten(Source).WordCount == 3);                       \
 		Source.Words[3] = USIZE_MAX;                                         \
 		Assert(BigInt_Flatten(Source).WordCount == 5);                       \
+	))                                                                       \
+	TEST(BigInt_Splice, SplicesCorrectly, (                                  \
+		bigint Source = BigInt_SAllocate(5);                                 \
+		Source.SWords[0] = -32;                                              \
+		Source.SWords[1] = 0;                                                \
+		Source.SWords[2] = 35;                                               \
+		Source.SWords[3] = 0;                                                \
+		Source.SWords[4] = 0;                                                \
+		bigint Result = BigInt_Splice(&Source, 1, 4);                        \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 35);                                      \
+		Assert(Result.SWords[2] == 0);                                       \
+	))                                                                       \
+	TEST(BigInt_Splice, TruncatesIfOverflow, (                               \
+		bigint Source = BigInt_SAllocate(2);                                 \
+		Source.SWords[0] = -32;                                              \
+		Source.SWords[1] = 35;                                               \
+		bigint Result = BigInt_Splice(&Source, 1, 3);                        \
+		Assert(Result.WordCount == 1);                                       \
+		Assert(Result.SWords == Source.SWords+1);                            \
+	))                                                                       \
+	TEST(BigInt_Splice, ReturnsSignIfEmpty, (                                \
+		bigint Source = BigInt(-2);                                          \
+		bigint Result = BigInt_Splice(&Source, 1, 2);                        \
+		Assert(Result.WordCount == 1);                                       \
+		Assert(Result.SWords[0] == -1);                                      \
+		Source = BigInt(4);                                                  \
+		Result = BigInt_Splice(&Source, 1, 2);                               \
+		Assert(Result.WordCount == 1);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Result = BigInt_Splice(&Source, 0, 0);                               \
+		Assert(Result.WordCount == 1);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
 	))                                                                       \
 	TEST(BigInt_SAnd, ANDsCorrectly, (                                       \
 		bigint A = BigInt_SAllocate(2);                                      \
@@ -634,6 +767,56 @@ BigInt_ToInt(bigint A)
 		Result = BigInt_SAbs(Source);                                        \
 		Assert(Result.WordCount == 2);                                       \
 		Assert(Result.SWords == Source.SWords);                              \
+	))                                                                       \
+	TEST(BigInt_SMul, MultipliesCorrectly, (                                 \
+		bigint A = BigInt_SAllocate(2);                                      \
+		A.SWords[0] = 0;                                                     \
+		A.SWords[1] = 1;                                                     \
+		bigint B = BigInt_SAllocate(2);                                      \
+		B.SWords[0] = 0;                                                     \
+		B.SWords[1] = 1;                                                     \
+		bigint Result = BigInt_SMul(A, B);                                   \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 0);                                       \
+		Assert(Result.SWords[2] == 1);                                       \
+	))                                                                       \
+	TEST(BigInt_SMul, HandlesNegatives, (                                    \
+		bigint A = BigInt_SAllocate(2);                                      \
+		A.SWords[0] = 0;                                                     \
+		A.SWords[1] = 1;                                                     \
+		bigint B = BigInt_SAllocate(2);                                      \
+		B.SWords[0] = 0;                                                     \
+		B.SWords[1] = -2;                                                    \
+		bigint Result = BigInt_SMul(A, B);                                   \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 0);                                       \
+		Assert(Result.SWords[2] == -2);                                      \
+	))                                                                       \
+	TEST(BigInt_SMul, HandlesDoubleNegation, (                               \
+		bigint A = BigInt_SAllocate(2);                                      \
+		A.SWords[0] = 0;                                                     \
+		A.SWords[1] = -3;                                                    \
+		bigint B = BigInt_SAllocate(2);                                      \
+		B.SWords[0] = 0;                                                     \
+		B.SWords[1] = -2;                                                    \
+		bigint Result = BigInt_SMul(A, B);                                   \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 0);                                       \
+		Assert(Result.SWords[2] == 6);                                       \
+	))                                                                       \
+	TEST(BigInt_SMul, RespectsUnevenSizes, (                                 \
+		bigint A = BigInt_SAllocate(7);                                      \
+		Mem_Set(A.SWords, 0, sizeof(usize) * 6);                             \
+		A.SWords[6] = 3;                                                     \
+		bigint B = BigInt_SAllocate(3);                                      \
+		Mem_Set(B.SWords, 0, sizeof(usize) * 2);                             \
+		B.SWords[2] = 2;                                                     \
+		bigint Result = BigInt_SMul(A, B);                                   \
+		Assert(Result.WordCount == 9);                                       \
+		Assert(Result.SWords[8] == 6);                                       \
 	))                                                                       \
 	TEST(BigInt_Compare, ReturnsNegativeForLess, (                           \
 		bigint A = BigInt(2);                                                \
