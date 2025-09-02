@@ -132,6 +132,6 @@ for Module in Platform/src/*/; do build_module; done
 if [[ -e build/*.obj ]]; then rm build/*.obj > /dev/null; fi
 if [[ -e build/*.exp ]]; then rm build/*.exp > /dev/null; fi
 
-cp -r assets build/assets
+if [[ -e assets/ ]]; then cp -r assets build/assets; fi
 
 exit $Result

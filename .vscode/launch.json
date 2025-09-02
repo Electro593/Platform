@@ -22,7 +22,7 @@
                     "ignoreFailures": true
                 },
                 {
-                    "text": "source ${workspaceFolder}/windows.gdbinit",
+                    "text": "source ${workspaceFolder}/Platform/scripts/windows.gdbinit",
                     "ignoreFailures": false
                 }
             ]
@@ -47,7 +47,7 @@
                     "ignoreFailures": true
                 },
                 {
-                    "text": "source ${workspaceFolder}/linux.gdbinit",
+                    "text": "source ${workspaceFolder}/Platform/scripts/linux.gdbinit",
                     "ignoreFailures": false
                 }
             ]
