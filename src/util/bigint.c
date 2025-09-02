@@ -346,11 +346,11 @@ BigInt_SAdd(bigint A, bigint B)
 
 	bigint Result = BigInt(0);
 	for (usize I = 0; I < Count + 1; I++) {
-		AW	  = I < AP.WordCount ? AP.Words[I] : AC;
-		BW	  = I < BP.WordCount ? BP.Words[I] : BC;
-		DW	  = AW + BW + Carry;
-		Carry = DW >> UHALF_BITS;
-		DW &= UHALF_MAX;
+		AW	   = I < AP.WordCount ? AP.Words[I] : AC;
+		BW	   = I < BP.WordCount ? BP.Words[I] : BC;
+		DW	   = AW + BW + Carry;
+		Carry  = DW >> UHALF_BITS;
+		DW	  &= UHALF_MAX;
 
 		if (I == Count) {
 			usize Bit = (I == 1 ? (uhalf) Result.Word : Result.Words[I - 1]) >> (UHALF_BITS - 1);
@@ -392,11 +392,11 @@ BigInt_SSub(bigint A, bigint B)
 
 	bigint Result = BigInt(0);
 	for (usize I = 0; I < Count + 1; I++) {
-		AW	  = I < AP.WordCount ? AP.Words[I] : AC;
-		BW	  = I < BP.WordCount ? BP.Words[I] : BC;
-		DW	  = AW + (~BW & UHALF_MAX) + Carry;
-		Carry = DW >> UHALF_BITS;
-		DW &= UHALF_MAX;
+		AW	   = I < AP.WordCount ? AP.Words[I] : AC;
+		BW	   = I < BP.WordCount ? BP.Words[I] : BC;
+		DW	   = AW + (~BW & UHALF_MAX) + Carry;
+		Carry  = DW >> UHALF_BITS;
+		DW	  &= UHALF_MAX;
 
 		if (I == Count) {
 			usize Bit = (I == 1 ? (uhalf) Result.Word : Result.Words[I - 1]) >> (UHALF_BITS - 1);
@@ -502,54 +502,130 @@ BigInt_SMul(bigint A, bigint B)
 	return Result;
 }
 
-// internal void
-// BigInt_DivideUnsigned(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
-// {
-// Since A and B are expected to be flattened multiword positive numbers, there won't be any
-// leading zeroes or 0-counts that we need to consider.
+internal void
+BigInt_DivideUnsignedSingleword(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
+{
+	if (QuotOut) {
+		*QuotOut = BigInt_SAllocate(MAX(A.WordCount - B.WordCount + 1, 1));
+		Mem_Set(QuotOut->Words, 0, QuotOut->WordCount * sizeof(uhalf));
+	}
+	if (RemOut) {
+		*RemOut = BigInt_SAllocate(B.WordCount);
+		Mem_Set(RemOut->Words, 0, RemOut->WordCount * sizeof(uhalf));
+	}
 
-// 	Stack_Push();
-//
-// 	// Obtain the normalization shift, e.g. the number of bits B[n-1] needs to be shifted by
-// until
-// 	// the leading bit is set.
-// 	usize BTop = B.Words[B.WordCount - 1];
-// 	u32	  NormShift;
-// 	Intrin_BitScanForward64(&NormShift, BTop);
-// 	NormShift = 31 - (NormShift > 32 ? NormShift - 32 : NormShift);
-//
-// 	// Copy A and B into U and V respectively, shifting by NormShift. The normalization
-// 	// allows the quotient estimation later to be more accurate. We're using mutable buffers
-// here
-// 	// instead of calling `BigInt_SShift` for performance.
-// 	bigint U = BigInt_SAllocate(A.WordCount + 1);
-// 	bigint V = BigInt_SAllocate(B.WordCount);
-//
-// 	U.Words[0] = A.Words[0] << NormShift;
-// 	for (usize I = 1; I < A.WordCount; I++)
-// 		U.Words[I] = (A.Words[I] << NormShift) | (A.Words[I - 1] >> (SIZE_BITS - NormShift));
-// 	U.Words[A.WordCount] = A.Words[A.WordCount - 1] >> (SIZE_BITS - NormShift);
-//
-// 	V.Words[0] = B.Words[0] << NormShift;
-// 	for (usize I = 1; I < B.WordCount; I++)
-// 		V.Words[I] = (B.Words[I] << NormShift) | (B.Words[I - 1] >> (SIZE_BITS - NormShift));
-//
-// 	for (usize I = 0; I < A.WordCount; I++)
-// 		usize DigitIndex = A.WordCount - I;
-//
-// 		usize UWH, UWH, VW, QH, RHU, RHL;
-// 		UWH = U.Words[DigitIndex];
-// 		UWL = U.Words[DigitIndex - 1];
-// 		VW = V.Words[V.WordCount-1];
-// 		BigInt_Divide2WBy1W(UWH, UWL, VW, &QH, &RHU, *RHL);
-//
-// 		if (UWH == 1 && UWL == 0 || )
-// 	}
-// }
+	Stack_Push();
+
+	bigint U = BigInt_SCopy(A);
+
+	Assert(B.WordCount == 1);
+	usize VW = B.Words[0];
+
+	for (usize I = 0; I < A.WordCount - B.WordCount; I++) {
+		usize DigitIndex = A.WordCount - I;
+
+		usize UW =
+			((usize) U.Words[DigitIndex - 1] << UHALF_BITS) | (usize) U.Words[DigitIndex - 2];
+		usize Q = UW / VW;
+		usize R = UW % VW;
+
+		U.Words[DigitIndex - 2] = R;
+
+		if (QuotOut) QuotOut->Words[DigitIndex - B.WordCount] = Q;
+	}
+
+	if (RemOut) Mem_Cpy(RemOut->Words, B.Words, B.WordCount * sizeof(uhalf));
+
+	Stack_Pop();
+}
+
+internal void
+BigInt_DivideUnsignedMultiword(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
+{
+	// Since A and B are expected to be flattened multiword positive numbers, there won't be any
+	// leading zeroes or 0-counts that we need to consider.
+
+	if (QuotOut) {
+		*QuotOut = BigInt_SAllocate(MAX(A.WordCount - B.WordCount + 1, 1));
+		Mem_Set(QuotOut->Words, 0, QuotOut->WordCount * sizeof(uhalf));
+	}
+	if (RemOut) {
+		*RemOut = BigInt_SAllocate(B.WordCount);
+		Mem_Set(RemOut->Words, 0, RemOut->WordCount * sizeof(uhalf));
+	}
+
+	Stack_Push();
+
+	// Obtain the normalization shift, e.g. the number of bits B[n-1] needs to be shifted by
+	// until the leading bit is set.
+	u32	  NormShift;
+	uhalf BTop = B.Words[B.WordCount - 1];
+	Intrin_BitScanForward(&NormShift, BTop);
+	NormShift = 31 - NormShift;
+
+	// Copy A and B into U and V respectively, shifting by NormShift. The normalization
+	// allows the quotient estimation later to be more accurate. We're using mutable buffers
+	// here instead of calling `BigInt_SShift` for performance.
+	bigint U = BigInt_SAllocate(A.WordCount + 1);
+	bigint V = BigInt_SAllocate(B.WordCount);
+
+	U.Words[0] = A.Words[0] << NormShift;
+	for (usize I = 1; I < A.WordCount; I++)
+		U.Words[I] = (A.Words[I] << NormShift) | (A.Words[I - 1] >> (UHALF_BITS - NormShift));
+	U.Words[A.WordCount] = A.Words[A.WordCount - 1] >> (UHALF_BITS - NormShift);
+
+	V.Words[0] = B.Words[0] << NormShift;
+	for (usize I = 1; I < B.WordCount; I++)
+		V.Words[I] = (B.Words[I] << NormShift) | (B.Words[I - 1] >> (UHALF_BITS - NormShift));
+
+	// Perform long division
+	for (usize I = 0; I <= A.WordCount - B.WordCount; I++) {
+		usize DigitIndex = A.WordCount - I;
+
+		// Estimate a quotient based on the biggest two digits of A and the biggest of B. Refine the
+		// estimate by checking the next least significant digits.
+		usize UW   = ((usize) U.Words[DigitIndex] << UHALF_BITS) | (usize) U.Words[DigitIndex - 1];
+		usize VW   = (usize) V.Words[V.WordCount - 1];
+		usize QHat = UW / VW;
+		usize RHat = UW % VW;
+
+		do {
+			if (QHat < UHALF_MAX
+				&& QHat * (usize) V.Words[V.WordCount - 2]
+					   <= (RHat << UHALF_BITS) + (usize) U.Words[DigitIndex - 2])
+				break;
+			QHat--;
+			RHat += VW;
+		} while (RHat < UHALF_MAX);
+
+		usize UL   = (UW << UHALF_BITS) | (usize) U.Words[DigitIndex - 2];
+		usize VL   = (VW << UHALF_BITS) | (usize) V.Words[V.WordCount - 2];
+		usize Prod = QHat * VL;
+		Assert(UL > Prod);
+		usize R = UL - Prod;
+
+		U.Words[DigitIndex - 1] = R >> UHALF_BITS;
+		U.Words[DigitIndex - 2] = R & UHALF_MAX;
+
+		if (QuotOut) QuotOut->Words[DigitIndex - B.WordCount] = QHat;
+	}
+
+	if (RemOut) {
+		// Shift the remainder (now U) into RemOut
+		for (usize I = 0; I < U.WordCount - 1; I++)
+			RemOut->Words[I] =
+				(U.Words[I + 1] << (UHALF_BITS - NormShift)) | (U.Words[I] >> NormShift);
+		RemOut->Words[U.WordCount - 1] = U.Words[U.WordCount - 1] >> NormShift;
+	}
+
+	Stack_Pop();
+}
 
 internal void
 BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 {
+	//TODO: Tests
+	
 	Stack_Push();
 	bigint AP = A, BP = B;
 
@@ -574,6 +650,8 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 	BP = BigInt_Flatten(BP);
 	if (!AP.WordCount) AP.SWords = &A.Word, AP.WordCount = 1;
 	if (!BP.WordCount) BP.SWords = &B.Word, BP.WordCount = 1;
+	if (AP.Words[AP.WordCount - 1] == 0) AP.WordCount--;
+	if (BP.Words[BP.WordCount - 1] == 0) BP.WordCount--;
 
 	bigint Quot, Rem;
 	s08	   Cmp = BigInt_Compare(AP, BP);
@@ -586,8 +664,10 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 	} else if (BP.WordCount == 1 && BP.SWords[0] == 1) {
 		Quot = A;
 		Rem	 = BigInt(0);
+	} else if (BP.WordCount >= 2) {
+		BigInt_DivideUnsignedMultiword(AP, BP, &Quot, &Rem);
 	} else {
-		// BigInt_DivideUnsigned(AP, BP, &Quot, &Rem);
+		BigInt_DivideUnsignedSingleword(AP, BP, &Quot, &Rem);
 	}
 
 	if (IsNegative) {
@@ -621,7 +701,6 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 internal bigint
 BigInt_SDiv(bigint A, bigint B)
 {
-	// TODO: Tests
 	bigint Quot;
 	BigInt_SDivRem(A, B, &Quot, NULL);
 	return Quot;
@@ -630,7 +709,6 @@ BigInt_SDiv(bigint A, bigint B)
 internal bigint
 BigInt_SRem(bigint A, bigint B)
 {
-	// TODO: Tests
 	bigint Rem;
 	BigInt_SDivRem(A, B, NULL, &Rem);
 	return Rem;
