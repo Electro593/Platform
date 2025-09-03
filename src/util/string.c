@@ -396,9 +396,6 @@ typedef enum fstring_format_status {
 	/// index specifiers are used, such as if you reference 1$ and 3$ but never 2$.
 	FSTRING_FORMAT_INDEX_NOT_PRESENT,
 
-	/// @brief A param index was invalid. This occurs if the index number was 0.
-	FSTRING_FORMAT_INDEX_INVALID,
-
 	/// @brief The usage of param indexes was inconsistent within the format string. Indexes are
 	/// all-or-nothing, so either all values, variable widths, and variable precisions use
 	/// them, or none do.
@@ -428,7 +425,6 @@ global string FStringFormatStatusDescriptions[] = {
 	[FSTRING_FORMAT_INT_NOT_PRESENT]   = CStringL("Expected a number"),
 	[FSTRING_FORMAT_INT_OVERFLOW]	   = CStringL("Number was too large"),
 	[FSTRING_FORMAT_INDEX_NOT_PRESENT] = CStringL("Not all parameters were referenced"),
-	[FSTRING_FORMAT_INDEX_INVALID]	   = CStringL("Parameter indexes cannot be zero"),
 	[FSTRING_FORMAT_INDEX_INCONSISTENT] =
 		CStringL("Format strings cannot contain both indexed and non-indexed parameters"),
 	[FSTRING_FORMAT_TYPE_INVALID] = CStringL("Invalid format type"),
@@ -763,7 +759,7 @@ typedef struct fstring_format_list {
 internal c08
 FString_PeekCursor(string *FormatCursor)
 {
-	if (!FormatCursor || !FormatCursor->Text || FormatCursor->Length <= 0) return 0;
+	if (!FormatCursor || !FormatCursor->Text || !FormatCursor->Length) return 0;
 	return FormatCursor->Text[0];
 }
 
@@ -772,7 +768,7 @@ FString_PeekCursor(string *FormatCursor)
 internal void
 FString_BumpCursor(string *FormatCursor)
 {
-	if (!FormatCursor || !FormatCursor->Text || FormatCursor->Length <= 0) return;
+	if (!FormatCursor || !FormatCursor->Text || !FormatCursor->Length) return;
 	FormatCursor->Text++;
 	FormatCursor->Length--;
 }
@@ -780,7 +776,7 @@ FString_BumpCursor(string *FormatCursor)
 /// @brief Parse an unsigned decimal int from a format specifier, such as a width, precision, or
 /// param index, and report whether it was valid, invalid, or overflowed.
 ///
-/// Regex: `[0-9]+`
+/// Regex: `[1-9][0-9]*`
 /// @param[in,out] FormatCursor A cursor potentially pointing to the beginning of a number in the
 /// format specifier. After return, this will point to the first character after the number or the
 /// first invalid character encountered.
@@ -791,13 +787,13 @@ FString_BumpCursor(string *FormatCursor)
 ///
 /// - `FSTRING_FORMAT_INT_OVERFLOW`: The parsed number exceeds an s32.
 ///
-/// - `FSTRING_FORMAT_INT_NOT_PRESENT`: No number was found.
+/// - `FSTRING_FORMAT_INT_NOT_PRESENT`: No number was found, or the number started with 0.
 internal fstring_format_status
 FString_ParseFormatInt(string *FormatCursor, s32 *IntOut)
 {
-	// If the first character isn't a digit, fail.
-	u08 Digit = FString_PeekCursor(FormatCursor) - '0';
-	if (Digit >= 10) return FSTRING_FORMAT_INT_NOT_PRESENT;
+	// If the first character isn't a nonzero digit, fail.
+	u08 Digit = FString_PeekCursor(FormatCursor) - '1';
+	if (Digit >= 9) return FSTRING_FORMAT_INT_NOT_PRESENT;
 
 	// Otherwise, iterate until we hit a non-digit.
 	s32 Int = 0;
@@ -814,7 +810,7 @@ FString_ParseFormatInt(string *FormatCursor, s32 *IntOut)
 /// @brief Extract a param index from a format specifier, and handle index usage consistency
 /// accordingly. Note that param indexes cannot be 0.
 ///
-/// Regex: `[0-9]+\\$`
+/// Regex: `[1-9][0-9]*\\$`
 /// @param[in,out] FormatCursor A cursor potentially pointing to the beginning of a parameter index
 /// in the format specifier. After return, this will point to the first character after the index on
 /// success, the first character after the number on `FSTRING_FORMAT_INDEX_INVALID`, or the first
@@ -833,9 +829,9 @@ FString_ParseFormatInt(string *FormatCursor, s32 *IntOut)
 /// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: The index's presence doesn't match the value in
 /// `UseIndexes` and `SetIndexUsage` is true.
 ///
-/// - `FSTRING_FORMAT_INDEX_INVALID`: The index number was 0.
-///
 /// - `FSTRING_FORMAT_INDEX_NOT_PRESENT`: A number was found, but it wasn't an index.
+///
+/// - `FSTRING_FORMAT_INT_OVERFLOW`: A number was found, but it was too large.
 internal fstring_format_status
 FString_ParseFormatIndex(string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b08 SetIndexUsage)
 {
@@ -862,7 +858,6 @@ FString_ParseFormatIndex(string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b
 	if (FString_PeekCursor(FormatCursor) == '$') {
 		if (SetIndexUsage) *UseIndexes = TRUE;
 		else if (!*UseIndexes) return FSTRING_FORMAT_INDEX_INCONSISTENT;
-		if (Index == 0) return FSTRING_FORMAT_INDEX_INVALID;
 		FString_BumpCursor(FormatCursor);
 		return FSTRING_FORMAT_VALID;
 	}
@@ -874,7 +869,7 @@ FString_ParseFormatIndex(string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b
 /// @brief Extract flags from a format specifier, such as alignment, signage, and notation. Flags
 /// may be repeated, though you should try not to, and duplicates will be ignored.
 ///
-/// Regex: `[-+ #'0]*`
+/// Regex: `[\\-+ #'0]*`
 /// @param[in,out] FormatCursor A cursor potentially pointing to the beginning of the list of flags
 /// in a format specifier. After return, this will point to the first character after the flags or
 /// the first invalid character encountered.
@@ -921,10 +916,10 @@ FString_ParseFormatType(string *FormatCursor, fstring_format_type *TypeOut)
 {
 	fstring_format_type State = FSTRING_FORMAT_SIZE_INITIAL;
 	while (State < FSTRING_FORMAT_SIZE_DONE) {
-		u08 Transition = FString_PeekCursor(FormatCursor) - '0';
+		u08 Transition = FString_PeekCursor(FormatCursor) - '1';
 
 		// Get the next state from the transition table. All invalid transitions return 0.
-		State = FStringFormatTypeStateMachine[State][Transition];
+		State = Transition < 74 ? FStringFormatTypeStateMachine[State][Transition] : 0;
 		if (!State) return FSTRING_FORMAT_TYPE_INVALID;
 
 		FString_BumpCursor(FormatCursor);
@@ -946,8 +941,15 @@ FString_ParseFormatType(string *FormatCursor, fstring_format_type *TypeOut)
 /// Cannot be null.
 /// @param[in] SetIndexUsage A boolean indicating whether to modify or respect the value in
 /// `UseIndexes`.
-/// @return `FSTRING_FORMAT_VALID` if parsing succeeded. Otherwise, returns the parsing error
-/// encountered. `FormatSpecifier` will point to the character where the error occurred.
+/// @return
+/// - `FSTRING_FORMAT_VALID`: The format was successfully parsed.
+///
+/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width, precision, or param index was too large.
+///
+/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: Only if `SetIndexUsage` is false: `UseIndexes` was true
+/// and a param's index was missing, or `UseIndexes` was false and a param index was found.
+///
+/// - `FSTRING_FORMAT_TYPE_INVALID`: The format's size and type had an invalid pattern.
 internal fstring_format_status
 FString_ParseFormat(
 	string		   *FormatCursor,
@@ -986,10 +988,10 @@ FString_ParseFormat(
 
 		Format.Type |= FSTRING_FORMAT_FLAG_PARAM_WIDTH;
 	} else {
-		// It's not provided by an argument, so it's either a number or default.
+		// It's not provided by an argument, so it's either a number or 0.
 		Status = FString_ParseFormatInt(FormatCursor, &Format.Width);
-		if (Status != FSTRING_FORMAT_VALID && Status != FSTRING_FORMAT_INT_NOT_PRESENT)
-			return Status;
+		if (Status == FSTRING_FORMAT_INT_NOT_PRESENT) Format.Width = 0;
+		else if (Status != FSTRING_FORMAT_VALID) return Status;
 	}
 
 precision:
@@ -1007,9 +1009,10 @@ precision:
 
 			Format.Type |= FSTRING_FORMAT_FLAG_PARAM_PRECISION;
 		} else {
-			// It's not provided by an argument, so it must be a number or it's invalid.
+			// It's not provided by an argument, so it's either a number or 0.
 			Status = FString_ParseFormatInt(FormatCursor, &Format.Precision);
-			if (Status != FSTRING_FORMAT_VALID) return Status;
+			if (Status == FSTRING_FORMAT_INT_NOT_PRESENT) Format.Precision = 0;
+			else if (Status != FSTRING_FORMAT_VALID) return Status;
 		}
 	}
 
@@ -1028,8 +1031,14 @@ precision:
 /// @param[in,out] FormatString A cursor pointing to the beginning of a format string. After return,
 /// this will point to the original string or the first invalid character encountered.
 /// @param[out] FormatListOut A pointer to the resulting data structure with the format list.
-/// @return `FSTRING_FORMAT_VALID` if parsing of all formats succeeded. Otherwise, returns the
-/// parsing error encountered.
+/// @return
+/// - `FSTRING_FORMAT_VALID`: All formats were successfully parsed.
+///
+/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width, precision, or param index was too large.
+///
+/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: At least one, but not all params specified an index.
+///
+/// - `FSTRING_FORMAT_TYPE_INVALID`: A format's size and type had an invalid pattern.
 internal fstring_format_status
 FString_ParseFormatString(string *FormatCursor, fstring_format_list *FormatListOut)
 {
@@ -1053,10 +1062,8 @@ FString_ParseFormatString(string *FormatCursor, fstring_format_list *FormatListO
 				// As an optimization, we only need to parse the formats if indexes or used, or to
 				// determine whether params are used in the first place.
 				b08 First = FormatList.FormatCount == 0;
-				if (First || UseIndexes) {
-					Status = FString_ParseFormat(FormatCursor, &Format, &UseIndexes, First);
-					if (Status != FSTRING_FORMAT_VALID) return Status;
-				}
+				Status	  = FString_ParseFormat(FormatCursor, &Format, &UseIndexes, First);
+				if (Status != FSTRING_FORMAT_VALID) return Status;
 
 				FormatList.FormatCount++;
 
@@ -1091,7 +1098,7 @@ FString_ParseFormatString(string *FormatCursor, fstring_format_list *FormatListO
 	}
 
 	// We can go ahead and early-out if there weren't any formats
-	if (!FormatList.FormatCount) return FSTRING_FORMAT_VALID;
+	if (!FormatList.FormatCount) goto end;
 
 	FormatList.Formats	 = Stack_Allocate(FormatList.FormatCount * sizeof(fstring_format));
 	FormatList.ExtraData = Stack_Allocate(FormatList.ExtraDataSize);
@@ -1127,6 +1134,7 @@ FString_ParseFormatString(string *FormatCursor, fstring_format_list *FormatListO
 		FString_BumpCursor(FormatCursor);
 	}
 
+end:
 	if (FormatListOut) *FormatListOut = FormatList;
 	*FormatCursor = FormatList.FormatString;
 	return FSTRING_FORMAT_VALID;
@@ -2062,5 +2070,559 @@ FString(string Format, ...)
 // - Floating point support
 // - Errno? Might need an architectural rework...
 // - Standardize length (# code units) vs codepoint count, update functions accordingly
+// - Match format string encoding with output encoding
+
+#ifndef REGION_STRING_TESTS
+
+#define STRING_TESTS                                                                                        \
+	TEST(FString_PeekCursor, WorksCorrectly, (                                                              \
+	    c08 Result = FString_PeekCursor(NULL);                                                              \
+		Assert(Result == 0);                                                                                \
+		string Cursor = {0};                                                                                \
+	    Result = FString_PeekCursor(&Cursor);                                                               \
+		Assert(Result == 0);                                                                                \
+		Cursor = CString("");                                                                               \
+	    Result = FString_PeekCursor(&Cursor);                                                               \
+		Assert(Result == 0);                                                                                \
+		Cursor = CString("Test");                                                                           \
+	    Result = FString_PeekCursor(&Cursor);                                                               \
+		Assert(Result == 'T');                                                                              \
+	))                                                                                                      \
+	TEST(FString_BumpCursor, WorksCorrectly, (                                                              \
+	    FString_BumpCursor(NULL);                                                                           \
+		string Cursor = {0};                                                                                \
+	    FString_BumpCursor(&Cursor);                                                                        \
+		Assert(Cursor.Text == NULL);                                                                        \
+		Assert(Cursor.Length == 0);                                                                         \
+		c08 *Empty = "";                                                                                    \
+		Cursor = CString(Empty);                                                                            \
+	    FString_BumpCursor(&Cursor);                                                                        \
+		Assert(Cursor.Text == Empty);                                                                       \
+		Assert(Cursor.Length == 0);                                                                         \
+		Cursor = CString("Test");                                                                           \
+	    FString_BumpCursor(&Cursor);                                                                        \
+		Assert(String_Cmp(Cursor, CString("est")) == 0);                                                    \
+	))                                                                                                      \
+	TEST(FString_ParseFormatInt, ReportsNotPresentOnNonDigit, (                                             \
+	    fstring_format_status Result = FString_ParseFormatInt(NULL, NULL);                                  \
+		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
+		s32 Int = -92;                                                                                      \
+	    Result = FString_ParseFormatInt(NULL, &Int);                                                        \
+		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
+		Assert(Int == -92);                                                                                 \
+		string Cursor = CString("-23");                                                                     \
+	    Result = FString_ParseFormatInt(&Cursor, &Int);                                                     \
+		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
+		Assert(String_Cmp(Cursor, CString("-23")) == 0);                                                    \
+		Assert(Int == -92);                                                                                 \
+		Cursor = CString("-23");                                                                            \
+	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
+		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
+		Assert(String_Cmp(Cursor, CString("-23")) == 0);                                                    \
+	))                                                                                                      \
+	TEST(FString_ParseFormatInt, ReportsNotPresentOnZero, (                                                 \
+		s32 Int = -92;                                                                                      \
+		string Cursor = CString("02");                                                                      \
+	    fstring_format_status Result = FString_ParseFormatInt(&Cursor, &Int);                               \
+		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
+		Assert(String_Cmp(Cursor, CString("02")) == 0);                                                     \
+		Assert(Int == -92);                                                                                 \
+		Cursor = CString("02");                                                                             \
+	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
+		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
+		Assert(String_Cmp(Cursor, CString("02")) == 0);                                                     \
+	))                                                                                                      \
+	TEST(FString_ParseFormatInt, ReportsIntOverflowOnTooLarge, (                                            \
+		s32 Int = -92;                                                                                      \
+		string Cursor = CString("2147483648");                                                              \
+	    fstring_format_status Result = FString_ParseFormatInt(&Cursor, &Int);                               \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+		Assert(Int == -92);                                                                                 \
+		Cursor = CString("2147483648");                                                                     \
+	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+	))                                                                                                      \
+	TEST(FString_ParseFormatInt, ReturnsValidOnSuccesssfulParse, (                                          \
+		s32 Int = -92;                                                                                      \
+		string Cursor = CString("2147483647");                                                              \
+	    fstring_format_status Result = FString_ParseFormatInt(&Cursor, &Int);                               \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Int == 2147483647);                                                                          \
+		Cursor = CString("1");                                                                              \
+	    Result = FString_ParseFormatInt(&Cursor, &Int);                                                     \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Int == 1);                                                                                   \
+		Cursor = CString("1");                                                                              \
+	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, PropagatesIndexOverflow, (                                               \
+		s32 Index = -92;                                                                                    \
+		b08 UseIndexes = 2;                                                                                 \
+		string Cursor = CString("2147483648");                                                              \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+		Assert(UseIndexes == 2);                                                                            \
+		Assert(Index == -92);                                                                               \
+		Cursor = CString("2147483648");                                                                     \
+	    Result = FString_ParseFormatIndex(&Cursor, NULL, &UseIndexes, TRUE);                                \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, ReportsInconsistentIfIndexNotPresentAndExpected, (                       \
+		b08 UseIndexes = TRUE;                                                                              \
+		s32 Index = -92;                                                                                    \
+		string Cursor = CString("-2$");                                                                     \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
+		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
+		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(UseIndexes == TRUE);                                                                         \
+		Assert(Index == -92);                                                                               \
+	    Result = FString_ParseFormatIndex(NULL, NULL, &UseIndexes, FALSE);                                  \
+		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
+		Assert(UseIndexes == TRUE);                                                                         \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, ReturnsValidIfIndexNotPresentAndProhibited, (                            \
+		b08 UseIndexes = FALSE;                                                                             \
+		s32 Index = -92;                                                                                    \
+		string Cursor = CString("-2$");                                                                     \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(UseIndexes == FALSE);                                                                        \
+		Assert(Index == -92);                                                                               \
+	    Result = FString_ParseFormatIndex(NULL, NULL, &UseIndexes, FALSE);                                  \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(UseIndexes == FALSE);                                                                        \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, UpdatesUseIndexesIfIndexNotPresentAndUseIndexesUndefined, (              \
+		b08 UseIndexes = 2;                                                                                 \
+		s32 Index = -92;                                                                                    \
+		string Cursor = CString("-2$");                                                                     \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(UseIndexes == FALSE);                                                                        \
+		Assert(Index == -92);                                                                               \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, ReportsInconsistentIfIndexPresentAndProhibited, (                        \
+		b08 UseIndexes = FALSE;                                                                             \
+		s32 Index = -92;                                                                                    \
+		string Cursor = CString("2$");                                                                      \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
+		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
+		Assert(String_Cmp(Cursor, CString("$")) == 0);                                                      \
+		Assert(UseIndexes == FALSE);                                                                        \
+		Assert(Index == 2);                                                                                 \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, ReturnsValidIfIndexIsValid, (                                            \
+		b08 UseIndexes = TRUE;                                                                              \
+		s32 Index = -92;                                                                                    \
+		string Cursor = CString("2$");                                                                      \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(UseIndexes == TRUE);                                                                         \
+		Assert(Index == 2);                                                                                 \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, UpdatesUseIndexesIfIndexValidAndUseIndexesUndefined, (                   \
+		b08 UseIndexes = FALSE;                                                                             \
+		s32 Index = -92;                                                                                    \
+		string Cursor = CString("2$");                                                                      \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(UseIndexes == TRUE);                                                                         \
+		Assert(Index == 2);                                                                                 \
+	))                                                                                                      \
+	TEST(FString_ParseFormatIndex, ReportsNotPresentIfNoDollarSignFollows, (                                \
+		b08 UseIndexes = 2;                                                                                 \
+		s32 Index = -92;                                                                                    \
+		string Cursor = CString("2");                                                                       \
+	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
+		Assert(Result == FSTRING_FORMAT_INDEX_NOT_PRESENT);                                                 \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(UseIndexes == 2);                                                                            \
+		Assert(Index == 2);                                                                                 \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, ReturnsValidAndKeepsExistingDataInOutput, (                              \
+		fstring_format_type Flags = 29;                                                                     \
+		string Cursor = CString("...");                                                                     \
+	    fstring_format_status Result = FString_ParseFormatFlags(&Cursor, &Flags);                           \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("...")) == 0);                                                    \
+		Assert(Flags == 29);                                                                                \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, HyphenIsLeftJustify, (                                                   \
+		fstring_format_type Flags = 0;                                                                      \
+		string Cursor = CString("-");                                                                       \
+	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Flags == FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);                                                  \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, PlusIsPrefixSign, (                                                      \
+		fstring_format_type Flags = 0;                                                                      \
+		string Cursor = CString("+");                                                                       \
+	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Flags == FSTRING_FORMAT_FLAG_PREFIX_SIGN);                                                   \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, SpaceIsPrefixSpace, (                                                    \
+		fstring_format_type Flags = 0;                                                                      \
+		string Cursor = CString(" ");                                                                       \
+	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Flags == FSTRING_FORMAT_FLAG_PREFIX_SPACE);                                                  \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, HashIsSpecifyRadix, (                                                    \
+		fstring_format_type Flags = 0;                                                                      \
+		string Cursor = CString("#");                                                                       \
+	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Flags == FSTRING_FORMAT_FLAG_SPECIFY_RADIX);                                                 \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, ApostropheIsSeparateGroups, (                                            \
+		fstring_format_type Flags = 0;                                                                      \
+		string Cursor = CString("'");                                                                       \
+	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Flags == FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);                                               \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, ZeroIsPadWithZero, (                                                     \
+		fstring_format_type Flags = 0;                                                                      \
+		string Cursor = CString("0");                                                                       \
+	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Flags == FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);                                                 \
+	))                                                                                                      \
+	TEST(FString_ParseFormatFlags, IgnoresDuplicates, (                                                     \
+		fstring_format_type Flags = FSTRING_FORMAT_TYPE_MASK;                                               \
+		string Cursor = CString("-+++00-");                                                                 \
+	    fstring_format_status Result = FString_ParseFormatFlags(&Cursor, &Flags);                           \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Flags == (FSTRING_FORMAT_TYPE_MASK | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                        \
+			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO));                        \
+	    Result = FString_ParseFormatFlags(NULL, NULL);                                                      \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+	))                                                                                                      \
+	TEST(FString_ParseFormatType, ReportsInvalidOnInvalidChars, (                                           \
+		fstring_format_type Type = -92;                                                                     \
+		string Cursor = CString("hhc");                                                                     \
+	    fstring_format_status Result = FString_ParseFormatType(&Cursor, &Type);                             \
+		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
+		Assert(String_Cmp(Cursor, CString("c")) == 0);                                                      \
+		Assert(Type == -92);                                                                                \
+	    Result = FString_ParseFormatType(NULL, NULL);                                                       \
+		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
+	))                                                                                                      \
+	TEST(FString_ParseFormatType, KeepsExistingDataInType, (                                                \
+		fstring_format_type Type = ~FSTRING_FORMAT_TYPE_MASK;                                               \
+		string Cursor = CString("d");                                                                       \
+	    fstring_format_status Result = FString_ParseFormatType(&Cursor, &Type);                             \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Type == (~FSTRING_FORMAT_TYPE_MASK | FSTRING_FORMAT_TYPE_S32));                              \
+		Cursor = CString("d");                                                                              \
+	    Result = FString_ParseFormatType(&Cursor, NULL);                                                    \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+	))                                                                                                      \
+	TEST(FString_ParseFormatType, ParsesFullType, (                                                         \
+		fstring_format_type Type = 0;                                                                       \
+		string Cursor = CString("wf64x");                                                                   \
+	    fstring_format_status Result = FString_ParseFormatType(&Cursor, &Type);                             \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(Type == (FSTRING_FORMAT_TYPE_U64 | FSTRING_FORMAT_FLAG_INT_HEX));                            \
+	))                                                                                                      \
+	TEST(FString_ParseFormatType, FlagsUppercaseForRespectiveTypes, (                                       \
+		fstring_format_type Type = 0;                                                                       \
+		string Cursor = CString("BXFEGACSTZdLd");                                                           \
+	    FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_U32 | FSTRING_FORMAT_FLAG_INT_BIN                               \
+			| FSTRING_FORMAT_FLAG_UPPERCASE));                                                              \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_U32 | FSTRING_FORMAT_FLAG_INT_HEX                               \
+			| FSTRING_FORMAT_FLAG_UPPERCASE));                                                              \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_R64 | FSTRING_FORMAT_FLAG_UPPERCASE));                          \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_R64 | FSTRING_FORMAT_FLAG_FLOAT_EXP                             \
+			| FSTRING_FORMAT_FLAG_UPPERCASE));                                                              \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_R64 | FSTRING_FORMAT_FLAG_FLOAT_FIT                             \
+			| FSTRING_FORMAT_FLAG_UPPERCASE));                                                              \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_R64 | FSTRING_FORMAT_FLAG_FLOAT_HEX                             \
+			| FSTRING_FORMAT_FLAG_UPPERCASE));                                                              \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_CHR | FSTRING_FORMAT_FLAG_CHR_WIDE));                           \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == (FSTRING_FORMAT_TYPE_STR | FSTRING_FORMAT_FLAG_CHR_WIDE));                           \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == FSTRING_FORMAT_TYPE_B08);                                                            \
+		Type = 0;                                                                                           \
+	    FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == FSTRING_FORMAT_TYPE_SSIZE);                                                          \
+		Type = 0;                                                                                           \
+		FString_ParseFormatType(&Cursor, &Type);                                                            \
+		Assert(Type == FSTRING_FORMAT_TYPE_S64);                                                            \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, MustContainAtLeastAType, (                                                    \
+		b08 UseIndexes = 2;                                                                                 \
+		string Cursor = CString("%d");                                                                      \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(UseIndexes == FALSE);                                                                        \
+		Assert(Format.Type == FSTRING_FORMAT_TYPE_S32);                                                     \
+		Assert(Format.ValueIndex == 0);                                                                     \
+		Assert(Format.Width == 0);                                                                          \
+		Assert(Format.Precision == -1);                                                                     \
+		Assert(String_Cmp(Format.SpecifierString, CString("%d")) == 0);                                     \
+		Assert(Format.ContentLength == 0);                                                                  \
+		Assert(Format.ActualWidth == 0);                                                                    \
+		Cursor = CString("%d");                                                                             \
+	    FString_BumpCursor(&Cursor);                                                                        \
+	    Result = FString_ParseFormat(&Cursor, NULL, &UseIndexes, FALSE);                                    \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, ReportsIndexInconsistentWhenIndexPresentAndProhibited, (                      \
+		b08 UseIndexes = FALSE;                                                                             \
+		string Cursor = CString("%1$d");                                                                    \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
+		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
+		Assert(String_Cmp(Cursor, CString("$d")) == 0);                                                     \
+		Assert(UseIndexes == FALSE);                                                                        \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, ReportsIndexInconsistentWhenIndexNotPresentAndExpected, (                     \
+		b08 UseIndexes = TRUE;                                                                              \
+		string Cursor = CString("%d");                                                                      \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
+		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
+		Assert(String_Cmp(Cursor, CString("d")) == 0);                                                      \
+		Assert(UseIndexes == TRUE);                                                                         \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, MaximalCaseWithExplicitNumbers, (                                             \
+		b08 UseIndexes = TRUE;                                                                              \
+		string FormatStr = CString("%--++  ''##002147483647.2147483647wf64d");                              \
+		string Cursor = FormatStr;                                                                          \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(UseIndexes == FALSE);                                                                        \
+		Assert(Format.Type == (FSTRING_FORMAT_TYPE_S64 | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                   \
+			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE                            \
+			| FSTRING_FORMAT_FLAG_SPECIFY_RADIX | FSTRING_FORMAT_FLAG_SEPARATE_GROUPS                       \
+			| FSTRING_FORMAT_FLAG_PAD_WITH_ZERO));                                                          \
+		Assert(Format.ValueIndex == 0);                                                                     \
+		Assert(Format.Width == 2147483647);                                                                 \
+		Assert(Format.Precision == 2147483647);                                                             \
+		Assert(String_Cmp(Format.SpecifierString, FormatStr) == 0);                                         \
+		Assert(Format.ContentLength == 0);                                                                  \
+		Assert(Format.ActualWidth == 0);                                                                    \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, MaximalCaseWithParamNumbers, (                                                \
+		b08 UseIndexes = TRUE;                                                                              \
+		string FormatStr = CString("%--++  ''##00*.*wf64d");                                                \
+		string Cursor = FormatStr;                                                                          \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(UseIndexes == FALSE);                                                                        \
+		Assert(Format.Type == (FSTRING_FORMAT_TYPE_S64 | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                   \
+			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE                            \
+			| FSTRING_FORMAT_FLAG_SPECIFY_RADIX | FSTRING_FORMAT_FLAG_SEPARATE_GROUPS                       \
+			| FSTRING_FORMAT_FLAG_PAD_WITH_ZERO | FSTRING_FORMAT_FLAG_PARAM_WIDTH                           \
+		    | FSTRING_FORMAT_FLAG_PARAM_PRECISION));                                                        \
+		Assert(Format.ValueIndex == 0);                                                                     \
+		Assert(Format.Width == 0);                                                                          \
+		Assert(Format.Precision == -1);                                                                     \
+		Assert(String_Cmp(Format.SpecifierString, FormatStr) == 0);                                         \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, MaximalCaseWithParamIndexes, (                                                \
+		b08 UseIndexes = FALSE;                                                                             \
+		string FormatStr = CString("%2147483647$--++  ''##00*2147483647$.*2147483647$wf64d");               \
+		string Cursor = FormatStr;                                                                          \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(UseIndexes == TRUE);                                                                         \
+		Assert(Format.Type == (FSTRING_FORMAT_TYPE_S64 | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                   \
+			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE                            \
+			| FSTRING_FORMAT_FLAG_SPECIFY_RADIX | FSTRING_FORMAT_FLAG_SEPARATE_GROUPS                       \
+			| FSTRING_FORMAT_FLAG_PAD_WITH_ZERO | FSTRING_FORMAT_FLAG_PARAM_WIDTH                           \
+		    | FSTRING_FORMAT_FLAG_PARAM_PRECISION));                                                        \
+		Assert(Format.ValueIndex == 2147483647);                                                            \
+		Assert(Format.Width == 2147483647);                                                                 \
+		Assert(Format.Precision == 2147483647);                                                             \
+		Assert(String_Cmp(Format.SpecifierString, FormatStr) == 0);                                         \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, ImplicitPrecisionIsZero, (                                                    \
+		b08 UseIndexes = FALSE;                                                                             \
+		string FormatStr = CString("%.d");                                                                  \
+		string Cursor = FormatStr;                                                                          \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(Format.Precision == 0);                                                                      \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, PropagatesIntOverflow, (                                                      \
+		b08 UseIndexes = TRUE;                                                                              \
+		string Cursor = CString("%2147483648$d");                                                           \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8$d")) == 0);                                                    \
+		Cursor = CString("%2147483648d");                                                                   \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8d")) == 0);                                                     \
+		Cursor = CString("%*2147483648$d");                                                                 \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8$d")) == 0);                                                    \
+		Cursor = CString("%.2147483648d");                                                                  \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8d")) == 0);                                                     \
+		Cursor = CString("%.*2147483648$d");                                                                \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
+		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
+		Assert(String_Cmp(Cursor, CString("8$d")) == 0);                                                    \
+	))                                                                                                      \
+	TEST(FString_ParseFormat, PropagatesInvalidType, (                                                      \
+		b08 UseIndexes = FALSE;                                                                             \
+		string Cursor = CString("%hhc");                                                                    \
+		fstring_format Format;                                                                              \
+		FString_BumpCursor(&Cursor);                                                                        \
+	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
+		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
+		Assert(String_Cmp(Cursor, CString("c")) == 0);                                                      \
+	))                                                                                                      \
+	TEST(FString_ParseFormatString, AllowsNullArgumentsButWhy, (                                            \
+	    fstring_format_status Result = FString_ParseFormatString(NULL, NULL);                               \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		string Cursor = CString("...%d...");                                                                \
+	    Result = FString_ParseFormatString(&Cursor, NULL);                                                  \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+	))                                                                                                      \
+	TEST(FString_ParseFormatString, IgnoresEscapedPercentSigns, (                                           \
+		usize StackCursor = (usize) Stack_GetCursor();                                                      \
+		string FormatStr = CString("%d%%%s");                                                               \
+		string Cursor = FormatStr;                                                                          \
+		fstring_format_list FormatList;                                                                     \
+	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, FormatStr) == 0);                                                         \
+		Assert(String_Cmp(FormatList.FormatString, FormatStr) == 0);                                        \
+		Assert(FormatList.FormatCount == 2);                                                                \
+		Assert(FormatList.ParamCount == 2);                                                                 \
+		Assert(FormatList.Formats != NULL);                                                                 \
+		Assert(FormatList.ExtraDataSize == sizeof(string));                                                 \
+		Assert(FormatList.ExtraData != NULL);                                                               \
+		Assert(FormatList.NonFormattedTextSize == 1);                                                       \
+		Assert(FormatList.TotalTextSize == 0);                                                              \
+		Assert(FormatList.Formats[0].Type == FSTRING_FORMAT_TYPE_S32);                                      \
+		Assert(FormatList.Formats[0].ValueIndex == 1);                                                      \
+		Assert(FormatList.Formats[1].Type == FSTRING_FORMAT_TYPE_STR);                                      \
+		Assert(FormatList.Formats[1].ValueIndex == 2);                                                      \
+		Assert((usize) Stack_GetCursor() == StackCursor + 2 * sizeof(fstring_format) + sizeof(string));     \
+	))                                                                                                      \
+	TEST(FString_ParseFormatString, NoAllocationIfNoFormats, (                                              \
+		usize StackCursor = (usize) Stack_GetCursor();                                                      \
+		string FormatStr = CString("%%d%%%%s");                                                             \
+		string Cursor = FormatStr;                                                                          \
+		fstring_format_list FormatList;                                                                     \
+	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Cursor, FormatStr) == 0);                                                         \
+		Assert(String_Cmp(FormatList.FormatString, FormatStr) == 0);                                        \
+		Assert(FormatList.FormatCount == 0);                                                                \
+		Assert(FormatList.ParamCount == 0);                                                                 \
+		Assert(FormatList.Formats == NULL);                                                                 \
+		Assert(FormatList.ExtraDataSize == 0);                                                              \
+		Assert(FormatList.ExtraData == NULL);                                                               \
+		Assert(FormatList.NonFormattedTextSize == 5);                                                       \
+		Assert((usize) Stack_GetCursor() == StackCursor);                                                   \
+	))                                                                                                      \
+	TEST(FString_ParseFormatString, ExplicitParamIndexesAreCorrect, (                                       \
+		string Cursor = CString("%2$d%1$s%4$*3$.*3$f");                                                     \
+		fstring_format_list FormatList;                                                                     \
+	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(FormatList.FormatCount == 3);                                                                \
+		Assert(FormatList.ParamCount == 4);                                                                 \
+		Assert(FormatList.NonFormattedTextSize == 0);                                                       \
+		Assert(FormatList.Formats[0].ValueIndex == 2);                                                      \
+		Assert(FormatList.Formats[1].ValueIndex == 1);                                                      \
+		Assert(FormatList.Formats[2].ValueIndex == 4);                                                      \
+		Assert(FormatList.Formats[2].WidthIndex == 3);                                                      \
+		Assert(FormatList.Formats[2].PrecisionIndex == 3);                                                  \
+	))                                                                                                      \
+	TEST(FString_ParseFormatString, ImplicitParamIndexesAreCorrect, (                                       \
+		string Cursor = CString("%d %*s %.*f %*.*x");                                                       \
+		fstring_format_list FormatList;                                                                     \
+	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
+		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
+		Assert(FormatList.FormatCount == 4);                                                                \
+		Assert(FormatList.ParamCount == 8);                                                                 \
+		Assert(FormatList.Formats[0].ValueIndex == 1);                                                      \
+		Assert(FormatList.Formats[1].ValueIndex == 2);                                                      \
+		Assert(FormatList.Formats[1].WidthIndex == 3);                                                      \
+		Assert(FormatList.Formats[2].ValueIndex == 4);                                                      \
+		Assert(FormatList.Formats[2].PrecisionIndex == 5);                                                  \
+		Assert(FormatList.Formats[3].ValueIndex == 6);                                                      \
+		Assert(FormatList.Formats[3].WidthIndex == 7);                                                      \
+		Assert(FormatList.Formats[3].PrecisionIndex == 8);                                                  \
+	))                                                                                                      \
+	TEST(FString_ParseFormatString, ReportsInconsistentIndexes, (                                           \
+		string FormatStr = CString("%2$d %s %3$f");                                                         \
+		string Cursor = FormatStr;                                                                          \
+		fstring_format_list FormatList;                                                                     \
+	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
+		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
+		Assert(String_Cmp(Cursor, CString("s %3$f")) == 0);                                                 \
+		Cursor = CString("%d %1$s %f");                                                                     \
+	    Result = FString_ParseFormatString(&Cursor, &FormatList);                                           \
+		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
+		Assert(String_Cmp(Cursor, CString("$s %f")) == 0);                                                  \
+	))                                                                                                      \
+	//
+
+#endif
 
 #endif

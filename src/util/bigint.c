@@ -624,8 +624,8 @@ BigInt_DivideUnsignedMultiword(bigint A, bigint B, bigint *QuotOut, bigint *RemO
 internal void
 BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 {
-	//TODO: Tests
-	
+	// TODO: Tests
+
 	Stack_Push();
 	bigint AP = A, BP = B;
 
@@ -1125,7 +1125,8 @@ BigInt_ToInt(bigint A)
 		ssize Result = BigInt_ToInt(Source);                                 \
 		Assert(Result == (1ull << SHALF_BITS));                              \
 	))                                                                       \
-	;
+	//
+
 #endif
 
 #endif
