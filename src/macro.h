@@ -12,7 +12,7 @@
 #define MAC_EVAL(...) __VA_ARGS__
 
 #define MAC_PACKAGE(...) (__VA_ARGS__)
-#define _MAC_UNPACKAGE_(D) D
+#define _MAC_UNPACKAGE_(...) __VA_ARGS__
 #define _MAC_UNPACKAGE(P) _MAC_UNPACKAGE_ P
 #define MAC_UNPACKAGE(P) _MAC_UNPACKAGE(P)
 

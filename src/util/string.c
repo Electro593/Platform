@@ -11,8 +11,12 @@
 
 #define EString() CStringL("")
 #define CStringL(Literal) CLStringL(Literal, sizeof(Literal)-1)
+#define CStringL_UTF8(Literal) CLEStringL(MAC_CONCAT(u8, Literal), sizeof(MAC_CONCAT(u8, Literal)) - 1, STRING_ENCODING_UTF8)
+#define CStringL_UTF16(Literal) CLEStringL(MAC_CONCAT(u, Literal), sizeof(MAC_CONCAT(u, Literal)) - 2, STRING_ENCODING_UTF16)
+#define CStringL_UTF32(Literal) CLEStringL(MAC_CONCAT(U, Literal), sizeof(MAC_CONCAT(U, Literal)) - 4, STRING_ENCODING_UTF32)
 #define CNStringL(Literal) CLStringL(Literal, sizeof(Literal))
-#define CLStringL(Literal, Len) (string){ .Length = (Len), .Encoding = STRING_ENCODING_ASCII, { .Text = (Literal) } }
+#define CLStringL(Literal, Len) (string){ .Length = (Len), .Encoding = STRING_ENCODING_ASCII, { .Text = (c08*) (Literal) } }
+#define CLEStringL(LITERAL, LENGTH, ENCODING) (string){ .Length = (LENGTH), .Encoding = (ENCODING), { .Text = (c08*) (LITERAL) } }
 #define CFStringL(Literal, ...) FString(CStringL(Literal), __VA_ARGS__)
 #define CFString(Format, ...) FString(CString(Format), __VA_ARGS__)
 
@@ -55,17 +59,23 @@ typedef struct string {
 
 persist c08 *BaseChars = "0123456789abcdef0123456789ABCDEF";
 
+internal string
+CLEString(vptr Text, u64 Length, string_encoding Encoding)
+{
+	string String;
+	String.Text		= Text;
+	String.Encoding = Encoding;
+	String.Length	= Length;
+	return String;
+}
+
 /*
  * Construct an immutable string view with C-string backing
  */
 internal string
 CLString(c08 *Chars, u64 Length)
 {
-	string String;
-	String.Length	= Length;
-	String.Encoding = STRING_ENCODING_ASCII;
-	String.Text		= Chars;
-	return String;
+	return CLEString(Chars, Length, STRING_ENCODING_ASCII);
 }
 
 /*
@@ -177,26 +187,22 @@ String_TryParseS32(string String, s32 *NumOut)
 	return TRUE;
 }
 
-/// @brief Bumps the string by the provided amount, up to the end of the string. This includes
-/// increasing the text pointer based on the encoding and reducing the length accordingly. Note that
-/// this does not consider character sequences, so bumping a 4-byte UTF8 sequence by 2 will result
-/// in an invalid sequence.
+/// @brief Bumps the string by the provided amount of bytes, up to the end of the string. This
+/// includes increasing the text pointer based on the encoding and reducing the length accordingly.
+/// Note that this does not consider encoding, and bumping a string by an invalid amount for its
+/// encoding (such as bumping a UTF-32 string by 2 bytes) may result in an invalid string.
 /// @param String The string to be bumped.
-/// @param Amount The amount to bump the string by.
+/// @param Amount The amount of bytes to bump the string by.
 /// @return The amount the string was actually bumped by. Zero if the string is invalid.
 internal usize
-String_BumpUnits(string *String, usize Amount)
+String_BumpBytes(string *String, usize Amount)
 {
+	// TODO: Test
+
 	if (!String || !String->Text) return 0;
 	if (String->Length < Amount) Amount = String->Length;
 	String->Length -= Amount;
-	switch (String->Encoding) {
-		case STRING_ENCODING_ASCII:
-		case STRING_ENCODING_UTF8 : String->Text += Amount; break;
-		case STRING_ENCODING_UTF16: String->Text16 += Amount; break;
-		case STRING_ENCODING_UTF32: String->Text32 += Amount; break;
-		default					  : Assert(FALSE, "Unknown encoding format"); return 0;
-	}
+	String->Text   += Amount;
 	return Amount;
 }
 
@@ -209,6 +215,8 @@ String_BumpUnits(string *String, usize Amount)
 internal u32
 String_NextCodepoint(string *String)
 {
+	// TODO: Test
+
 	if (!String || !String->Text || !String->Length) return 0;
 
 	u32 B1, B2, B3, B4;
@@ -273,12 +281,14 @@ String_NextCodepoint(string *String)
 			break;
 
 		case STRING_ENCODING_UTF16:
-			B1 = (u16) String->Text16[0];
-			B2 = String->Length < 2 ? 0 : (u16) String->Text16[1];
-			if (B1 >= 0xD800 && B1 <= 0xDFFF) {
+			B1	  = String->Length < 2 ? 0 : (u16) String->Text16[0];
+			B2	  = String->Length < 4 ? 0 : (u16) String->Text16[1];
+			Delta = 2;
+			if (String->Length < 2) Delta = String->Length;
+			else if (B1 >= 0xD800 && B1 <= 0xDFFF) {
 				if (B1 <= 0xDBFF && B2 >= 0xDC00 && B2 <= 0xDFFF) {
 					Codepoint = 0x10000 + ((B1 - 0xD800) << 10) + (B2 - 0xDC00);
-					Delta	  = 2;
+					Delta	  = 4;
 				}
 			} else {
 				Codepoint = B1;
@@ -286,84 +296,87 @@ String_NextCodepoint(string *String)
 			break;
 
 		case STRING_ENCODING_UTF32:
-			B1 = (u32) String->Text32[0];
-			if (B1 < 0x10FFFF && (B1 < 0xD800 || B1 > 0xDFFF)) Codepoint = B1;
+			B1	  = String->Length < 4 ? 0 : (u32) String->Text32[0];
+			Delta = 4;
+			if (String->Length < 4) Delta = String->Length;
+			else if (B1 < 0x10FFFF && (B1 < 0xD800 || B1 > 0xDFFF)) Codepoint = B1;
 			break;
 
 		default: Assert(FALSE, "Unknown encoding format"); return 0;
 	}
 
-	String_BumpUnits(String, Delta);
+	String_BumpBytes(String, Delta);
 	return Codepoint;
 }
 
 /// @brief Attempts to convert the provided codepoint into a character sequence based on the target
 /// encoding and write it into the string.
-/// @param[in,out] String The string to be written into. Must be large enough to contain the encoded
-/// character sequence or the call will fail. For reference, ASCII and UTF32 are max 1 character,
-/// UTF16 is 2, and UTF8 is 4. May be null.
+/// @param[in] String The string to be written into. If it's not large enough to contain the encoded
+/// character sequence, it remains unchanged and the necessary size is returned.
 /// @param[in] Codepoint The codepoint to encode into the string. If this is invalid, such as being
 /// a surrogate half or greater than `0x10FFFF`, it will be converted into `0xFFFD` before being
 /// encoded.
-/// @return The number of characters that were written. If `String` is null, this is the number of
-/// characters that would have been written.
+/// @return The number of characters that were written. If `String` is too small, this is the number
+/// of characters that would have been written.
 internal usize
-String_WriteCodepoint(string *String, u32 Codepoint)
+String_WriteCodepoint(string String, u32 Codepoint)
 {
-	usize Length = String ? String->Length : 0;
+	// TODO: Test
+
+	usize Length = String.Text ? String.Length : 0;
 	if (Codepoint > 0x10FFFF || (Codepoint >= 0xD800 && Codepoint <= 0xDFFF)) Codepoint = 0xFFFD;
 
-	switch (String->Encoding) {
+	switch (String.Encoding) {
 		case STRING_ENCODING_ASCII:
 			if (Codepoint <= 0x7F) {
-				if (Length >= 1) String->Text[0] = Codepoint;
+				if (Length >= 1) String.Text[0] = Codepoint;
 				return 1;
 			}
 			return 0;
 
 		case STRING_ENCODING_UTF8:
 			if (Codepoint <= 0x7F) {
-				if (Length >= 1) String->Text[0] = Codepoint;
+				if (Length >= 1) String.Text[0] = Codepoint & 0x7F;
 				return 1;
 			} else if (Codepoint <= 0x7FF) {
 				if (Length >= 2) {
-					String->Text[0] = 0xC0 | (Codepoint & 0x1F);
-					String->Text[1] = 0x80 | ((Codepoint >> 6) & 0x3F);
+					String.Text[0] = 0xC0 | (Codepoint & 0x1F);
+					String.Text[1] = 0x80 | ((Codepoint >> 6) & 0x3F);
 				}
 				return 2;
 			} else if (Codepoint <= 0xFFFF) {
 				if (Length >= 3) {
-					String->Text[0] = 0xE0 | (Codepoint & 0x0F);
-					String->Text[1] = 0x80 | ((Codepoint >> 6) & 0x3F);
-					String->Text[2] = 0x80 | ((Codepoint >> 12) & 0x3F);
+					String.Text[0] = 0xE0 | (Codepoint & 0x0F);
+					String.Text[1] = 0x80 | ((Codepoint >> 6) & 0x3F);
+					String.Text[2] = 0x80 | ((Codepoint >> 12) & 0x3F);
 				}
 				return 3;
 			} else {
 				if (Length >= 4) {
-					String->Text[0] = 0xF0 | (Codepoint & 0x07);
-					String->Text[1] = 0x80 | ((Codepoint >> 6) & 0x3F);
-					String->Text[2] = 0x80 | ((Codepoint >> 12) & 0x3F);
-					String->Text[3] = 0x80 | ((Codepoint >> 18) & 0x3F);
+					String.Text[0] = 0xF0 | (Codepoint & 0x07);
+					String.Text[1] = 0x80 | ((Codepoint >> 6) & 0x3F);
+					String.Text[2] = 0x80 | ((Codepoint >> 12) & 0x3F);
+					String.Text[3] = 0x80 | ((Codepoint >> 18) & 0x3F);
 				}
 				return 4;
 			}
 
 		case STRING_ENCODING_UTF16:
 			if (Codepoint <= 0xFFFF) {
-				if (Length >= 1) String->Text16[0] = Codepoint;
-				return 1;
-			} else {
-				if (Length >= 2) {
-					Codepoint		  -= 0x10000;
-					String->Text16[0]  = 0xD800 | ((Codepoint >> 10) & 0x3FF);
-					String->Text16[1]  = 0xDC00 | (Codepoint & 0x3FF);
-				}
+				if (Length >= 2) String.Text16[0] = Codepoint;
 				return 2;
+			} else {
+				if (Length >= 4) {
+					Codepoint		 -= 0x10000;
+					String.Text16[0]  = 0xD800 | ((Codepoint >> 10) & 0x3FF);
+					String.Text16[1]  = 0xDC00 | (Codepoint & 0x3FF);
+				}
+				return 4;
 			}
 
 		case STRING_ENCODING_UTF32:
-			if (Length >= 1) String->Text32[0] = Codepoint;
-			return 1;
+			if (Length >= 4) String.Text32[0] = Codepoint;
+			return 4;
 
 		default: Assert(FALSE, "Unknown encoding format"); return 0;
 	}
@@ -1298,72 +1311,83 @@ FString_UpdateParamReferences(fstring_format_list *FormatList, ...)
 }
 
 /// @brief Write a string into the buffer, based on the format. Only alignment and width are
-/// considered. The string's encoding is used instead of any flags. The resulting string will be
-/// encoded as UTF-8.
-/// @param Format A pointer to the format being written. On return, if actual width was 0, it will
-/// contain the updated actual width. Cannot be null.
-/// @param Buffer A pointer to be buffer being written into. If this is null, only the format's
-/// actual width will be updated. Otherwise, the buffer must be valid and large enough to contain
-/// the format's full length.
+/// considered. The param's encoding is used instead of any flags on read, and the written encoding
+/// matches the one passed in.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided buffer was invalid or too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteString(fstring_format *Format, string *Buffer)
+FString_WriteString(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 
+	u32 PadCodepoint = ' ';
+
 	if (Format->ContentLength == 0) {
-		string Cursor = *Format->Value.String;
+		string Cursor		 = *Format->Value.String;
+		string EncodingStr	 = EString();
+		EncodingStr.Encoding = Buffer.Encoding;
 		while (Cursor.Length) {
 			u32 Codepoint		   = String_NextCodepoint(&Cursor);
-			Format->ContentLength += String_WriteCodepoint(NULL, Codepoint);
+			Format->ContentLength += String_WriteCodepoint(EncodingStr, Codepoint);
 		}
-		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
+
+		usize WidthLength = String_WriteCodepoint(EncodingStr, PadCodepoint) * Format->Width;
+
+		Format->ActualWidth = MAX(WidthLength, Format->ContentLength);
 	}
 
-	if (!Buffer) return FSTRING_FORMAT_VALID;
-	if (!Buffer->Text || Buffer->Length < Format->ActualWidth)
-		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
 	string Cursor = *Format->Value.String;
-	string Dest	  = *Buffer;
+	string Dest	  = Buffer;
 
 	b08	  IsLeft	= !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
 	usize PadLength = Format->ActualWidth - Format->ContentLength;
 
-	if (!IsLeft)
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, ' '));
-
-	while (Cursor.Length) {
-		u32	  Codepoint = String_NextCodepoint(&Cursor);
-		usize Written	= String_WriteCodepoint(&Dest, Codepoint);
-		String_BumpUnits(&Dest, Written);
-		Dest.Text += Written;
+	if (!IsLeft) {
+		for (usize I = 0; I < PadLength;) {
+			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
+			String_BumpBytes(&Dest, Delta);
+			I += Delta;
+		}
 	}
 
-	if (IsLeft)
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, ' '));
+	while (Cursor.Length) {
+		u32 Codepoint = String_NextCodepoint(&Cursor);
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
+	}
+
+	if (IsLeft) {
+		for (usize I = 0; I < PadLength;) {
+			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
+			String_BumpBytes(&Dest, Delta);
+			I += Delta;
+		}
+	}
 
 	return FSTRING_FORMAT_VALID;
 }
 
 /// @brief Write a character into the buffer, based on the format. Accepts ASCII and UTF32.
 /// Only alignment, width, and `FLAG_CHR_WIDE` are considered.
-/// @param Format A pointer to the format being written. On return, if actual width was 0, it will
-/// contain the updated actual width. Cannot be null.
-/// @param Buffer A pointer to be buffer being written into. If this is null, only the format's
-/// actual width will be updated. Otherwise, the buffer must be valid and large enough to contain
-/// the format's full length.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided buffer was invalid or too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteChar(fstring_format *Format, string *Buffer)
+FString_WriteChar(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 
@@ -1389,17 +1413,17 @@ FString_WriteChar(fstring_format *Format, string *Buffer)
 
 /// @brief Write a boolean 'true' or 'false' into the buffer, based on the format. Only alignment
 /// and width are considered.
-/// @param Format A pointer to the format being written. On return, if actual width was 0, it will
-/// contain the updated actual width. Cannot be null.
-/// @param Buffer A pointer to be buffer being written into. If this is null, only the format's
-/// actual width will be updated. Otherwise, the buffer must be valid and large enough to contain
-/// the format's full length.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided buffer was invalid or too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteBool(fstring_format *Format, string *Buffer)
+FString_WriteBool(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 
@@ -1412,17 +1436,17 @@ FString_WriteBool(fstring_format *Format, string *Buffer)
 
 /// @brief Write an unsigned int into the buffer, based on the format. Alignment, width, precision,
 /// prefixing, grouping, and 0-padding are considered.
-/// @param Format A pointer to the format being written. On return, if actual width was 0, it will
-/// contain the updated actual width. Cannot be null.
-/// @param Buffer A pointer to be buffer being written into. If this is null, only the format's
-/// actual width will be updated. Otherwise, the buffer must be valid and large enough to contain
-/// the format's full length.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided buffer was invalid or too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteUnsigned(fstring_format *Format, string *Buffer)
+FString_WriteUnsigned(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 
@@ -1473,24 +1497,25 @@ FString_WriteUnsigned(fstring_format *Format, string *Buffer)
 		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
 	}
 
-	if (!Buffer) return FSTRING_FORMAT_VALID;
-	if (!Buffer->Text || Buffer->Length < Format->ActualWidth)
-		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
 	string RadixChars = IsUppercase ? CStringL("0123456789ABCDEF") : CStringL("0123456789abcdef");
 	usize  PadLength  = Format->ActualWidth - Format->ContentLength;
 
-	string Dest = *Buffer;
+	string EncodingStr	 = EString();
+	EncodingStr.Encoding = Buffer.Encoding;
+
+	string Dest = Buffer;
 	if (!IsLeft) {
 		u32 PadChar = ' ';
 		if (Format->Precision < 0 && PadZero) PadChar = '0';
 		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, PadChar));
+			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, PadChar));
 	}
 
 	while (RadixPrefix.Length) {
 		u32 Codepoint = String_NextCodepoint(&RadixPrefix);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	usize Value		 = Format->Value.Unsigned;
@@ -1503,8 +1528,8 @@ FString_WriteUnsigned(fstring_format *Format, string *Buffer)
 		u32 Codepoint  = RadixChars.Text[Value % Radix];
 		Value		  /= Radix;
 
-		String_BumpUnits(&Dest, -String_WriteCodepoint(NULL, Codepoint));
-		String_WriteCodepoint(&Dest, Codepoint);
+		String_BumpBytes(&Dest, -String_WriteCodepoint(EncodingStr, Codepoint));
+		String_WriteCodepoint(Dest, Codepoint);
 		DigitsSinceGroup++;
 
 		if (DigitsSinceGroup == GroupSize) {
@@ -1512,17 +1537,17 @@ FString_WriteUnsigned(fstring_format *Format, string *Buffer)
 			string Group	 = GroupStr;
 			while (Group.Length) {
 				u32 Codepoint = String_NextCodepoint(&Group);
-				String_BumpUnits(&Dest, -String_WriteCodepoint(NULL, Codepoint));
-				String_WriteCodepoint(&Dest, Codepoint);
+				String_BumpBytes(&Dest, -String_WriteCodepoint(EncodingStr, Codepoint));
+				String_WriteCodepoint(Dest, Codepoint);
 			}
 		}
 	}
 
 	if (IsLeft) {
-		Dest.Text	= Buffer->Text + Format->ContentLength;
+		Dest.Text	= Buffer.Text + Format->ContentLength;
 		Dest.Length = PadLength;
 		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, ' '));
+			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, ' '));
 	}
 
 	return FSTRING_FORMAT_VALID;
@@ -1530,17 +1555,17 @@ FString_WriteUnsigned(fstring_format *Format, string *Buffer)
 
 /// @brief Write a signed int into the buffer, based on the format. Alignment, width, precision,
 /// signage, grouping, and 0-padding are considered.
-/// @param Format A pointer to the format being written. On return, if actual width was 0, it will
-/// contain the updated actual width. Cannot be null.
-/// @param Buffer A pointer to be buffer being written into. If this is null, only the format's
-/// actual width will be updated. Otherwise, the buffer must be valid and large enough to contain
-/// the format's full length.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided buffer was invalid or too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteSigned(fstring_format *Format, string *Buffer)
+FString_WriteSigned(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 
@@ -1575,23 +1600,24 @@ FString_WriteSigned(fstring_format *Format, string *Buffer)
 		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
 	}
 
-	if (!Buffer) return FSTRING_FORMAT_VALID;
-	if (!Buffer->Text || Buffer->Length < Format->ActualWidth)
-		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
 	usize PadLength = Format->ActualWidth - Format->ContentLength;
 
-	string Dest = *Buffer;
+	string EncodingStr	 = EString();
+	EncodingStr.Encoding = Buffer.Encoding;
+
+	string Dest = Buffer;
 	if (!IsLeft) {
 		u32 PadChar = ' ';
 		if (Format->Precision < 0 && PadZero) PadChar = '0';
 		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, PadChar));
+			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, PadChar));
 	}
 
 	while (Prefix.Length) {
 		u32 Codepoint = String_NextCodepoint(&Prefix);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	ssize Value			   = Format->Value.Signed;
@@ -1604,8 +1630,8 @@ FString_WriteSigned(fstring_format *Format, string *Buffer)
 		u32 Codepoint  = '0' + (Value < 0 ? -(Value % 10) : Value % 10);
 		Value		  /= 10;
 
-		String_BumpUnits(&Dest, -String_WriteCodepoint(NULL, Codepoint));
-		String_WriteCodepoint(&Dest, Codepoint);
+		String_BumpBytes(&Dest, -String_WriteCodepoint(EncodingStr, Codepoint));
+		String_WriteCodepoint(Dest, Codepoint);
 		DigitsSinceGroup++;
 
 		if (DigitsSinceGroup == GroupSize) {
@@ -1613,24 +1639,55 @@ FString_WriteSigned(fstring_format *Format, string *Buffer)
 			string Group	 = GroupStr;
 			while (Group.Length) {
 				u32 Codepoint = String_NextCodepoint(&Group);
-				String_BumpUnits(&Dest, -String_WriteCodepoint(NULL, Codepoint));
-				String_WriteCodepoint(&Dest, Codepoint);
+				String_BumpBytes(&Dest, -String_WriteCodepoint(EncodingStr, Codepoint));
+				String_WriteCodepoint(Dest, Codepoint);
 			}
 		}
 	}
 
 	if (IsLeft) {
-		Dest.Text	= Buffer->Text + Format->ContentLength;
+		Dest.Text	= Buffer.Text + Format->ContentLength;
 		Dest.Length = PadLength;
 		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, ' '));
+			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, ' '));
 	}
 
 	return FSTRING_FORMAT_VALID;
 }
 
+/// @brief Write a pointer into the buffer, based on the format. Effectively the same as `%#X` unles
+/// the pointer is null, in which case `(nil)` will be printed.` Only alignment and width are
+/// considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
+/// @return
+/// - `FSTRING_FORMAT_VALID`: The format was written successfully.
+///
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteHexFloat(fstring_format *Format, string *Buffer)
+FString_WritePointer(fstring_format *Format, string Buffer)
+{
+	Assert(Format);
+
+	// We're only keeping this one
+	Format->Type &= FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;
+
+	// Depending on if value is null, interpret as unsigned or print a string
+	if (Format->Value.Pointer) {
+		Format->Type |= FSTRING_FORMAT_FLAG_INT_HEX | FSTRING_FORMAT_FLAG_UPPERCASE;
+		return FString_WriteUnsigned(Format, Buffer);
+	}
+
+	string Nil			 = CStringL("(nil)");
+	Format->Value.String = &Nil;
+	return FString_WriteString(Format, Buffer);
+}
+
+internal fstring_format_status
+FString_WriteHexFloat(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 	Stack_Push();
@@ -1734,85 +1791,81 @@ FString_WriteHexFloat(fstring_format *Format, string *Buffer)
 		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
 	}
 
-	if (!Buffer) {
-		Stack_Pop();
-		return FSTRING_FORMAT_VALID;
-	}
-	if (!Buffer->Text || Buffer->Length < Format->ActualWidth) {
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) {
 		Stack_Pop();
 		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 	}
 
 	usize PadLength = Format->ActualWidth - Format->ContentLength;
 
-	string Dest = *Buffer;
+	string Dest = Buffer;
 	if (!IsLeft) {
 		u32 PadChar = ' ';
 		if (Format->Precision < 0 && PadZero) PadChar = '0';
 		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, PadChar));
+			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, PadChar));
 	}
 
 	while (SignString.Length) {
 		u32 Codepoint = String_NextCodepoint(&SignString);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	while (SpecialString.Length) {
 		u32 Codepoint = String_NextCodepoint(&SpecialString);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	while (HexString.Length) {
 		u32 Codepoint = String_NextCodepoint(&HexString);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	while (WholeDigits) {
 		bigint Quot		 = BigInt_SDiv(WholePart, WholeDivisor);
 		bigint Rem		 = BigInt_SRem(Quot, Radix);
 		u32	   Codepoint = DigitsList[Rem.Words[0]];
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 		WholeDivisor = BigInt_SDiv(WholeDivisor, Radix);
 		WholeDigits--;
 	}
 
 	while (RadixString.Length) {
 		u32 Codepoint = String_NextCodepoint(&RadixString);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	while (FracDigits) {
 		bigint Quot		 = BigInt_SDiv(FracPart, FracDivisor);
 		bigint Rem		 = BigInt_SRem(Quot, Radix);
 		u32	   Codepoint = DigitsList[Rem.Words[0]];
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 		FracDivisor = BigInt_SDiv(FracDivisor, Radix);
 		FracDigits--;
 	}
 
 	while (ExpSignString.Length) {
 		u32 Codepoint = String_NextCodepoint(&ExpSignString);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	while (ExpString.Length) {
 		u32 Codepoint = String_NextCodepoint(&ExpString);
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
 	while (ExpDigits) {
 		u32 Codepoint = DigitsList[(Exponent / ExpDivisor) % 10];
-		String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, Codepoint));
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 		ExpDivisor /= 10;
 		ExpDigits--;
 	}
 
 	if (IsLeft) {
-		Dest.Text	= Buffer->Text + Format->ContentLength;
+		Dest.Text	= Buffer.Text + Format->ContentLength;
 		Dest.Length = PadLength;
 		for (usize I = 0; I < PadLength; I++)
-			String_BumpUnits(&Dest, String_WriteCodepoint(&Dest, ' '));
+			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, ' '));
 	}
 
 	Stack_Pop();
@@ -1821,58 +1874,27 @@ FString_WriteHexFloat(fstring_format *Format, string *Buffer)
 
 /// @brief Write a floating point value into the buffer, based on the format. Alignment, width,
 /// precision, signage, radixing, grouping, and 0-padding are considered.
-/// @param Format A pointer to the format being written. On return, if actual width was 0, it will
-/// contain the updated actual width. Cannot be null.
-/// @param Buffer A pointer to be buffer being written into. If this is null, only the format's
-/// actual width will be updated. Otherwise, the buffer must be valid and large enough to contain
-/// the format's full length.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided buffer was invalid or too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteFloat(fstring_format *Format, string *Buffer)
+FString_WriteFloat(fstring_format *Format, string Buffer)
 {
 	return FString_WriteHexFloat(Format, Buffer);
-}
-
-/// @brief Write a pointer into the buffer, based on the format. Effectively the same as `%#X` unles
-/// the pointer is null, in which case `(nil)` will be printed.` Only alignment and width are
-/// considered.
-/// @param Format A pointer to the format being written. On return, if actual width was 0, it will
-/// contain the updated actual width. Cannot be null.
-/// @param Buffer A pointer to be buffer being written into. If this is null, only the format's
-/// actual width will be updated. Otherwise, the buffer must be valid and large enough to contain
-/// the format's full length.
-/// @return
-/// - `FSTRING_FORMAT_VALID`: The format was written successfully.
-///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided buffer was invalid or too small.
-internal fstring_format_status
-FString_WritePointer(fstring_format *Format, string *Buffer)
-{
-	Assert(Format);
-
-	// We're only keeping this one
-	Format->Type &= FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;
-
-	// Depending on if value is null, interpret as unsigned or print a string
-	if (Format->Value.Pointer) {
-		Format->Type |= FSTRING_FORMAT_FLAG_INT_HEX | FSTRING_FORMAT_FLAG_UPPERCASE;
-		return FString_WriteUnsigned(Format, Buffer);
-	}
-
-	string Nil			 = CStringL("(nil)");
-	Format->Value.String = &Nil;
-	return FString_WriteString(Format, Buffer);
 }
 
 /// @brief Writes a formatted value into the provided buffer.
 /// @param[in,out] Format A pointer to the format specifier containing the type, flags, and value.
 /// Cannot be null.
-/// @param[in,out] Buffer A pointer to the string being written into. If this is null, only
-/// `Format->ActualWidth` is updated. Otherwise, the buffer must be valid and large enough to
-/// contain the full output.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
@@ -1882,7 +1904,7 @@ FString_WritePointer(fstring_format *Format, string *Buffer)
 /// - `FSTRING_FORMAT_TYPE_INVALID`: The provided format's type was unsupported. This can occur, for
 /// example, if you provide a non-writable query type.
 internal fstring_format_status
-FString_WriteFormat(fstring_format *Format, string *Buffer)
+FString_WriteFormat(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 	switch (Format->Type & FSTRING_FORMAT_TYPE_MASK) {
@@ -1909,9 +1931,9 @@ FString_WriteFormat(fstring_format *Format, string *Buffer)
 /// string, and if the buffer is large enough, write into it.
 /// @param[in,out] FormatList A pointer to the list of formats and other useful data. Format actual
 /// widths and total text size will be updated after this call. Cannot be null.
-/// @param[in,out] Buffer A pointer to thestring being written into. If this is null, only
-/// `FormatList->TotalTextSize` and format actual widths are updated. Otherwise, the buffer must be
-/// valid and large enough to contain the full output.
+/// @param[in] Buffer The buffer being written into. If this is too small,
+/// `FormatList->TotalTextSize` will be set to the required size. Otherwise, the buffer will be
+/// written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The total size was computed successfully.
 ///
@@ -1920,7 +1942,7 @@ FString_WriteFormat(fstring_format *Format, string *Buffer)
 ///
 /// - `FSTRING_FORMAT_TYPE_INVALID`: One of the provided formats had an invalid type.
 internal fstring_format_status
-FString_WriteFormats(fstring_format_list *FormatList, string *Buffer)
+FString_WriteFormats(fstring_format_list *FormatList, string Buffer)
 {
 	Assert(FormatList);
 
@@ -1930,11 +1952,13 @@ FString_WriteFormats(fstring_format_list *FormatList, string *Buffer)
 
 		string *Strings = FormatList->ExtraData;
 
+		string EncodingStr	 = EString();
+		EncodingStr.Encoding = Buffer.Encoding;
+
 		// Run through the formats and accumulate their text sizes
 		for (usize I = 0; I < FormatList->FormatCount; I++) {
 			fstring_format *Format = &FormatList->Formats[I];
 
-			usize Size = 0;
 			switch (Format->Type & FSTRING_FORMAT_TYPE_MASK) {
 				// Queries don't add anything to the total length. We'll set the current text size
 				// as its actual width instead though, so we can easily update the query value
@@ -1946,49 +1970,49 @@ FString_WriteFormats(fstring_format_list *FormatList, string *Buffer)
 					break;
 
 				default:
-					fstring_format_status Status = FString_WriteFormat(Format, NULL);
-					if (Status != FSTRING_FORMAT_VALID) return Status;
-					FormatList->TotalTextSize += Size;
+					fstring_format_status Status = FString_WriteFormat(Format, EncodingStr);
+					if (Status != FSTRING_FORMAT_BUFFER_TOO_SMALL && Status != FSTRING_FORMAT_VALID)
+						return Status;
+					FormatList->TotalTextSize += Format->ActualWidth;
 			}
 		}
 	}
 
-	if (!Buffer) return FSTRING_FORMAT_VALID;
-	if (!Buffer->Text || Buffer->Length < FormatList->TotalTextSize)
+	if (!Buffer.Text || Buffer.Length < FormatList->TotalTextSize)
 		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
 	// Now we can actually write into the buffer.
-	c08	  *Src	= FormatList->FormatString.Text;
-	string Dest = *Buffer;
+	string Src	= FormatList->FormatString;
+	string Dest = Buffer;
 	for (usize I = 0; I < FormatList->FormatCount; I++) {
 		fstring_format *Format = &FormatList->Formats[I];
 
 		// Write the plaintext into Dest
-		usize PlaintextSize = (usize) Format->SpecifierString.Text - (usize) Src;
-		Mem_Cpy(Dest.Text, Src, PlaintextSize);
-		Dest.Text	+= PlaintextSize;
-		Dest.Length -= PlaintextSize;
-
-		// Skip past the format specifier
-		Src = Format->SpecifierString.Text + Format->SpecifierString.Length;
+		string End = Format->SpecifierString;
+		while (Src.Text < End.Text) {
+			u32 Codepoint = String_NextCodepoint(&Src);
+			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
+		}
 
 		// Write the format into Dest
-		fstring_format_status Status  = FString_WriteFormat(Format, &Dest);
-		Dest.Text					 += Format->ActualWidth;
-		Dest.Length					 -= Format->ActualWidth;
-
-		// This shouldn't actually happen unless FormatList was corrupted somehow, but we'll respect
-		// it to be safe.
+		fstring_format_status Status = FString_WriteFormat(Format, Dest);
 		if (Status != FSTRING_FORMAT_VALID) return Status;
+		Dest.Text	+= Format->ActualWidth;
+		Dest.Length -= Format->ActualWidth;
+
+		// Skip past the format specifier
+		Src.Text   += Format->SpecifierString.Length;
+		Src.Length -= Format->SpecifierString.Length;
 	}
 
 	// Write the last bit of plaintext into Dest
-	usize PlaintextSize =
-		(usize) FormatList->FormatString.Text + FormatList->FormatString.Length - (usize) Src;
-	Mem_Cpy(Dest.Text, Src, PlaintextSize);
+	while (Src.Length) {
+		u32 Codepoint = String_NextCodepoint(&Src);
+		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
+	}
 
 	// Sanity check that we didn't just overwrite the buffer
-	Assert(Dest.Length == PlaintextSize);
+	Assert(Dest.Length == FormatList->TotalTextSize);
 
 	return FSTRING_FORMAT_VALID;
 }
@@ -2024,16 +2048,27 @@ FVString(string Format, va_list Args)
 		goto failed;
 	}
 
-	// Need to compute the total size to know how large the buffer should be
-	Status = FString_WriteFormats(&FormatList, NULL);
-	if (Status != FSTRING_FORMAT_VALID) {
+	// Output UTF-8 by default.
+	string Buffer	= EString();
+	Buffer.Encoding = STRING_ENCODING_UTF8;
+
+	// Need to compute the total size to know how large the buffer should be.
+	Status = FString_WriteFormats(&FormatList, Buffer);
+
+	// This shouldn't happen, but...
+	if (Status == FSTRING_FORMAT_VALID) return Buffer;
+
+	if (Status != FSTRING_FORMAT_BUFFER_TOO_SMALL) {
 		ErrorString = FormatList.FormatString;
 		goto failed;
 	}
 
+	// Allocate the buffer on the stack. We might support other allocators later.
+	Buffer.Length = FormatList.TotalTextSize;
+	Buffer.Text	  = Stack_Allocate(Buffer.Length);
+
 	// Write into the buffer, and if everything looks good, return it.
-	string Buffer = LString(FormatList.TotalTextSize);
-	Status		  = FString_WriteFormats(&FormatList, &Buffer);
+	Status = FString_WriteFormats(&FormatList, Buffer);
 	if (Status != FSTRING_FORMAT_VALID) {
 		ErrorString = FormatList.FormatString;
 		goto failed;
@@ -2096,6 +2131,7 @@ FString(string Format, ...)
 // - Errno? Might need an architectural rework...
 // - Standardize length (# code units) vs codepoint count, update functions accordingly
 // - Match format string encoding with output encoding
+// - Test encodings
 
 #ifndef REGION_STRING_TESTS
 
@@ -2749,6 +2785,63 @@ FString(string Format, ...)
 		Assert(FormatList.Formats[0].Value.Signed == 23);                                                   \
 		Assert(FormatList.Formats[0].Width == S32_MIN);                                                     \
 		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
+	))                                                                                                      \
+	TEST(FString_WriteString, UpdatesLengthAndReturnsWithEmptyBuffer, (                                     \
+		string String = CString("Hello!");                                                                  \
+		fstring_format Format = { .Width = 8, .Value = { .String = &String } };                             \
+		fstring_format_status Status = FString_WriteString(&Format, EString());                             \
+		Assert(Status == FSTRING_FORMAT_BUFFER_TOO_SMALL);                                                  \
+		Assert(Format.ContentLength == 6);                                                                  \
+		Assert(Format.ActualWidth == 8);                                                                    \
+		Format = (fstring_format){ .Width = 4, .Value = { .String = &String } };                            \
+		Status = FString_WriteString(&Format, EString());                                                   \
+		Assert(Status == FSTRING_FORMAT_BUFFER_TOO_SMALL);                                                  \
+		Assert(Format.ContentLength == 6);                                                                  \
+		Assert(Format.ActualWidth == 6);                                                                    \
+	))                                                                                                      \
+	TEST(FString_WriteString, RespectsSourceEncoding, (                                                     \
+		string String = CStringL_UTF32("Hi!");                                                              \
+		string Buffer = LString(8);                                                                         \
+		Buffer.Encoding = STRING_ENCODING_UTF8;                                                             \
+		fstring_format Format = { .Width = 8, .Value = { .String = &String } };                             \
+		fstring_format_status Status = FString_WriteString(&Format, Buffer);                                \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("     Hi!")) == 0);                                               \
+		String = CStringL_UTF16("Hi!");                                                                     \
+		Format = (fstring_format){ .Width = 8, .Value = { .String = &String } };                            \
+		Status = FString_WriteString(&Format, Buffer);                                                      \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("     Hi!")) == 0);                                               \
+	))                                                                                                      \
+	TEST(FString_WriteString, RespectsDestEncoding, (                                                       \
+		string String = CStringL_UTF8("Hi!");                                                               \
+		string Buffer = LString(16);                                                                        \
+		Buffer.Encoding = STRING_ENCODING_UTF32;                                                            \
+		fstring_format Format = { .Width = 4, .Value = { .String = &String } };                             \
+		fstring_format_status Status = FString_WriteString(&Format, Buffer);                                \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL_UTF32(" Hi!")) == 0);                                            \
+		Buffer.Encoding = STRING_ENCODING_UTF16;                                                            \
+		Buffer.Length = 8;                                                                                  \
+		Format = (fstring_format){ .Width = 4, .Value = { .String = &String } };                            \
+		Status = FString_WriteString(&Format, Buffer);                                                      \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL_UTF16(" Hi!")) == 0);                                            \
+	))                                                                                                      \
+	TEST(FString_WriteString, HandlesLeftAlign, (                                                           \
+		string String = CStringL("Hi!");                                                                    \
+		string Buffer = LString(8);                                                                         \
+		fstring_format Format = { .Width = 8, .Value = { .String = &String } };                             \
+		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                     \
+		fstring_format_status Status = FString_WriteString(&Format, Buffer);                                \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("Hi!     ")) == 0);                                               \
+		String = CStringL("");                                                                              \
+		Format = (fstring_format){ .Width = 8, .Value = { .String = &String } };                            \
+		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                     \
+		Status = FString_WriteString(&Format, Buffer);                                                      \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("        ")) == 0);                                               \
 	))                                                                                                      \
 	//
 
