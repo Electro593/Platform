@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -Wall -Wextra -fno-stack-protector -Werror" # /GS- /Gs0x100000
+CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -Wall -Wextra -funsigned-char -fno-stack-protector -Werror" # /GS- /Gs0x100000
 CompilerSwitches="$CompilerSwitches -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
 CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_OPENGL -D_WORD_SIZE=64"
