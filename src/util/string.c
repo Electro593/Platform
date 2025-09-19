@@ -1483,6 +1483,10 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 	if (!IsGrouped) GroupStr = EString();
 
 	usize MinDigits = Format->Precision < 0 ? 1 : Format->Precision;
+	if (PadCodepoint == '0') {
+		MinDigits  = Format->Width - RadixPrefix.Length;
+		MinDigits -= (MinDigits - 1) / (GroupSize + 1);
+	}
 
 	usize ValueDivisor = 1;
 	usize Value		   = Format->Value.Unsigned;
@@ -1510,9 +1514,7 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 
 	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	usize  PadLength	 = Format->ActualWidth - Format->ContentLength;
-	string EncodingStr	 = EString();
-	EncodingStr.Encoding = Buffer.Encoding;
+	usize PadLength = Format->ActualWidth - Format->ContentLength;
 
 	string Dest = Buffer;
 	if (!IsLeft && !PadZero) {
@@ -1636,46 +1638,64 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 	b08 PrefixSign	= !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SIGN);
 	b08 PrefixSpace = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SPACE);
 	b08 IsGrouped	= !!(Format->Type & FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);
-	b08 IsUppercase = !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
 	b08 PadZero		= !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
 
-	string Prefix = Format->Value.Signed < 0 ? CStringL("-")
-				  : PrefixSign				 ? CStringL("+")
-				  : PrefixSpace				 ? CStringL(" ")
-											 : EString();
+	u32 PadCodepoint = (Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
 
-	string GroupStr	  = IsGrouped ? CStringL(",") : EString();
-	usize  GroupSize  = 3;
-	usize  MinDigits  = Format->Precision < 0 ? 1 : Format->Precision;
-	usize  GroupCount = (MinDigits - 1) / GroupSize;
+	string Prefix	= Format->Value.Signed < 0 ? CStringL("-")
+					: PrefixSign			   ? CStringL("+")
+					: PrefixSpace			   ? CStringL(" ")
+											   : EString();
+	string GroupStr = IsGrouped ? CStringL(",") : EString();
+
+	usize MinDigits = Format->Precision < 0 ? 1 : Format->Precision;
+	if (PadCodepoint == '0') {
+		MinDigits  = Format->Width - Prefix.Length;
+		MinDigits -= (MinDigits - 1) / 4;
+	}
+
+	ssize ValueDivisor = 1;
+	ssize Value		   = Format->Value.Signed;
+	usize ValueDigits  = !!Value;
+	if (Value < 0) {
+		while (Value / 10 <= -ValueDivisor) {
+			ValueDivisor *= 10;
+			ValueDigits++;
+		}
+	} else {
+		while (Value / 10 >= ValueDivisor) {
+			ValueDivisor *= 10;
+			ValueDigits++;
+		}
+	}
+	usize PrecisionZeroes = ValueDigits < MinDigits ? MinDigits - ValueDigits : 0;
+	usize TotalDigits	  = PrecisionZeroes + ValueDigits;
+	usize GroupCount	  = TotalDigits ? ((TotalDigits - 1) / 3) : 0;
 
 	if (Format->ContentLength == 0) {
-		ssize Value = Format->Value.Signed;
-		while (Value) {
-			Value /= 10;
-			Format->ContentLength++;
-		}
-		Format->ContentLength = MAX(MinDigits, Format->ContentLength);
+		string EncodingStr	  = EString();
+		EncodingStr.Encoding  = Buffer.Encoding;
+		usize DigitsLength	  = String_WriteCodepoint(EncodingStr, '0') * TotalDigits;
+		Format->ContentLength = DigitsLength;
 
 		Format->ContentLength += Prefix.Length;
 		Format->ContentLength += GroupCount * GroupStr.Length;
 
-		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
+		usize WidthLength	= String_WriteCodepoint(EncodingStr, PadCodepoint) * Format->Width;
+		Format->ActualWidth = MAX(WidthLength, Format->ContentLength);
 	}
 
 	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
 	usize PadLength = Format->ActualWidth - Format->ContentLength;
 
-	string EncodingStr	 = EString();
-	EncodingStr.Encoding = Buffer.Encoding;
-
 	string Dest = Buffer;
-	if (!IsLeft) {
-		u32 PadChar = ' ';
-		if (Format->Precision < 0 && PadZero) PadChar = '0';
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, PadChar));
+	if (!IsLeft && !PadZero) {
+		for (usize I = 0; I < PadLength;) {
+			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
+			String_BumpBytes(&Dest, Delta);
+			I += Delta;
+		}
 	}
 
 	while (Prefix.Length) {
@@ -1683,36 +1703,46 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 	}
 
-	ssize Value			   = Format->Value.Signed;
-	usize DigitCount	   = Format->ContentLength - Prefix.Length - GroupCount * GroupStr.Length;
-	usize DigitsSinceGroup = 0;
+	if (!IsLeft && PadZero) {
+		for (usize I = 0; I < PadLength;) {
+			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
+			String_BumpBytes(&Dest, Delta);
+			I += Delta;
+		}
+	}
 
-	Dest.Text	+= Format->ContentLength - Prefix.Length;
-	Dest.Length += Format->ContentLength - Prefix.Length;
-	for (usize I = 0; I < DigitCount; I++) {
-		u32 Codepoint  = '0' + (Value < 0 ? -(Value % 10) : Value % 10);
-		Value		  /= 10;
+	usize DigitsSinceGroup = 3 - (TotalDigits % 3);
+	for (usize I = 0; I < TotalDigits; I++) {
+		u32 Codepoint;
 
-		String_BumpBytes(&Dest, -String_WriteCodepoint(EncodingStr, Codepoint));
-		String_WriteCodepoint(Dest, Codepoint);
+		if (I < PrecisionZeroes) {
+			Codepoint = '0';
+		} else {
+			ssize Digit	  = (Value / ValueDivisor) % 10;
+			ValueDivisor /= 10;
+			Codepoint	  = '0' + (Digit < 0 ? -Digit : Digit);
+		}
+
+		usize DigitLength = String_WriteCodepoint(Dest, Codepoint);
+		String_BumpBytes(&Dest, DigitLength);
 		DigitsSinceGroup++;
 
-		if (DigitsSinceGroup == GroupSize) {
+		if (I < TotalDigits - 1 && DigitsSinceGroup == 3) {
 			DigitsSinceGroup = 0;
 			string Group	 = GroupStr;
 			while (Group.Length) {
 				u32 Codepoint = String_NextCodepoint(&Group);
-				String_BumpBytes(&Dest, -String_WriteCodepoint(EncodingStr, Codepoint));
-				String_WriteCodepoint(Dest, Codepoint);
+				String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
 			}
 		}
 	}
 
 	if (IsLeft) {
-		Dest.Text	= Buffer.Text + Format->ContentLength;
-		Dest.Length = PadLength;
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, ' '));
+		for (usize I = 0; I < PadLength;) {
+			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
+			String_BumpBytes(&Dest, Delta);
+			I += Delta;
+		}
 	}
 
 	return FSTRING_FORMAT_VALID;
@@ -3060,8 +3090,8 @@ FString(string Format, ...)
 		Assert(String_Cmp(Buffer, CString("0X2A")) == 0);                                                   \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, HandlesAlignmentAndPadding, (                                               \
-		string Buffer = LString(11);                                                                        \
-		fstring_format Format = { .Width = 11, .Precision = -1, .Value = { .Unsigned = 0x2cdeba } };        \
+		string Buffer = LString(13);                                                                        \
+		fstring_format Format = { .Width = 12, .Precision = -1, .Value = { .Unsigned = 0x2cdeba } };        \
 		Format.Type = FSTRING_FORMAT_FLAG_INT_HEX;                                                          \
 		Format.Type |= FSTRING_FORMAT_FLAG_SPECIFY_RADIX;                                                   \
 		Format.Type |= FSTRING_FORMAT_FLAG_SEPARATE_GROUPS;                                                 \
@@ -3070,13 +3100,14 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0x2c_deba  ")) == 0);                                            \
+		Assert(String_Cmp(Buffer, CString("0x2c_deba   ")) == 0);                                           \
 		Format.ContentLength = 0;                                                                           \
 		Format.Type &= ~FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                   \
+		Buffer.Length = 13;                                                                                 \
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0x002c_deba")) == 0);                                            \
+		Assert(String_Cmp(Buffer, CString("0x0_002c_deba")) == 0);                                          \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, HandlesPrecision, (                                                         \
 		string Buffer = LString(12);                                                                        \
@@ -3095,6 +3126,14 @@ FString(string Format, ...)
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CString("            ")) == 0);                                           \
+	))                                                                                                      \
+	TEST(FString_WriteUnsigned, PrintsMax, (                                                                \
+		string Buffer = LString(30);                                                                        \
+		fstring_format Format = { .Value = { .Unsigned = U64_MAX } };                                       \
+		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("18446744073709551615")) == 0);                                   \
 	))                                                                                                      \
 	TEST(FString_WritePointer, OnlyAcceptsLeftJustify, (                                                    \
 		string Buffer = LString(10);                                                                        \
@@ -3123,6 +3162,74 @@ FString(string Format, ...)
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CString("(nil)")) == 0);                                                  \
+	))                                                                                                      \
+	TEST(FString_WriteSigned, HandlesAlignmentAndPadding, (                                                 \
+		string Buffer = LString(10);                                                                        \
+		fstring_format Format = { .Width = 9, .Precision = -1, .Value = { .Signed = -92831 } };             \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SIGN;                                                      \
+		Format.Type |= FSTRING_FORMAT_FLAG_SEPARATE_GROUPS;                                                 \
+		Format.Type |= FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                    \
+		Format.Type |= FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;                                                   \
+		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("-92,831  ")) == 0);                                              \
+		Format.ContentLength = 0;                                                                           \
+		Format.Type &= ~FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                   \
+		Buffer.Length = 12;                                                                                 \
+		Status = FString_WriteSigned(&Format, Buffer);                                                      \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("-0,092,831")) == 0);                                             \
+	))                                                                                                      \
+	TEST(FString_WriteSigned, HandlesPrecision, (                                                           \
+		string Buffer = LString(12);                                                                        \
+		fstring_format Format = { .Width = 12, .Precision = 8, .Value = { .Signed = 192832 } };             \
+		Format.Type = FSTRING_FORMAT_FLAG_SEPARATE_GROUPS;                                                  \
+		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("  00,192,832")) == 0);                                           \
+		Format.Value.Signed = 0;                                                                            \
+		Format.Precision = 0;                                                                               \
+		Format.ContentLength = 0;                                                                           \
+		Format.Type &= ~FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                   \
+		Status = FString_WriteSigned(&Format, Buffer);                                                      \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("            ")) == 0);                                           \
+	))                                                                                                      \
+	TEST(FString_WriteSigned, HandlesPrefixSpace, (                                                         \
+		string Buffer = LString(12);                                                                        \
+		fstring_format Format = { .Value = { .Signed = 192832 } };                                          \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SPACE;                                                     \
+		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString(" 192832")) == 0);                                                \
+		Format.ContentLength = 0;                                                                           \
+		Format.Type |= FSTRING_FORMAT_FLAG_PREFIX_SIGN;                                                     \
+		Buffer.Length = 12;                                                                                 \
+		Status = FString_WriteSigned(&Format, Buffer);                                                      \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("+192832")) == 0);                                                \
+	))                                                                                                      \
+	TEST(FString_WriteSigned, PrintsMax, (                                                                  \
+		string Buffer = LString(30);                                                                        \
+		fstring_format Format = { .Value = { .Signed = S64_MAX } };                                         \
+		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("9223372036854775807")) == 0);                                    \
+	))                                                                                                      \
+	TEST(FString_WriteSigned, PrintsMin, (                                                                  \
+		string Buffer = LString(30);                                                                        \
+		fstring_format Format = { .Value = { .Signed = S64_MIN } };                                         \
+		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("-9223372036854775808")) == 0);                                   \
 	))                                                                                                      \
 	//
 
