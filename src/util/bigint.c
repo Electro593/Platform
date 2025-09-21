@@ -323,8 +323,10 @@ BigInt_SShift(bigint A, ssize ShiftBy)
 		for (I = 0; I < Count; I++) {
 			J  = I - WordsBy;
 			AH = J < 0 ? 0 : AP.Words[J];
-			AL = J - 1 < 0 ? 0 : AP.Words[J - 1];
-			DW = (AH << BitsBy) | (AL >> (UHALF_BITS - BitsBy));
+			if (BitsBy) {
+				AL = J - 1 < 0 ? 0 : AP.Words[J - 1];
+				DW = (AH << BitsBy) | (AL >> (UHALF_BITS - BitsBy));
+			} else DW = AH;
 
 			if (!I) {
 				if (Count == 1) return BigInt(DW);
@@ -517,10 +519,6 @@ BigInt_DivideUnsignedSingleWord(bigint A, bigint B, bigint *QuotOut, bigint *Rem
 		*QuotOut = BigInt_SAllocate(MAX(A.WordCount - B.WordCount + 1, 1));
 		Mem_Set(QuotOut->Words, 0, QuotOut->WordCount * sizeof(uhalf));
 	}
-	if (RemOut) {
-		*RemOut = BigInt_SAllocate(B.WordCount);
-		Mem_Set(RemOut->Words, 0, RemOut->WordCount * sizeof(uhalf));
-	}
 
 	Stack_Push();
 
@@ -529,24 +527,23 @@ BigInt_DivideUnsignedSingleWord(bigint A, bigint B, bigint *QuotOut, bigint *Rem
 	Assert(B.WordCount == 1);
 	usize VW = B.Words[0];
 
-	for (usize I = 0; I < A.WordCount - B.WordCount; I++) {
-		usize DigitIndex = A.WordCount - I;
+	for (usize I = A.WordCount; I > 0; I--) {
+		usize UWH = I < A.WordCount ? U.Words[I] : 0;
+		usize UWL = U.Words[I - 1];
+		usize UW  = (UWH << UHALF_BITS) | UWL;
+		usize Q	  = UW / VW;
+		usize R	  = UW % VW;
 
-		usize UW =
-			((usize) U.Words[DigitIndex - 1] << UHALF_BITS) | (usize) U.Words[DigitIndex - 2];
-		usize Q = UW / VW;
-		usize R = UW % VW;
-
-		U.Words[DigitIndex - 2] = R;
-
-		if (QuotOut) QuotOut->Words[DigitIndex - B.WordCount] = Q;
+		U.Words[I - 1] = R;
+		if (QuotOut) QuotOut->Words[I - 1] = Q;
 	}
 
-	if (RemOut) Mem_Cpy(RemOut->Words, B.Words, B.WordCount * sizeof(uhalf));
+	if (RemOut) *RemOut = BigInt(U.Words[0]);
 
 	Stack_Pop();
 }
 
+// CREDIT: https://skanthak.hier-im-netz.de/division.html
 internal void
 BigInt_DivideUnsignedMultiWord(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 {
@@ -568,7 +565,7 @@ BigInt_DivideUnsignedMultiWord(bigint A, bigint B, bigint *QuotOut, bigint *RemO
 	// until the leading bit is set.
 	u32	  NormShift;
 	uhalf BTop = B.Words[B.WordCount - 1];
-	Intrin_BitScanForward(&NormShift, BTop);
+	Intrin_BitScanReverse(&NormShift, BTop);
 	NormShift = 31 - NormShift;
 
 	// Copy A and B into U and V respectively, shifting by NormShift. The normalization
@@ -577,17 +574,23 @@ BigInt_DivideUnsignedMultiWord(bigint A, bigint B, bigint *QuotOut, bigint *RemO
 	bigint U = BigInt_SAllocate(A.WordCount + 1);
 	bigint V = BigInt_SAllocate(B.WordCount);
 
-	U.Words[0] = A.Words[0] << NormShift;
-	for (usize I = 1; I < A.WordCount; I++)
-		U.Words[I] = (A.Words[I] << NormShift) | (A.Words[I - 1] >> (UHALF_BITS - NormShift));
-	U.Words[A.WordCount] = A.Words[A.WordCount - 1] >> (UHALF_BITS - NormShift);
+	if (NormShift) {
+		U.Words[0] = A.Words[0] << NormShift;
+		for (usize I = 1; I < A.WordCount; I++)
+			U.Words[I] = (A.Words[I] << NormShift) | (A.Words[I - 1] >> (UHALF_BITS - NormShift));
+		U.Words[A.WordCount] = A.Words[A.WordCount - 1] >> (UHALF_BITS - NormShift);
 
-	V.Words[0] = B.Words[0] << NormShift;
-	for (usize I = 1; I < B.WordCount; I++)
-		V.Words[I] = (B.Words[I] << NormShift) | (B.Words[I - 1] >> (UHALF_BITS - NormShift));
+		V.Words[0] = B.Words[0] << NormShift;
+		for (usize I = 1; I < B.WordCount; I++)
+			V.Words[I] = (B.Words[I] << NormShift) | (B.Words[I - 1] >> (UHALF_BITS - NormShift));
+	} else {
+		Mem_Cpy(U.Words, A.Words, A.WordCount * sizeof(uhalf));
+		Mem_Cpy(V.Words, B.Words, B.WordCount * sizeof(uhalf));
+		U.Words[A.WordCount] = 0;
+	}
 
 	// Perform long division
-	for (usize I = 0; I <= A.WordCount - B.WordCount; I++) {
+	for (usize I = 0; I <= A.WordCount - V.WordCount; I++) {
 		usize DigitIndex = A.WordCount - I;
 
 		// Estimate a quotient based on the biggest two digits of A and the biggest of B. Refine the
@@ -600,22 +603,37 @@ BigInt_DivideUnsignedMultiWord(bigint A, bigint B, bigint *QuotOut, bigint *RemO
 		do {
 			if (QHat < UHALF_MAX
 				&& QHat * (usize) V.Words[V.WordCount - 2]
-					   <= (RHat << UHALF_BITS) + (usize) U.Words[DigitIndex - 2])
+					   <= ((RHat << UHALF_BITS) | (usize) U.Words[DigitIndex - 2]))
 				break;
 			QHat--;
 			RHat += VW;
 		} while (RHat < UHALF_MAX);
 
-		usize UL   = (UW << UHALF_BITS) | (usize) U.Words[DigitIndex - 2];
-		usize VL   = (VW << UHALF_BITS) | (usize) V.Words[V.WordCount - 2];
-		usize Prod = QHat * VL;
-		Assert(UL > Prod);
-		usize R = UL - Prod;
+		// Multiply out QHat by V and subtract it from U
+		ssize K = 0, T;
+		for (usize J = 0; J < V.WordCount; J++) {
+			usize P = QHat * V.Words[J];
+			T		= U.Words[DigitIndex - V.WordCount + J] - K - (P & (usize) UHALF_MAX);
+			U.Words[DigitIndex - V.WordCount + J] = T;
+			K									  = (P >> UHALF_BITS) - (T >> UHALF_BITS);
+		}
+		T					= U.Words[DigitIndex] - K;
+		U.Words[DigitIndex] = T;
 
-		U.Words[DigitIndex - 1] = R >> UHALF_BITS;
-		U.Words[DigitIndex - 2] = R & UHALF_MAX;
+		// If the remainder we subtracted was larger than the multiplied quotient,
+		// decrement the quotient and remove the corresponding remainder amount.
+		if (T < 0) {
+			QHat--;
+			K = 0;
+			for (usize J = 0; J < V.WordCount; J++) {
+				T = U.Words[DigitIndex - V.WordCount + J] + V.Words[J] + K;
+				U.Words[DigitIndex - V.WordCount + J] = T;
+				K									  = T >> UHALF_BITS;
+			}
+			U.Words[DigitIndex] += K;
+		}
 
-		if (QuotOut) QuotOut->Words[DigitIndex - B.WordCount] = QHat;
+		if (QuotOut) QuotOut->Words[DigitIndex - V.WordCount] = QHat;
 	}
 
 	if (RemOut) {
@@ -658,11 +676,12 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 	BP = BigInt_Flatten(BP);
 	if (!AP.WordCount) AP.SWords = &A.Word, AP.WordCount = 1;
 	if (!BP.WordCount) BP.SWords = &B.Word, BP.WordCount = 1;
+
+	s08 Cmp = BigInt_Compare(AP, BP);
 	if (AP.Words[AP.WordCount - 1] == 0) AP.WordCount--;
 	if (BP.Words[BP.WordCount - 1] == 0) BP.WordCount--;
 
 	bigint Quot = BigInt(0), Rem = BigInt(0);
-	s08	   Cmp = BigInt_Compare(AP, BP);
 	if (Cmp < 0) {
 		Quot = BigInt(0);
 		Rem	 = A;
@@ -674,6 +693,9 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 		Rem	 = BigInt(0);
 	} else if (BP.WordCount >= 2) {
 		BigInt_DivideUnsignedMultiWord(AP, BP, QuotOut ? &Quot : NULL, RemOut ? &Rem : NULL);
+	} else if (AP.WordCount == 1) {
+		Quot = BigInt(A.Word / B.Word);
+		Rem	 = BigInt(A.Word % B.Word);
 	} else {
 		BigInt_DivideUnsignedSingleWord(AP, BP, QuotOut ? &Quot : NULL, RemOut ? &Rem : NULL);
 	}
@@ -682,6 +704,9 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 		Quot = BigInt_SNegate(Quot);
 		Rem	 = BigInt_SNegate(Rem);
 	}
+
+	Quot = BigInt_Flatten(Quot);
+	Rem	 = BigInt_Flatten(Rem);
 
 	Stack_Pop();
 
@@ -959,6 +984,14 @@ BigInt_ToInt(bigint A)
 		Assert(Result.WordCount == 2);                                       \
 		Assert(Result.SWords[0] == SHALF_MIN);                               \
 		Assert(Result.SWords[1] == 0);                                       \
+	))                                                                       \
+	TEST(BigInt_SShift, HandlesSignedOverflow, (                             \
+		bigint A = BigInt_SInit(2, 0x8ac722fe, 0);                           \
+		bigint Result = BigInt_SShift(A, SHALF_BITS);                        \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 0x8ac722fe);                              \
+		Assert(Result.SWords[2] == 0);                                       \
 	))                                                                       \
 	TEST(BigInt_SAdd, AddsSmallNumbers, (                                    \
 		bigint Result = BigInt_SAdd(BigInt(3), BigInt(5));                   \

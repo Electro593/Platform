@@ -96,10 +96,10 @@ Load(platform_state *Platform, platform_module *Module)
 	Module->Funcs = &_F;
 }
 
-#define TEST(FunctionName, TestName, TestCode)  \
+#define TEST(FunctionName, TestName, TestCode)         \
 	static void Test_##FunctionName##_##TestName(void) \
-	{                                           \
-		MAC_UNPACKAGE(TestCode)                 \
+	{                                                  \
+		MAC_UNPACKAGE(TestCode)                        \
 	}
 BIGINT_TESTS
 STRING_TESTS
