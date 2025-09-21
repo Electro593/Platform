@@ -382,6 +382,29 @@ String_WriteCodepoint(string String, u32 Codepoint)
 	}
 }
 
+internal usize
+String_Cpy(string Dest, string Src)
+{
+	usize Written = 0;
+	while (Src.Length) {
+		u32	  Codepoint	 = String_NextCodepoint(&Src);
+		usize Delta		 = String_WriteCodepoint(Dest, Codepoint);
+		Written			+= String_BumpBytes(&Dest, Delta);
+	}
+	return Written;
+}
+
+internal usize
+String_Fill(string Dest, u32 Codepoint, usize Count)
+{
+	usize Written = 0;
+	for (usize I = 0; I < Count; I++) {
+		usize Delta	 = String_WriteCodepoint(Dest, Codepoint);
+		Written		+= String_BumpBytes(&Dest, Delta);
+	}
+	return Written;
+}
+
 /**************************************************************************************************
  *   String Formatting
  *-------------------------------------------------------------------------------------------------
@@ -1332,50 +1355,34 @@ FString_WriteString(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 
-	u32 PadCodepoint = ' ';
+	b08 IsLeft = !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
+
+	string EncodingStr	 = EString();
+	EncodingStr.Encoding = Buffer.Encoding;
+
+	u32	  PadCodepoint = ' ';
+	usize PadCharLen   = String_WriteCodepoint(EncodingStr, PadCodepoint);
 
 	if (Format->ActualWidth == 0) {
-		string Cursor		 = *Format->Value.String;
-		string EncodingStr	 = EString();
-		EncodingStr.Encoding = Buffer.Encoding;
+		string Cursor = *Format->Value.String;
 		while (Cursor.Length) {
 			u32 Codepoint		   = String_NextCodepoint(&Cursor);
 			Format->ContentLength += String_WriteCodepoint(EncodingStr, Codepoint);
 		}
 
-		usize WidthLength = String_WriteCodepoint(EncodingStr, PadCodepoint) * Format->Width;
-
+		usize WidthLength	= PadCharLen * Format->Width;
 		Format->ActualWidth = MAX(WidthLength, Format->ContentLength);
 	}
 
 	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	string Cursor = *Format->Value.String;
-	string Dest	  = Buffer;
+	usize PadCount = (Format->ActualWidth - Format->ContentLength) / PadCharLen;
 
-	b08	  IsLeft	= !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
-	usize PadLength = Format->ActualWidth - Format->ContentLength;
+	if (!IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
-	if (!IsLeft) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, *Format->Value.String));
 
-	while (Cursor.Length) {
-		u32 Codepoint = String_NextCodepoint(&Cursor);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
-
-	if (IsLeft) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	return FSTRING_FORMAT_VALID;
 }
@@ -1436,8 +1443,13 @@ FString_WriteBool(fstring_format *Format, string Buffer)
 	string True	 = CStringL("true");
 	string False = CStringL("false");
 
-	Format->Value.String = Format->Value.Bool ? &True : &False;
-	return FString_WriteString(Format, Buffer);
+	fstring_format NewFormat	 = *Format;
+	NewFormat.Value.String		 = Format->Value.Bool ? &True : &False;
+	fstring_format_status Status = FString_WriteString(&NewFormat, Buffer);
+	Format->ActualWidth			 = NewFormat.ActualWidth;
+	Format->ContentLength		 = NewFormat.ContentLength;
+
+	return Status;
 }
 
 /// @brief Write an unsigned int into the buffer, based on the format. Alignment, width, precision,
@@ -1462,13 +1474,16 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 	b08 IsUppercase	 = !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
 	b08 PadZero		 = !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
 
-	u32 PadCodepoint = (Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
+	string EncodingStr	 = EString();
+	EncodingStr.Encoding = Buffer.Encoding;
+
+	u32	  PadCodepoint = (Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
+	usize PadCharLen   = String_WriteCodepoint(EncodingStr, PadCodepoint);
 
 	string RadixPrefix = EString();
 	string GroupStr	   = CStringL(",");
 	usize  Radix	   = 10;
 	usize  GroupSize   = 3;
-
 	if (Format->Type & FSTRING_FORMAT_FLAG_INT_BIN) {
 		RadixPrefix = IsUppercase ? CStringL("0B") : CStringL("0b");
 		GroupStr	= CStringL("_");
@@ -1484,13 +1499,13 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 		Radix		= 16;
 		GroupSize	= 4;
 	}
-
 	if (!SpecifyRadix) RadixPrefix = EString();
 	if (!IsGrouped) GroupStr = EString();
 
+	usize DigitLen	= String_WriteCodepoint(EncodingStr, '0');
 	usize MinDigits = Format->Precision < 0 ? 1 : Format->Precision;
-	if (PadCodepoint == '0') {
-		MinDigits  = Format->Width - RadixPrefix.Length;
+	if (PadCodepoint == '0' && Format->Width > RadixPrefix.Length) {
+		MinDigits  = (Format->Width - RadixPrefix.Length) / DigitLen;
 		MinDigits -= (MinDigits - 1) / (GroupSize + 1);
 	}
 
@@ -1506,43 +1521,23 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 	usize GroupCount	  = TotalDigits ? ((TotalDigits - 1) / GroupSize) : 0;
 
 	if (Format->ActualWidth == 0) {
-		string EncodingStr	  = EString();
-		EncodingStr.Encoding  = Buffer.Encoding;
-		usize DigitsLength	  = String_WriteCodepoint(EncodingStr, '0') * TotalDigits;
+		usize DigitsLength	  = DigitLen * TotalDigits;
 		Format->ContentLength = DigitsLength;
 
 		Format->ContentLength += RadixPrefix.Length;
 		Format->ContentLength += GroupCount * GroupStr.Length;
 
-		usize WidthLength	= String_WriteCodepoint(EncodingStr, PadCodepoint) * Format->Width;
+		usize WidthLength	= PadCharLen * Format->Width;
 		Format->ActualWidth = MAX(WidthLength, Format->ContentLength);
 	}
 
 	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	usize PadLength = Format->ActualWidth - Format->ContentLength;
+	usize PadCount = (Format->ActualWidth - Format->ContentLength) / PadCharLen;
 
-	string Dest = Buffer;
-	if (!IsLeft && !PadZero) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	if (!IsLeft && !PadZero) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
-	while (RadixPrefix.Length) {
-		u32 Codepoint = String_NextCodepoint(&RadixPrefix);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
-
-	if (!IsLeft && PadZero) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, RadixPrefix));
 
 	usize DigitsSinceGroup = GroupSize - (TotalDigits % GroupSize);
 	for (usize I = 0; I < TotalDigits; I++) {
@@ -1560,27 +1555,16 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 							   : 'a' + (Digit - 10));
 		}
 
-		usize DigitLength = String_WriteCodepoint(Dest, Codepoint);
-		String_BumpBytes(&Dest, DigitLength);
+		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
 		DigitsSinceGroup++;
 
 		if (I < TotalDigits - 1 && DigitsSinceGroup == GroupSize) {
 			DigitsSinceGroup = 0;
-			string Group	 = GroupStr;
-			while (Group.Length) {
-				u32 Codepoint = String_NextCodepoint(&Group);
-				String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-			}
+			String_BumpBytes(&Buffer, String_Cpy(Buffer, GroupStr));
 		}
 	}
 
-	if (IsLeft) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	return FSTRING_FORMAT_VALID;
 }
@@ -1646,7 +1630,11 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 	b08 IsGrouped	= !!(Format->Type & FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);
 	b08 PadZero		= !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
 
-	u32 PadCodepoint = (Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
+	string EncodingStr	 = EString();
+	EncodingStr.Encoding = Buffer.Encoding;
+
+	u32	  PadCodepoint = (Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
+	usize PadCharLen   = String_WriteCodepoint(EncodingStr, PadCodepoint);
 
 	string Prefix	= Format->Value.Signed < 0 ? CStringL("-")
 					: PrefixSign			   ? CStringL("+")
@@ -1654,9 +1642,10 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 											   : EString();
 	string GroupStr = IsGrouped ? CStringL(",") : EString();
 
+	usize DigitLen	= String_WriteCodepoint(EncodingStr, '0');
 	usize MinDigits = Format->Precision < 0 ? 1 : Format->Precision;
 	if (PadCodepoint == '0') {
-		MinDigits  = Format->Width - Prefix.Length;
+		MinDigits  = (Format->Width - Prefix.Length) / DigitLen;
 		MinDigits -= (MinDigits - 1) / 4;
 	}
 
@@ -1679,43 +1668,23 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 	usize GroupCount	  = TotalDigits ? ((TotalDigits - 1) / 3) : 0;
 
 	if (Format->ActualWidth == 0) {
-		string EncodingStr	  = EString();
-		EncodingStr.Encoding  = Buffer.Encoding;
 		usize DigitsLength	  = String_WriteCodepoint(EncodingStr, '0') * TotalDigits;
 		Format->ContentLength = DigitsLength;
 
 		Format->ContentLength += Prefix.Length;
 		Format->ContentLength += GroupCount * GroupStr.Length;
 
-		usize WidthLength	= String_WriteCodepoint(EncodingStr, PadCodepoint) * Format->Width;
+		usize WidthLength	= PadCharLen * Format->Width;
 		Format->ActualWidth = MAX(WidthLength, Format->ContentLength);
 	}
 
 	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	usize PadLength = Format->ActualWidth - Format->ContentLength;
+	usize PadCount = (Format->ActualWidth - Format->ContentLength) / PadCharLen;
 
-	string Dest = Buffer;
-	if (!IsLeft && !PadZero) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	if (!IsLeft && !PadZero) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
-	while (Prefix.Length) {
-		u32 Codepoint = String_NextCodepoint(&Prefix);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
-
-	if (!IsLeft && PadZero) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, Prefix));
 
 	usize DigitsSinceGroup = 3 - (TotalDigits % 3);
 	for (usize I = 0; I < TotalDigits; I++) {
@@ -1729,27 +1698,16 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 			Codepoint	  = '0' + (Digit < 0 ? -Digit : Digit);
 		}
 
-		usize DigitLength = String_WriteCodepoint(Dest, Codepoint);
-		String_BumpBytes(&Dest, DigitLength);
+		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
 		DigitsSinceGroup++;
 
 		if (I < TotalDigits - 1 && DigitsSinceGroup == 3) {
 			DigitsSinceGroup = 0;
-			string Group	 = GroupStr;
-			while (Group.Length) {
-				u32 Codepoint = String_NextCodepoint(&Group);
-				String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-			}
+			String_BumpBytes(&Buffer, String_Cpy(Buffer, GroupStr));
 		}
 	}
 
-	if (IsLeft) {
-		for (usize I = 0; I < PadLength;) {
-			usize Delta = String_WriteCodepoint(Dest, PadCodepoint);
-			String_BumpBytes(&Dest, Delta);
-			I += Delta;
-		}
-	}
+	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	return FSTRING_FORMAT_VALID;
 }
@@ -1760,103 +1718,78 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 	Assert(Format);
 	Stack_Push();
 
-	static const string Empty		  = EString();
-	static const string NanUpper	  = CStringL("NAN");
-	static const string NanLower	  = CStringL("nan");
-	static const string InfUpper	  = CStringL("INF");
-	static const string InfLower	  = CStringL("inf");
-	static const string SignPos		  = CStringL("+");
-	static const string SignNeg		  = CStringL("-");
-	static const string SignSpace	  = CStringL(" ");
-	static const string HexUpper	  = CStringL("0X");
-	static const string HexLower	  = CStringL("0x");
-	static const string ExpHexUpper	  = CStringL("P");
-	static const string ExpHexLower	  = CStringL("p");
-	static const string Period		  = CStringL(".");
-	static const u32	DigitsUpper[] = { '0', '1', '2', '3', '4', '5', '6', '7',
-										  '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-	static const u32	DigitsLower[] = { '0', '1', '2', '3', '4', '5', '6', '7',
-										  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-
 	b08 IsLeft		 = !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
 	b08 SpecifyRadix = !!(Format->Type & FSTRING_FORMAT_FLAG_SPECIFY_RADIX);
 	b08 PrefixSign	 = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SIGN);
 	b08 PrefixSpace	 = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SPACE);
-	b08 IsGrouped	 = !!(Format->Type & FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);
 	b08 IsUpper		 = !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
 	b08 PadZero		 = !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
+
+	string EncodingStr	 = EString();
+	EncodingStr.Encoding = Buffer.Encoding;
+
+	u32	  PadCodepoint = PadZero && !IsLeft ? '0' : ' ';
+	usize PadCharLen   = String_WriteCodepoint(EncodingStr, PadCodepoint);
 
 	r64 Value  = Format->Value.Float;
 	u64 Binary = *(u64 *) &Value;
 
-	b08	  Negative = Binary >> 63;
-	ssize Exponent = (ssize) ((Binary >> 52) & 0x3FF) - 1023;
-	usize Mantissa = Binary & ((1ull << 52) - 1);
+	b08 Negative = Binary >> 63;
+	s64 Exponent = (ssize) ((Binary >> 52) & 0x7FF) - 1023;
+	u64 Mantissa = Binary & ((1ull << 52) - 1);
 
-	const u32 *DigitsList = IsUpper ? DigitsUpper : DigitsLower;
-
-	b08	   IsSpecial	 = Exponent == 1024;
-	string SpecialString = !IsSpecial ? Empty
-						 : Mantissa	  ? (IsUpper ? NanUpper : NanLower)
-									  : (IsUpper ? InfUpper : InfLower);
-
-	if (Exponent == -1023) Exponent = -1022;
-	else Mantissa |= 1ull << 52;
-
-	b08 NegativeExp = Exponent < 0;
-	Exponent		= NegativeExp ? -Exponent : Exponent;
-
-	s32 MantissaLSB;
-	if (!Intrin_BitScanForward64((u32 *) &MantissaLSB, Mantissa)) MantissaLSB = 52;
-
-	bigint WholePart, FracPart, Radix, WholeDivisor, FracDivisor;
-	usize  WholeDigits = 0, FracDigits = 0, ExpDigits = 0, ExpDivisor = 1;
-	if (!IsSpecial) {
-		Radix = BigInt(16);
-
-		WholePart	 = BigInt(Mantissa >> 52);
-		WholeDivisor = BigInt(1);
-		while (BigInt_Compare(WholePart, WholeDivisor) >= 0) {
-			WholeDivisor = BigInt_SMul(WholeDivisor, Radix);
-			WholeDigits++;
+	u64 WholePart	= 1;
+	u64 FracDigits	= 13;
+	u64 FracDivisor = 1ull << 48;
+	u64 FracPart	= Mantissa;
+	if (Format->Precision < 0) {
+		if (!FracPart) FracDigits = 0;
+		else {
+			u64 DigitCheck = FracPart;
+			while (DigitCheck % 16 == 0) {
+				DigitCheck /= 16;
+				FracDigits--;
+			}
 		}
-		if (WholeDigits < 1) WholeDigits = 1;
+	} else FracDigits = Format->Precision;
 
-		FracPart	= BigInt(Mantissa & ((1ull << 52) - 1));
-		FracDivisor = BigInt(1);
-		while (BigInt_Compare(FracPart, FracDivisor) >= 0) {
-			FracDivisor = BigInt_SMul(FracDivisor, Radix);
-			FracDigits++;
-		}
-		if (Format->Precision < 0)
-			while (!BigInt_SRem(FracPart, Radix).Words[0]) FracDigits--;
-		else FracDigits = Format->Precision;
-
-		while (Exponent >= ExpDivisor) {
-			ExpDivisor *= 10;
-			ExpDigits++;
-		}
-		if (ExpDigits < 1) ExpDigits = 1;
+	if (Exponent == -1023) {
+		Exponent  = -1022;
+		WholePart = 0;
 	}
+	usize ExpDigits	  = 1;
+	usize ExpDivisor  = 1;
+	b08	  NegativeExp = Exponent < 0;
+	usize ExpPart	  = NegativeExp ? -Exponent : Exponent;
+	while (ExpPart / 10 >= ExpDivisor) {
+		ExpDivisor *= 10;
+		ExpDigits++;
+	}
+	if (ExpDigits < 1) ExpDigits = 1;
 
-	string SignString = Negative ? SignNeg : PrefixSign ? SignPos : PrefixSpace ? SignSpace : Empty;
-	string HexString  = IsSpecial ? Empty : IsUpper ? HexUpper : HexLower;
-	string RadixString	 = IsSpecial || (!SpecifyRadix && !FracDigits) ? Empty : Period;
-	string ExpSignString = IsSpecial ? Empty : NegativeExp ? SignNeg : SignPos;
-	string ExpString	 = IsSpecial ? Empty : IsUpper ? ExpHexUpper : ExpHexLower;
+	string SignString	 = Negative	   ? CStringL("-")
+						 : PrefixSign  ? CStringL("+")
+						 : PrefixSpace ? CStringL(" ")
+									   : EString();
+	string HexString	 = IsUpper ? CStringL("0X") : CStringL("0x");
+	string RadixString	 = !SpecifyRadix && !FracDigits ? EString() : CStringL(".");
+	string ExpSignString = NegativeExp ? CStringL("-") : CStringL("+");
+	string ExpString	 = IsUpper ? CStringL("P") : CStringL("p");
+
+	usize DigitLen = String_WriteCodepoint(EncodingStr, '0');
 
 	if (Format->ActualWidth == 0) {
 		Format->ContentLength = SignString.Length
-							  + SpecialString.Length
 							  + HexString.Length
-							  + WholeDigits
+							  + 1 * DigitLen
 							  + RadixString.Length
-							  + FracDigits
+							  + FracDigits * DigitLen
 							  + ExpSignString.Length
 							  + ExpString.Length
-							  + ExpDigits;
+							  + ExpDigits * DigitLen;
 
-		Format->ActualWidth = MAX(Format->Width, Format->ContentLength);
+		usize PadWidth		= PadCharLen * Format->Width;
+		Format->ActualWidth = MAX(PadWidth, Format->ContentLength);
 	}
 
 	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) {
@@ -1864,77 +1797,37 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 	}
 
-	usize PadLength = Format->ActualWidth - Format->ContentLength;
+	usize PadCount = (Format->ActualWidth - Format->ContentLength) / PadCharLen;
 
-	string Dest = Buffer;
-	if (!IsLeft) {
-		u32 PadChar = ' ';
-		if (Format->Precision < 0 && PadZero) PadChar = '0';
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, PadChar));
-	}
-
-	while (SignString.Length) {
-		u32 Codepoint = String_NextCodepoint(&SignString);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
-
-	while (SpecialString.Length) {
-		u32 Codepoint = String_NextCodepoint(&SpecialString);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
-
-	while (HexString.Length) {
-		u32 Codepoint = String_NextCodepoint(&HexString);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
-
-	while (WholeDigits) {
-		bigint Quot		 = BigInt_SDiv(WholePart, WholeDivisor);
-		bigint Rem		 = BigInt_SRem(Quot, Radix);
-		u32	   Codepoint = DigitsList[Rem.Words[0]];
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-		WholeDivisor = BigInt_SDiv(WholeDivisor, Radix);
-		WholeDigits--;
-	}
-
-	while (RadixString.Length) {
-		u32 Codepoint = String_NextCodepoint(&RadixString);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
+	if (!IsLeft && !PadZero) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, SignString));
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, HexString));
+	if (!IsLeft && PadZero) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, '0' + WholePart));
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, RadixString));
 
 	while (FracDigits) {
-		bigint Quot		 = BigInt_SDiv(FracPart, FracDivisor);
-		bigint Rem		 = BigInt_SRem(Quot, Radix);
-		u32	   Codepoint = DigitsList[Rem.Words[0]];
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-		FracDivisor = BigInt_SDiv(FracDivisor, Radix);
+		usize Digit		= (FracPart / FracDivisor) % 16;
+		u32	  Codepoint = Digit < 10 ? '0' + Digit
+						: IsUpper	 ? 'A' + (Digit - 10)
+									 : 'a' + (Digit - 10);
+		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
+		FracDivisor /= 16;
 		FracDigits--;
 	}
 
-	while (ExpSignString.Length) {
-		u32 Codepoint = String_NextCodepoint(&ExpSignString);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
-
-	while (ExpString.Length) {
-		u32 Codepoint = String_NextCodepoint(&ExpString);
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
-	}
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, ExpString));
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, ExpSignString));
 
 	while (ExpDigits) {
-		u32 Codepoint = DigitsList[(Exponent / ExpDivisor) % 10];
-		String_BumpBytes(&Dest, String_WriteCodepoint(Dest, Codepoint));
+		usize Digit		= (ExpPart / ExpDivisor) % 10;
+		u32	  Codepoint = '0' + Digit;
+		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
 		ExpDivisor /= 10;
 		ExpDigits--;
 	}
 
-	if (IsLeft) {
-		Dest.Text	= Buffer.Text + Format->ContentLength;
-		Dest.Length = PadLength;
-		for (usize I = 0; I < PadLength; I++)
-			String_BumpBytes(&Dest, String_WriteCodepoint(Dest, ' '));
-	}
+	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	Stack_Pop();
 	return FSTRING_FORMAT_VALID;
@@ -1954,7 +1847,42 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 internal fstring_format_status
 FString_WriteFloat(fstring_format *Format, string Buffer)
 {
-	return FString_WriteHexFloat(Format, Buffer);
+	Assert(Format);
+
+	b08 PrefixSign	= !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SIGN);
+	b08 PrefixSpace = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SPACE);
+	b08 IsUpper		= !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
+
+	r64 Value  = Format->Value.Float;
+	u64 Binary = *(u64 *) &Value;
+
+	b08	  Negative = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
+	ssize Exponent =
+		(ssize) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
+	usize Mantissa = Binary & R64_MANTISSA_MASK;
+
+	if (Exponent == R64_EXPONENT_MAX) {
+		c08	   SpecialChars[4];
+		string SpecialStr = CLString(SpecialChars, 4);
+		if (Mantissa) Mem_Cpy(SpecialChars + 1, IsUpper ? "NAN" : "nan", 3);
+		else Mem_Cpy(SpecialChars + 1, IsUpper ? "INF" : "inf", 3);
+		if (Negative) SpecialChars[0] = '-';
+		else if (PrefixSign) SpecialChars[0] = '+';
+		else if (PrefixSpace) SpecialChars[0] = ' ';
+		else String_BumpBytes(&SpecialStr, 1);
+
+		fstring_format NewFormat	 = *Format;
+		NewFormat.Value.String		 = &SpecialStr;
+		fstring_format_status Status = FString_WriteString(&NewFormat, Buffer);
+
+		Format->ActualWidth	  = NewFormat.ActualWidth;
+		Format->ContentLength = NewFormat.ContentLength;
+		return Status;
+	}
+
+	if (Format->Type & FSTRING_FORMAT_FLAG_FLOAT_HEX) return FString_WriteHexFloat(Format, Buffer);
+
+	return FSTRING_FORMAT_NOT_IMPLEMENTED;
 }
 
 /// @brief Writes a formatted value into the provided buffer.
@@ -2209,8 +2137,11 @@ FString(string Format, ...)
 // - Floating point support
 // - Errno? Might need an architectural rework...
 // - Standardize length (# code units) vs codepoint count, update functions accordingly
+//    - Width should be # of codepoints, currently it's being used incorrectly
 // - Match format string encoding with output encoding
 // - Test encodings
+// - Encodings where not all digits have the same length?
+// - Hex float groupings?
 
 #ifndef REGION_STRING_TESTS
 
@@ -2221,10 +2152,10 @@ FString(string Format, ...)
 		string Cursor = {0};                                                                                \
 	    Result = FString_PeekCursor(&Cursor);                                                               \
 		Assert(Result == 0);                                                                                \
-		Cursor = CString("");                                                                               \
+		Cursor = CStringL("");                                                                              \
 	    Result = FString_PeekCursor(&Cursor);                                                               \
 		Assert(Result == 0);                                                                                \
-		Cursor = CString("Test");                                                                           \
+		Cursor = CStringL("Test");                                                                          \
 	    Result = FString_PeekCursor(&Cursor);                                                               \
 		Assert(Result == 'T');                                                                              \
 	))                                                                                                      \
@@ -2239,9 +2170,9 @@ FString(string Format, ...)
 	    FString_BumpCursor(&Cursor);                                                                        \
 		Assert(Cursor.Text == Empty);                                                                       \
 		Assert(Cursor.Length == 0);                                                                         \
-		Cursor = CString("Test");                                                                           \
+		Cursor = CStringL("Test");                                                                          \
 	    FString_BumpCursor(&Cursor);                                                                        \
-		Assert(String_Cmp(Cursor, CString("est")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("est")) == 0);                                                   \
 	))                                                                                                      \
 	TEST(FString_ParseFormatInt, ReportsNotPresentOnNonDigit, (                                             \
 	    fstring_format_status Result = FString_ParseFormatInt(NULL, NULL);                                  \
@@ -2250,78 +2181,78 @@ FString(string Format, ...)
 	    Result = FString_ParseFormatInt(NULL, &Int);                                                        \
 		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
 		Assert(Int == -92);                                                                                 \
-		string Cursor = CString("-23");                                                                     \
+		string Cursor = CStringL("-23");                                                                    \
 	    Result = FString_ParseFormatInt(&Cursor, &Int);                                                     \
 		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
-		Assert(String_Cmp(Cursor, CString("-23")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("-23")) == 0);                                                   \
 		Assert(Int == -92);                                                                                 \
-		Cursor = CString("-23");                                                                            \
+		Cursor = CStringL("-23");                                                                           \
 	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
 		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
-		Assert(String_Cmp(Cursor, CString("-23")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("-23")) == 0);                                                   \
 	))                                                                                                      \
 	TEST(FString_ParseFormatInt, ReportsNotPresentOnZero, (                                                 \
 		s32 Int = -92;                                                                                      \
-		string Cursor = CString("02");                                                                      \
+		string Cursor = CStringL("02");                                                                     \
 	    fstring_format_status Result = FString_ParseFormatInt(&Cursor, &Int);                               \
 		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
-		Assert(String_Cmp(Cursor, CString("02")) == 0);                                                     \
+		Assert(String_Cmp(Cursor, CStringL("02")) == 0);                                                    \
 		Assert(Int == -92);                                                                                 \
-		Cursor = CString("02");                                                                             \
+		Cursor = CStringL("02");                                                                            \
 	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
 		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
-		Assert(String_Cmp(Cursor, CString("02")) == 0);                                                     \
+		Assert(String_Cmp(Cursor, CStringL("02")) == 0);                                                    \
 	))                                                                                                      \
 	TEST(FString_ParseFormatInt, ReportsIntOverflowOnTooLarge, (                                            \
 		s32 Int = -92;                                                                                      \
-		string Cursor = CString("2147483648");                                                              \
+		string Cursor = CStringL("2147483648");                                                             \
 	    fstring_format_status Result = FString_ParseFormatInt(&Cursor, &Int);                               \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("8")) == 0);                                                     \
 		Assert(Int == -92);                                                                                 \
-		Cursor = CString("2147483648");                                                                     \
+		Cursor = CStringL("2147483648");                                                                    \
 	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("8")) == 0);                                                     \
 	))                                                                                                      \
 	TEST(FString_ParseFormatInt, ReturnsValidOnSuccesssfulParse, (                                          \
 		s32 Int = -92;                                                                                      \
-		string Cursor = CString("2147483647");                                                              \
+		string Cursor = CStringL("2147483647");                                                             \
 	    fstring_format_status Result = FString_ParseFormatInt(&Cursor, &Int);                               \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Int == 2147483647);                                                                          \
-		Cursor = CString("1");                                                                              \
+		Cursor = CStringL("1");                                                                             \
 	    Result = FString_ParseFormatInt(&Cursor, &Int);                                                     \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Int == 1);                                                                                   \
-		Cursor = CString("1");                                                                              \
+		Cursor = CStringL("1");                                                                             \
 	    Result = FString_ParseFormatInt(&Cursor, NULL);                                                     \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 	))                                                                                                      \
 	TEST(FString_ParseFormatIndex, PropagatesIndexOverflow, (                                               \
 		s32 Index = -92;                                                                                    \
 		b08 UseIndexes = 2;                                                                                 \
-		string Cursor = CString("2147483648");                                                              \
+		string Cursor = CStringL("2147483648");                                                             \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("8")) == 0);                                                     \
 		Assert(UseIndexes == 2);                                                                            \
 		Assert(Index == -92);                                                                               \
-		Cursor = CString("2147483648");                                                                     \
+		Cursor = CStringL("2147483648");                                                                    \
 	    Result = FString_ParseFormatIndex(&Cursor, NULL, &UseIndexes, TRUE);                                \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("8")) == 0);                                                     \
 	))                                                                                                      \
 	TEST(FString_ParseFormatIndex, ReportsInconsistentIfIndexNotPresentAndExpected, (                       \
 		b08 UseIndexes = TRUE;                                                                              \
 		s32 Index = -92;                                                                                    \
-		string Cursor = CString("-2$");                                                                     \
+		string Cursor = CStringL("-2$");                                                                    \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
-		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("-2$")) == 0);                                                   \
 		Assert(UseIndexes == TRUE);                                                                         \
 		Assert(Index == -92);                                                                               \
 	    Result = FString_ParseFormatIndex(NULL, NULL, &UseIndexes, FALSE);                                  \
@@ -2331,130 +2262,130 @@ FString(string Format, ...)
 	TEST(FString_ParseFormatIndex, ReturnsValidIfIndexNotPresentAndProhibited, (                            \
 		b08 UseIndexes = FALSE;                                                                             \
 		s32 Index = -92;                                                                                    \
-		string Cursor = CString("-2$");                                                                     \
+		string Cursor = CStringL("-2$");                                                                    \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("-2$")) == 0);                                                   \
 		Assert(UseIndexes == FALSE);                                                                        \
 		Assert(Index == -92);                                                                               \
 	    Result = FString_ParseFormatIndex(NULL, NULL, &UseIndexes, FALSE);                                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("-2$")) == 0);                                                   \
 		Assert(UseIndexes == FALSE);                                                                        \
 	))                                                                                                      \
 	TEST(FString_ParseFormatIndex, UpdatesUseIndexesIfIndexNotPresentAndUseIndexesUndefined, (              \
 		b08 UseIndexes = 2;                                                                                 \
 		s32 Index = -92;                                                                                    \
-		string Cursor = CString("-2$");                                                                     \
+		string Cursor = CStringL("-2$");                                                                    \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("-2$")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("-2$")) == 0);                                                   \
 		Assert(UseIndexes == FALSE);                                                                        \
 		Assert(Index == -92);                                                                               \
 	))                                                                                                      \
 	TEST(FString_ParseFormatIndex, ReportsInconsistentIfIndexPresentAndProhibited, (                        \
 		b08 UseIndexes = FALSE;                                                                             \
 		s32 Index = -92;                                                                                    \
-		string Cursor = CString("2$");                                                                      \
+		string Cursor = CStringL("2$");                                                                     \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
-		Assert(String_Cmp(Cursor, CString("$")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("$")) == 0);                                                     \
 		Assert(UseIndexes == FALSE);                                                                        \
 		Assert(Index == 2);                                                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatIndex, ReturnsValidIfIndexIsValid, (                                            \
 		b08 UseIndexes = TRUE;                                                                              \
 		s32 Index = -92;                                                                                    \
-		string Cursor = CString("2$");                                                                      \
+		string Cursor = CStringL("2$");                                                                     \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, FALSE);       \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(UseIndexes == TRUE);                                                                         \
 		Assert(Index == 2);                                                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatIndex, UpdatesUseIndexesIfIndexValidAndUseIndexesUndefined, (                   \
 		b08 UseIndexes = FALSE;                                                                             \
 		s32 Index = -92;                                                                                    \
-		string Cursor = CString("2$");                                                                      \
+		string Cursor = CStringL("2$");                                                                     \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(UseIndexes == TRUE);                                                                         \
 		Assert(Index == 2);                                                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatIndex, ReportsNotPresentIfNoDollarSignFollows, (                                \
 		b08 UseIndexes = 2;                                                                                 \
 		s32 Index = -92;                                                                                    \
-		string Cursor = CString("2");                                                                       \
+		string Cursor = CStringL("2");                                                                      \
 	    fstring_format_status Result = FString_ParseFormatIndex(&Cursor, &Index, &UseIndexes, TRUE);        \
 		Assert(Result == FSTRING_FORMAT_INDEX_NOT_PRESENT);                                                 \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(UseIndexes == 2);                                                                            \
 		Assert(Index == 2);                                                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, ReturnsValidAndKeepsExistingDataInOutput, (                              \
 		fstring_format_type Flags = 29;                                                                     \
-		string Cursor = CString("...");                                                                     \
+		string Cursor = CStringL("...");                                                                    \
 	    fstring_format_status Result = FString_ParseFormatFlags(&Cursor, &Flags);                           \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("...")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("...")) == 0);                                                   \
 		Assert(Flags == 29);                                                                                \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, HyphenIsLeftJustify, (                                                   \
 		fstring_format_type Flags = 0;                                                                      \
-		string Cursor = CString("-");                                                                       \
+		string Cursor = CStringL("-");                                                                      \
 	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);                                                  \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, PlusIsPrefixSign, (                                                      \
 		fstring_format_type Flags = 0;                                                                      \
-		string Cursor = CString("+");                                                                       \
+		string Cursor = CStringL("+");                                                                      \
 	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == FSTRING_FORMAT_FLAG_PREFIX_SIGN);                                                   \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, SpaceIsPrefixSpace, (                                                    \
 		fstring_format_type Flags = 0;                                                                      \
-		string Cursor = CString(" ");                                                                       \
+		string Cursor = CStringL(" ");                                                                      \
 	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == FSTRING_FORMAT_FLAG_PREFIX_SPACE);                                                  \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, HashIsSpecifyRadix, (                                                    \
 		fstring_format_type Flags = 0;                                                                      \
-		string Cursor = CString("#");                                                                       \
+		string Cursor = CStringL("#");                                                                      \
 	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == FSTRING_FORMAT_FLAG_SPECIFY_RADIX);                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, ApostropheIsSeparateGroups, (                                            \
 		fstring_format_type Flags = 0;                                                                      \
-		string Cursor = CString("'");                                                                       \
+		string Cursor = CStringL("'");                                                                      \
 	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);                                               \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, ZeroIsPadWithZero, (                                                     \
 		fstring_format_type Flags = 0;                                                                      \
-		string Cursor = CString("0");                                                                       \
+		string Cursor = CStringL("0");                                                                      \
 	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, UnderscoreIsNoWrite, (                                                   \
 		fstring_format_type Flags = 0;                                                                      \
-		string Cursor = CString("_");                                                                       \
+		string Cursor = CStringL("_");                                                                      \
 	    FString_ParseFormatFlags(&Cursor, &Flags);                                                          \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == FSTRING_FORMAT_FLAG_NO_WRITE);                                                      \
 	))                                                                                                      \
 	TEST(FString_ParseFormatFlags, IgnoresDuplicates, (                                                     \
 		fstring_format_type Flags = FSTRING_FORMAT_TYPE_MASK;                                               \
-		string Cursor = CString("-+++00-");                                                                 \
+		string Cursor = CStringL("-+++00-");                                                                \
 	    fstring_format_status Result = FString_ParseFormatFlags(&Cursor, &Flags);                           \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Flags == (FSTRING_FORMAT_TYPE_MASK | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                        \
 			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO));                        \
 	    Result = FString_ParseFormatFlags(NULL, NULL);                                                      \
@@ -2462,36 +2393,36 @@ FString(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_ParseFormatType, ReportsInvalidOnInvalidChars, (                                           \
 		fstring_format_type Type = -92;                                                                     \
-		string Cursor = CString("hhc");                                                                     \
+		string Cursor = CStringL("hhc");                                                                    \
 	    fstring_format_status Result = FString_ParseFormatType(&Cursor, &Type);                             \
 		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
-		Assert(String_Cmp(Cursor, CString("c")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("c")) == 0);                                                     \
 		Assert(Type == -92);                                                                                \
 	    Result = FString_ParseFormatType(NULL, NULL);                                                       \
 		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
 	))                                                                                                      \
 	TEST(FString_ParseFormatType, KeepsExistingDataInType, (                                                \
 		fstring_format_type Type = ~FSTRING_FORMAT_TYPE_MASK;                                               \
-		string Cursor = CString("d");                                                                       \
+		string Cursor = CStringL("d");                                                                      \
 	    fstring_format_status Result = FString_ParseFormatType(&Cursor, &Type);                             \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Type == (~FSTRING_FORMAT_TYPE_MASK | FSTRING_FORMAT_TYPE_S32));                              \
-		Cursor = CString("d");                                                                              \
+		Cursor = CStringL("d");                                                                             \
 	    Result = FString_ParseFormatType(&Cursor, NULL);                                                    \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	))                                                                                                      \
 	TEST(FString_ParseFormatType, ParsesFullType, (                                                         \
 		fstring_format_type Type = 0;                                                                       \
-		string Cursor = CString("wf64x");                                                                   \
+		string Cursor = CStringL("wf64x");                                                                  \
 	    fstring_format_status Result = FString_ParseFormatType(&Cursor, &Type);                             \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(Type == (FSTRING_FORMAT_TYPE_U64 | FSTRING_FORMAT_FLAG_INT_HEX));                            \
 	))                                                                                                      \
 	TEST(FString_ParseFormatType, FlagsUppercaseForRespectiveTypes, (                                       \
 		fstring_format_type Type = 0;                                                                       \
-		string Cursor = CString("BXFEGACSTZdLd");                                                           \
+		string Cursor = CStringL("BXFEGACSTZdLd");                                                          \
 	    FString_ParseFormatType(&Cursor, &Type);                                                            \
 		Assert(Type == (FSTRING_FORMAT_TYPE_U32 | FSTRING_FORMAT_FLAG_INT_BIN                               \
 			| FSTRING_FORMAT_FLAG_UPPERCASE));                                                              \
@@ -2532,54 +2463,54 @@ FString(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_ParseFormat, MustContainAtLeastAType, (                                                    \
 		b08 UseIndexes = 2;                                                                                 \
-		string Cursor = CString("%d");                                                                      \
+		string Cursor = CStringL("%d");                                                                     \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(UseIndexes == FALSE);                                                                        \
 		Assert(Format.Type == FSTRING_FORMAT_TYPE_S32);                                                     \
 		Assert(Format.ValueIndex == 0);                                                                     \
 		Assert(Format.Width == 0);                                                                          \
 		Assert(Format.Precision == -1);                                                                     \
-		Assert(String_Cmp(Format.SpecifierString, CString("%d")) == 0);                                     \
+		Assert(String_Cmp(Format.SpecifierString, CStringL("%d")) == 0);                                    \
 		Assert(Format.ContentLength == 0);                                                                  \
 		Assert(Format.ActualWidth == 0);                                                                    \
-		Cursor = CString("%d");                                                                             \
+		Cursor = CStringL("%d");                                                                            \
 	    FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, NULL, &UseIndexes, FALSE);                                    \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	))                                                                                                      \
 	TEST(FString_ParseFormat, ReportsIndexInconsistentWhenIndexPresentAndProhibited, (                      \
 		b08 UseIndexes = FALSE;                                                                             \
-		string Cursor = CString("%1$d");                                                                    \
+		string Cursor = CStringL("%1$d");                                                                   \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
-		Assert(String_Cmp(Cursor, CString("$d")) == 0);                                                     \
+		Assert(String_Cmp(Cursor, CStringL("$d")) == 0);                                                    \
 		Assert(UseIndexes == FALSE);                                                                        \
 	))                                                                                                      \
 	TEST(FString_ParseFormat, ReportsIndexInconsistentWhenIndexNotPresentAndExpected, (                     \
 		b08 UseIndexes = TRUE;                                                                              \
-		string Cursor = CString("%d");                                                                      \
+		string Cursor = CStringL("%d");                                                                     \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
-		Assert(String_Cmp(Cursor, CString("d")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("d")) == 0);                                                     \
 		Assert(UseIndexes == TRUE);                                                                         \
 	))                                                                                                      \
 	TEST(FString_ParseFormat, MaximalCaseWithExplicitNumbers, (                                             \
 		b08 UseIndexes = TRUE;                                                                              \
-		string FormatStr = CString("%--++  ''##002147483647.2147483647wf64d");                              \
+		string FormatStr = CStringL("%--++  ''##002147483647.2147483647wf64d");                             \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(UseIndexes == FALSE);                                                                        \
 		Assert(Format.Type == (FSTRING_FORMAT_TYPE_S64 | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                   \
 			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE                            \
@@ -2594,13 +2525,13 @@ FString(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_ParseFormat, MaximalCaseWithParamNumbers, (                                                \
 		b08 UseIndexes = TRUE;                                                                              \
-		string FormatStr = CString("%--++  ''##00*.*wf64d");                                                \
+		string FormatStr = CStringL("%--++  ''##00*.*wf64d");                                               \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(UseIndexes == FALSE);                                                                        \
 		Assert(Format.Type == (FSTRING_FORMAT_TYPE_S64 | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                   \
 			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE                            \
@@ -2614,13 +2545,13 @@ FString(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_ParseFormat, MaximalCaseWithParamIndexes, (                                                \
 		b08 UseIndexes = FALSE;                                                                             \
-		string FormatStr = CString("%2147483647$--++  ''##00*2147483647$.*2147483647$wf64d");               \
+		string FormatStr = CStringL("%2147483647$--++  ''##00*2147483647$.*2147483647$wf64d");              \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Cursor, CString("")) == 0);                                                       \
+		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
 		Assert(UseIndexes == TRUE);                                                                         \
 		Assert(Format.Type == (FSTRING_FORMAT_TYPE_S64 | FSTRING_FORMAT_FLAG_LEFT_JUSTIFY                   \
 			| FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE                            \
@@ -2634,7 +2565,7 @@ FString(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_ParseFormat, ImplicitPrecisionIsZero, (                                                    \
 		b08 UseIndexes = FALSE;                                                                             \
-		string FormatStr = CString("%.d");                                                                  \
+		string FormatStr = CStringL("%.d");                                                                 \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
@@ -2644,52 +2575,52 @@ FString(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_ParseFormat, PropagatesIntOverflow, (                                                      \
 		b08 UseIndexes = TRUE;                                                                              \
-		string Cursor = CString("%2147483648$d");                                                           \
+		string Cursor = CStringL("%2147483648$d");                                                          \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8$d")) == 0);                                                    \
-		Cursor = CString("%2147483648d");                                                                   \
+		Assert(String_Cmp(Cursor, CStringL("8$d")) == 0);                                                   \
+		Cursor = CStringL("%2147483648d");                                                                  \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8d")) == 0);                                                     \
-		Cursor = CString("%*2147483648$d");                                                                 \
+		Assert(String_Cmp(Cursor, CStringL("8d")) == 0);                                                    \
+		Cursor = CStringL("%*2147483648$d");                                                                \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8$d")) == 0);                                                    \
-		Cursor = CString("%.2147483648d");                                                                  \
+		Assert(String_Cmp(Cursor, CStringL("8$d")) == 0);                                                   \
+		Cursor = CStringL("%.2147483648d");                                                                 \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8d")) == 0);                                                     \
-		Cursor = CString("%.*2147483648$d");                                                                \
+		Assert(String_Cmp(Cursor, CStringL("8d")) == 0);                                                    \
+		Cursor = CStringL("%.*2147483648$d");                                                               \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("8$d")) == 0);                                                    \
+		Assert(String_Cmp(Cursor, CStringL("8$d")) == 0);                                                   \
 	))                                                                                                      \
 	TEST(FString_ParseFormat, PropagatesInvalidType, (                                                      \
 		b08 UseIndexes = FALSE;                                                                             \
-		string Cursor = CString("%hhc");                                                                    \
+		string Cursor = CStringL("%hhc");                                                                   \
 		fstring_format Format;                                                                              \
 		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
-		Assert(String_Cmp(Cursor, CString("c")) == 0);                                                      \
+		Assert(String_Cmp(Cursor, CStringL("c")) == 0);                                                     \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, AllowsNullArgumentsButWhy, (                                            \
 	    fstring_format_status Result = FString_ParseFormatString(NULL, NULL);                               \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-		string Cursor = CString("...%d...");                                                                \
+		string Cursor = CStringL("...%d...");                                                               \
 	    Result = FString_ParseFormatString(&Cursor, NULL);                                                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, IgnoresEscapedPercentSigns, (                                           \
 		usize StackCursor = (usize) Stack_GetCursor();                                                      \
-		string FormatStr = CString("%d%%%s");                                                               \
+		string FormatStr = CStringL("%d%%%s");                                                              \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
@@ -2710,7 +2641,7 @@ FString(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, NoAllocationIfNoFormats, (                                              \
 		usize StackCursor = (usize) Stack_GetCursor();                                                      \
-		string FormatStr = CString("%%d%%%%s");                                                             \
+		string FormatStr = CStringL("%%d%%%%s");                                                            \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
@@ -2725,7 +2656,7 @@ FString(string Format, ...)
 		Assert((usize) Stack_GetCursor() == StackCursor);                                                   \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, ExplicitParamIndexesAreCorrect, (                                       \
-		string Cursor = CString("%2$d%1$s%4$*3$.*3$f");                                                     \
+		string Cursor = CStringL("%2$d%1$s%4$*3$.*3$f");                                                    \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
@@ -2736,12 +2667,12 @@ FString(string Format, ...)
 		Assert(FormatList.Formats[2].ValueIndex == 4);                                                      \
 		Assert(FormatList.Formats[2].WidthIndex == 3);                                                      \
 		Assert(FormatList.Formats[2].PrecisionIndex == 3);                                                  \
-		Assert(String_Cmp(FormatList.Formats[0].SpecifierString, CString("%2$d")) == 0);                    \
-		Assert(String_Cmp(FormatList.Formats[1].SpecifierString, CString("%1$s")) == 0);                    \
-		Assert(String_Cmp(FormatList.Formats[2].SpecifierString, CString("%4$*3$.*3$f")) == 0);             \
+		Assert(String_Cmp(FormatList.Formats[0].SpecifierString, CStringL("%2$d")) == 0);                   \
+		Assert(String_Cmp(FormatList.Formats[1].SpecifierString, CStringL("%1$s")) == 0);                   \
+		Assert(String_Cmp(FormatList.Formats[2].SpecifierString, CStringL("%4$*3$.*3$f")) == 0);            \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, ImplicitParamIndexesAreCorrect, (                                       \
-		string Cursor = CString("%d %*s %.*f %*.*x");                                                       \
+		string Cursor = CStringL("%d %*s %.*f %*.*x");                                                      \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
@@ -2755,61 +2686,61 @@ FString(string Format, ...)
 		Assert(FormatList.Formats[3].ValueIndex == 6);                                                      \
 		Assert(FormatList.Formats[3].WidthIndex == 7);                                                      \
 		Assert(FormatList.Formats[3].PrecisionIndex == 8);                                                  \
-		Assert(String_Cmp(FormatList.Formats[0].SpecifierString, CString("%d")) == 0);                      \
-		Assert(String_Cmp(FormatList.Formats[1].SpecifierString, CString("%*s")) == 0);                     \
-		Assert(String_Cmp(FormatList.Formats[2].SpecifierString, CString("%.*f")) == 0);                    \
-		Assert(String_Cmp(FormatList.Formats[3].SpecifierString, CString("%*.*x")) == 0);                   \
+		Assert(String_Cmp(FormatList.Formats[0].SpecifierString, CStringL("%d")) == 0);                     \
+		Assert(String_Cmp(FormatList.Formats[1].SpecifierString, CStringL("%*s")) == 0);                    \
+		Assert(String_Cmp(FormatList.Formats[2].SpecifierString, CStringL("%.*f")) == 0);                   \
+		Assert(String_Cmp(FormatList.Formats[3].SpecifierString, CStringL("%*.*x")) == 0);                  \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, ReportsInconsistentIndexes, (                                           \
-		string FormatStr = CString("%2$d %s %3$f");                                                         \
+		string FormatStr = CStringL("%2$d %s %3$f");                                                        \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
-		Assert(String_Cmp(Cursor, CString("s %3$f")) == 0);                                                 \
-		Cursor = CString("%d %1$s %f");                                                                     \
+		Assert(String_Cmp(Cursor, CStringL("s %3$f")) == 0);                                                \
+		Cursor = CStringL("%d %1$s %f");                                                                    \
 	    Result = FString_ParseFormatString(&Cursor, &FormatList);                                           \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
-		Assert(String_Cmp(Cursor, CString("$s %f")) == 0);                                                  \
+		Assert(String_Cmp(Cursor, CStringL("$s %f")) == 0);                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, PropagatesIntOverflow, (                                                \
-		string Cursor = CString("%d %3000000000s %f");                                                      \
+		string Cursor = CStringL("%d %3000000000s %f");                                                     \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(Cursor, CString("0s %f")) == 0);                                                  \
+		Assert(String_Cmp(Cursor, CStringL("0s %f")) == 0);                                                 \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, PropagatesInvalidType, (                                                \
-		string Cursor = CString("%d %y %f");                                                                \
+		string Cursor = CStringL("%d %y %f");                                                               \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&Cursor, &FormatList);                     \
 		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
-		Assert(String_Cmp(Cursor, CString("y %f")) == 0);                                                   \
+		Assert(String_Cmp(Cursor, CStringL("y %f")) == 0);                                                  \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsRedefinedParamsWithinSpecifier, (                            \
-		string FormatStr = CString("%2$d %1$.*1$f %%");                                                     \
+		string FormatStr = CStringL("%2$d %1$.*1$f %%");                                                    \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&FormatStr, &FormatList);                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 		usize Cursor = (usize) Stack_GetCursor();                                                           \
 	    Result = FString_UpdateParamReferences(&FormatList, 1.2f, 23);                                      \
 		Assert(Result == FSTRING_FORMAT_PARAM_REDEFINED);                                                   \
-		Assert(String_Cmp(FormatList.FormatString, CString("%1$.*1$f")) == 0);                              \
+		Assert(String_Cmp(FormatList.FormatString, CStringL("%1$.*1$f")) == 0);                             \
 		Assert(FormatList.FormatCount == 1);                                                                \
 		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsRedefinedParamsBetweenSpecifiers, (                          \
-		string FormatStr = CString("%2$d %2$.*1$f %%");                                                     \
+		string FormatStr = CStringL("%2$d %2$.*1$f %%");                                                    \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&FormatStr, &FormatList);                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	    Result = FString_UpdateParamReferences(&FormatList, 23, 1.2f);                                      \
 		Assert(Result == FSTRING_FORMAT_PARAM_REDEFINED);                                                   \
-		Assert(String_Cmp(FormatList.FormatString, CString("%2$.*1$f")) == 0);                              \
+		Assert(String_Cmp(FormatList.FormatString, CStringL("%2$.*1$f")) == 0);                             \
 		Assert(FormatList.FormatCount == 1);                                                                \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsSkippedParams, (                                             \
-		string FormatStr = CString("%3$d %1$f");                                                            \
+		string FormatStr = CStringL("%3$d %1$f");                                                           \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&FormatStr, &FormatList);                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
@@ -2821,33 +2752,33 @@ FString(string Format, ...)
 		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, UpdatesValuesAndReturnsValid, (                                     \
-		string FormatStr = CString("%*d %s");                                                               \
+		string FormatStr = CStringL("%*d %s");                                                              \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&FormatStr, &FormatList);                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	    usize Cursor = (usize) Stack_GetCursor();                                                           \
-	    Result = FString_UpdateParamReferences(&FormatList, 23, 2, CString("Hi!"));                         \
+	    Result = FString_UpdateParamReferences(&FormatList, 23, 2, CStringL("Hi!"));                        \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(FormatList.FormatString, FormatStr) == 0);                                        \
 		Assert(FormatList.Formats[0].Value.Signed == 23);                                                   \
 		Assert(FormatList.Formats[0].Width == 2);                                                           \
 		Assert(FormatList.Formats[1].Value.String == FormatList.ExtraData);                                 \
 		Assert(FormatList.ExtraData = FormatList.Formats[1].Value.String + 1);                              \
-		Assert(String_Cmp(*FormatList.Formats[1].Value.String, CString("Hi!")) == 0);                       \
+		Assert(String_Cmp(*FormatList.Formats[1].Value.String, CStringL("Hi!")) == 0);                      \
 		Assert(FormatList.FormatCount == 2);                                                                \
 		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsInvalidStringEncoding, (                                     \
-		string FormatStr = CString("%*d %ls");                                                              \
+		string FormatStr = CStringL("%*d %ls");                                                             \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&FormatStr, &FormatList);                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	    usize Cursor = (usize) Stack_GetCursor();                                                           \
-	    Result = FString_UpdateParamReferences(&FormatList, 23, 2, CString("Hi!"));                         \
+	    Result = FString_UpdateParamReferences(&FormatList, 23, 2, CStringL("Hi!"));                        \
 		Assert(Result == FSTRING_FORMAT_ENCODING_INVALID);                                                  \
-		Assert(String_Cmp(FormatList.FormatString, CString("%ls")) == 0);                                   \
+		Assert(String_Cmp(FormatList.FormatString, CStringL("%ls")) == 0);                                  \
 		Assert(FormatList.FormatCount == 1);                                                                \
-		FormatStr = CString("%*d %s");                                                                      \
+		FormatStr = CStringL("%*d %s");                                                                     \
 	    Result = FString_ParseFormatString(&FormatStr, &FormatList);                                        \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	    string Param = LString(12);                                                                         \
@@ -2858,26 +2789,26 @@ FString(string Format, ...)
 	    Cursor = (usize) Stack_GetCursor();                                                                 \
 	    Result = FString_UpdateParamReferences(&FormatList, 23, 2, Param);                                  \
 		Assert(Result == FSTRING_FORMAT_ENCODING_INVALID);                                                  \
-		Assert(String_Cmp(FormatList.FormatString, CString("%s")) == 0);                                    \
+		Assert(String_Cmp(FormatList.FormatString, CStringL("%s")) == 0);                                   \
 		Assert(FormatList.FormatCount == 1);                                                                \
 		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsOverflowedWidthParam, (                                      \
-		string FormatStr = CString("%*d %s");                                                               \
+		string FormatStr = CStringL("%*d %s");                                                              \
 		fstring_format_list FormatList;                                                                     \
 	    fstring_format_status Result = FString_ParseFormatString(&FormatStr, &FormatList);                  \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	    usize Cursor = (usize) Stack_GetCursor();                                                           \
-	    Result = FString_UpdateParamReferences(&FormatList, 23, S32_MIN, CString("Hi!"));                   \
+	    Result = FString_UpdateParamReferences(&FormatList, 23, S32_MIN, CStringL("Hi!"));                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
-		Assert(String_Cmp(FormatList.FormatString, CString("%*d")) == 0);                                   \
+		Assert(String_Cmp(FormatList.FormatString, CStringL("%*d")) == 0);                                  \
 		Assert(FormatList.Formats[0].Value.Signed == 23);                                                   \
 		Assert(FormatList.Formats[0].Width == S32_MIN);                                                     \
 		Assert(FormatList.FormatCount == 0);                                                                \
 		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_WriteString, UpdatesLengthAndReturnsWithEmptyBuffer, (                                     \
-		string String = CString("Hello!");                                                                  \
+		string String = CStringL("Hello!");                                                                 \
 		fstring_format Format = { .Width = 8, .Value = { .String = &String } };                             \
 		fstring_format_status Status = FString_WriteString(&Format, EString());                             \
 		Assert(Status == FSTRING_FORMAT_BUFFER_TOO_SMALL);                                                  \
@@ -2896,12 +2827,12 @@ FString(string Format, ...)
 		fstring_format Format = { .Width = 8, .Value = { .String = &String } };                             \
 		fstring_format_status Status = FString_WriteString(&Format, Buffer);                                \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("     Hi!")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("     Hi!")) == 0);                                              \
 		String = CStringL_UTF16("Hi!");                                                                     \
 		Format = (fstring_format){ .Width = 8, .Value = { .String = &String } };                            \
 		Status = FString_WriteString(&Format, Buffer);                                                      \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("     Hi!")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("     Hi!")) == 0);                                              \
 	))                                                                                                      \
 	TEST(FString_WriteString, RespectsDestEncoding, (                                                       \
 		string String = CStringL_UTF8("Hi!");                                                               \
@@ -2925,13 +2856,13 @@ FString(string Format, ...)
 		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                     \
 		fstring_format_status Status = FString_WriteString(&Format, Buffer);                                \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("Hi!     ")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("Hi!     ")) == 0);                                              \
 		String = CStringL("");                                                                              \
 		Format = (fstring_format){ .Width = 8, .Value = { .String = &String } };                            \
 		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                     \
 		Status = FString_WriteString(&Format, Buffer);                                                      \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("        ")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("        ")) == 0);                                              \
 	))                                                                                                      \
 	TEST(FString_WriteChar, RespectsWideFlag, (                                                             \
 		string Buffer = LString(4);                                                                         \
@@ -2956,12 +2887,12 @@ FString(string Format, ...)
 		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                     \
 		fstring_format_status Status = FString_WriteChar(&Format, Buffer);                                  \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("T       ")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("T       ")) == 0);                                              \
 		Buffer.Length = 3;                                                                                  \
 		Format = (fstring_format){ .Width = 3, .Value = { .Char = '?' } };                                  \
 		Status = FString_WriteChar(&Format, Buffer);                                                        \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("  ?")) == 0);                                                    \
+		Assert(String_Cmp(Buffer, CStringL("  ?")) == 0);                                                   \
 	))                                                                                                      \
 	TEST(FString_WriteBool, WorksAndHandlesLeftAlignAndPadding, (                                           \
 		string Buffer = LString(8);                                                                         \
@@ -2969,12 +2900,12 @@ FString(string Format, ...)
 		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                     \
 		fstring_format_status Status = FString_WriteBool(&Format, Buffer);                                  \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("true    ")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("true    ")) == 0);                                              \
 		Buffer.Length = 6;                                                                                  \
 		Format = (fstring_format){ .Width = 6, .Value = { .Bool = FALSE } };                                \
 		Status = FString_WriteBool(&Format, Buffer);                                                        \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString(" false")) == 0);                                                 \
+		Assert(String_Cmp(Buffer, CStringL(" false")) == 0);                                                \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsDecimal, (                                                            \
 		string Buffer = LString(1);                                                                         \
@@ -2982,13 +2913,13 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0")) == 0);                                                      \
+		Assert(String_Cmp(Buffer, CStringL("0")) == 0);                                                     \
 		Format = (fstring_format){ .Precision = -1, .Value = { .Unsigned = U64_MAX } };                     \
 		Buffer = LString(20);                                                                               \
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("18446744073709551615")) == 0);                                   \
+		Assert(String_Cmp(Buffer, CStringL("18446744073709551615")) == 0);                                  \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsOctal, (                                                              \
 		string Buffer = LString(1);                                                                         \
@@ -2997,14 +2928,14 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0")) == 0);                                                      \
+		Assert(String_Cmp(Buffer, CStringL("0")) == 0);                                                     \
 		Format = (fstring_format){ .Precision = -1, .Value = { .Unsigned = U64_MAX } };                     \
 		Format.Type = FSTRING_FORMAT_FLAG_INT_OCT;                                                          \
 		Buffer = LString(22);                                                                               \
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("1777777777777777777777")) == 0);                                 \
+		Assert(String_Cmp(Buffer, CStringL("1777777777777777777777")) == 0);                                \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsHexadecimal, (                                                        \
 		string Buffer = LString(1);                                                                         \
@@ -3013,14 +2944,14 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0")) == 0);                                                      \
+		Assert(String_Cmp(Buffer, CStringL("0")) == 0);                                                     \
 		Format = (fstring_format){ .Precision = -1, .Value = { .Unsigned = U64_MAX } };                     \
 		Format.Type = FSTRING_FORMAT_FLAG_INT_HEX;                                                          \
 		Buffer = LString(16);                                                                               \
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("ffffffffffffffff")) == 0);                                       \
+		Assert(String_Cmp(Buffer, CStringL("ffffffffffffffff")) == 0);                                      \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsBinary, (                                                             \
 		string Buffer = LString(1);                                                                         \
@@ -3029,14 +2960,14 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0")) == 0);                                                      \
+		Assert(String_Cmp(Buffer, CStringL("0")) == 0);                                                     \
 		Format = (fstring_format){ .Precision = -1, .Value = { .Unsigned = U64_MAX } };                     \
 		Format.Type = FSTRING_FORMAT_FLAG_INT_BIN;                                                          \
 		Buffer = LString(64);                                                                               \
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		string TestStr = CString("1111111111111111111111111111111111111111111111111111111111111111");       \
+		string TestStr = CStringL("1111111111111111111111111111111111111111111111111111111111111111");      \
 		Assert(String_Cmp(Buffer, TestStr) == 0);                                                           \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsDecimalGroups, (                                                      \
@@ -3046,7 +2977,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("8,030,895,855")) == 0);                                          \
+		Assert(String_Cmp(Buffer, CStringL("8,030,895,855")) == 0);                                         \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsOctalGroups, (                                                        \
 		string Buffer = LString(20);                                                                        \
@@ -3055,7 +2986,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("73_653_337_357")) == 0);                                         \
+		Assert(String_Cmp(Buffer, CStringL("73_653_337_357")) == 0);                                        \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsHexadecimalGroups, (                                                  \
 		string Buffer = LString(20);                                                                        \
@@ -3064,7 +2995,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("1_dead_beef")) == 0);                                            \
+		Assert(String_Cmp(Buffer, CStringL("1_dead_beef")) == 0);                                           \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsBinaryGroups, (                                                       \
 		string Buffer = LString(40);                                                                        \
@@ -3073,7 +3004,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("1_11011110_10101101_10111110_11101111")) == 0);                  \
+		Assert(String_Cmp(Buffer, CStringL("1_11011110_10101101_10111110_11101111")) == 0);                 \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsOctalPrefix, (                                                        \
 		string Buffer = LString(4);                                                                         \
@@ -3083,7 +3014,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0377")) == 0);                                                   \
+		Assert(String_Cmp(Buffer, CStringL("0377")) == 0);                                                  \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsBinaryPrefix, (                                                       \
 		string Buffer = LString(8);                                                                         \
@@ -3093,14 +3024,14 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0b101010")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("0b101010")) == 0);                                              \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
 		Format.Type |= FSTRING_FORMAT_FLAG_UPPERCASE;                                                       \
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0B101010")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("0B101010")) == 0);                                              \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsHexadecimalPrefix, (                                                  \
 		string Buffer = LString(8);                                                                         \
@@ -3110,14 +3041,14 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0x2a")) == 0);                                                   \
+		Assert(String_Cmp(Buffer, CStringL("0x2a")) == 0);                                                  \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
 		Format.Type |= FSTRING_FORMAT_FLAG_UPPERCASE;                                                       \
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0X2A")) == 0);                                                   \
+		Assert(String_Cmp(Buffer, CStringL("0X2A")) == 0);                                                  \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, HandlesAlignmentAndPadding, (                                               \
 		string Buffer = LString(13);                                                                        \
@@ -3130,7 +3061,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0x2c_deba   ")) == 0);                                           \
+		Assert(String_Cmp(Buffer, CStringL("0x2c_deba   ")) == 0);                                          \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
 		Format.Type &= ~FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                   \
@@ -3138,7 +3069,7 @@ FString(string Format, ...)
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0x0_002c_deba")) == 0);                                          \
+		Assert(String_Cmp(Buffer, CStringL("0x0_002c_deba")) == 0);                                         \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, HandlesPrecision, (                                                         \
 		string Buffer = LString(12);                                                                        \
@@ -3148,7 +3079,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("  00,192,832")) == 0);                                           \
+		Assert(String_Cmp(Buffer, CStringL("  00,192,832")) == 0);                                          \
 		Format.Value.Unsigned = 0;                                                                          \
 		Format.Precision = 0;                                                                               \
 		Format.ContentLength = 0;                                                                           \
@@ -3157,7 +3088,7 @@ FString(string Format, ...)
 		Status = FString_WriteUnsigned(&Format, Buffer);                                                    \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("            ")) == 0);                                           \
+		Assert(String_Cmp(Buffer, CStringL("            ")) == 0);                                          \
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, PrintsMax, (                                                                \
 		string Buffer = LString(30);                                                                        \
@@ -3165,7 +3096,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteUnsigned(&Format, Buffer);                              \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("18446744073709551615")) == 0);                                   \
+		Assert(String_Cmp(Buffer, CStringL("18446744073709551615")) == 0);                                  \
 	))                                                                                                      \
 	TEST(FString_WritePointer, OnlyAcceptsLeftJustify, (                                                    \
 		string Buffer = LString(10);                                                                        \
@@ -3178,7 +3109,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WritePointer(&Format, Buffer);                               \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("    0xabcd")) == 0);                                             \
+		Assert(String_Cmp(Buffer, CStringL("    0xabcd")) == 0);                                            \
 		Format.Precision = 0;                                                                               \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
@@ -3186,7 +3117,7 @@ FString(string Format, ...)
 		Status = FString_WritePointer(&Format, Buffer);                                                     \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0xabcd    ")) == 0);                                             \
+		Assert(String_Cmp(Buffer, CStringL("0xabcd    ")) == 0);                                            \
 	))                                                                                                      \
 	TEST(FString_WritePointer, PrintsNilForNull, (                                                          \
 		string Buffer = LString(10);                                                                        \
@@ -3194,7 +3125,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WritePointer(&Format, Buffer);                               \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("(nil)")) == 0);                                                  \
+		Assert(String_Cmp(Buffer, CStringL("(nil)")) == 0);                                                 \
 	))                                                                                                      \
 	TEST(FString_WriteSigned, HandlesAlignmentAndPadding, (                                                 \
 		string Buffer = LString(10);                                                                        \
@@ -3206,7 +3137,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("-92,831  ")) == 0);                                              \
+		Assert(String_Cmp(Buffer, CStringL("-92,831  ")) == 0);                                             \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
 		Format.Type &= ~FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                   \
@@ -3214,7 +3145,7 @@ FString(string Format, ...)
 		Status = FString_WriteSigned(&Format, Buffer);                                                      \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("-0,092,831")) == 0);                                             \
+		Assert(String_Cmp(Buffer, CStringL("-0,092,831")) == 0);                                            \
 	))                                                                                                      \
 	TEST(FString_WriteSigned, HandlesPrecision, (                                                           \
 		string Buffer = LString(12);                                                                        \
@@ -3223,7 +3154,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("  00,192,832")) == 0);                                           \
+		Assert(String_Cmp(Buffer, CStringL("  00,192,832")) == 0);                                          \
 		Format.Value.Signed = 0;                                                                            \
 		Format.Precision = 0;                                                                               \
 		Format.ContentLength = 0;                                                                           \
@@ -3232,7 +3163,7 @@ FString(string Format, ...)
 		Status = FString_WriteSigned(&Format, Buffer);                                                      \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("            ")) == 0);                                           \
+		Assert(String_Cmp(Buffer, CStringL("            ")) == 0);                                          \
 	))                                                                                                      \
 	TEST(FString_WriteSigned, HandlesPrefixSpace, (                                                         \
 		string Buffer = LString(12);                                                                        \
@@ -3241,7 +3172,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString(" 192832")) == 0);                                                \
+		Assert(String_Cmp(Buffer, CStringL(" 192832")) == 0);                                               \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
 		Format.Type |= FSTRING_FORMAT_FLAG_PREFIX_SIGN;                                                     \
@@ -3249,7 +3180,7 @@ FString(string Format, ...)
 		Status = FString_WriteSigned(&Format, Buffer);                                                      \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("+192832")) == 0);                                                \
+		Assert(String_Cmp(Buffer, CStringL("+192832")) == 0);                                               \
 	))                                                                                                      \
 	TEST(FString_WriteSigned, PrintsMax, (                                                                  \
 		string Buffer = LString(30);                                                                        \
@@ -3257,7 +3188,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("9223372036854775807")) == 0);                                    \
+		Assert(String_Cmp(Buffer, CStringL("9223372036854775807")) == 0);                                   \
 	))                                                                                                      \
 	TEST(FString_WriteSigned, PrintsMin, (                                                                  \
 		string Buffer = LString(30);                                                                        \
@@ -3265,9 +3196,178 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteSigned(&Format, Buffer);                                \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("-9223372036854775808")) == 0);                                   \
+		Assert(String_Cmp(Buffer, CStringL("-9223372036854775808")) == 0);                                  \
 	))                                                                                                      \
-	/* TODO: Test FString_WriteFloat */                                                                     \
+	TEST(FString_WriteFloat, HandlesInfinity, (                                                             \
+		string		   Buffer = LString(10);                                                                \
+		fstring_format Format = { .Width = 10, .Value = { .Float = R64_INF } };                             \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("       inf")) == 0);                                            \
+		Format = (fstring_format){ .Width = 10, .Value = { .Float = R64_NINF } };                           \
+		Status = FString_WriteFloat(&Format, Buffer);                                                       \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("      -inf")) == 0);                                            \
+		Format = (fstring_format){ .Width = 10, .Value = { .Float = R64_INF } };                            \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE;                   \
+		Status = FString_WriteFloat(&Format, Buffer);                                                       \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("      +inf")) == 0);                                            \
+		Format = (fstring_format){ .Width = 10, .Value = { .Float = R64_INF } };                            \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SPACE | FSTRING_FORMAT_FLAG_UPPERCASE                      \
+			| FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                             \
+		Status = FString_WriteFloat(&Format, Buffer);                                                       \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL(" INF      ")) == 0);                                            \
+	))                                                                                                      \
+	TEST(FString_WriteFloat, HandlesNan, (                                                                  \
+		string		   Buffer = LString(10);                                                                \
+		fstring_format Format = { .Width = 10, .Value = { .Float = R64_NAN(1) } };                          \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("       nan")) == 0);                                            \
+		Format = (fstring_format){ .Width = 10, .Value = { .Float = R64_NNAN(2) } };                        \
+		Status = FString_WriteFloat(&Format, Buffer);                                                       \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("      -nan")) == 0);                                            \
+		Format = (fstring_format){ .Width = 10, .Value = { .Float = R64_NAN(3) } };                         \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE;                   \
+		Status = FString_WriteFloat(&Format, Buffer);                                                       \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("      +nan")) == 0);                                            \
+		Format = (fstring_format){ .Width = 10, .Value = { .Float = R64_NAN(R64_MANTISSA_MASK) } };         \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SPACE | FSTRING_FORMAT_FLAG_UPPERCASE                      \
+			| FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;                                                             \
+		Status = FString_WriteFloat(&Format, Buffer);                                                       \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL(" NAN      ")) == 0);                                            \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, PrintsSignExpAndMantissa, (                                                 \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(1, 1023, 0x8F1D29138CD2Full) } };          \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("-0x1.8f1d29138cd2fp+1023")) == 0);                              \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesUppercase, (                                                         \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(1, 0, 0x123456789abcdull) } };             \
+		Format.Type = FSTRING_FORMAT_FLAG_UPPERCASE;                                                        \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("-0X1.123456789ABCDP+0")) == 0);                                 \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesPrefixSpace, (                                                       \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 0, 0x123456789abcdull) } };             \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SPACE;                                                     \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL(" 0x1.123456789abcdp+0")) == 0);                                 \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesPrefixSign, (                                                        \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 0, 0x123456789abcdull) } };             \
+		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE;                   \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("+0x1.123456789abcdp+0")) == 0);                                 \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesDenormal, (                                                          \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, -1023, 0x8F1D29138CD00ull) } };         \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x0.8f1d29138cdp-1022")) == 0);                                 \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, PrecisionExtends, (                                                         \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Precision = 4, .Value = { .Float = R64_CREATE(0, 2, 0) } };              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x1.0000p+2")) == 0);                                           \
+		Buffer.Length = 30;                                                                                 \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, PrecisionTruncates, (                                                       \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 2, 0x123456789ABCD) } };                \
+		Format.Precision = 4;                                                                               \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x1.1234p+2")) == 0);                                           \
+		Buffer.Length = 30;                                                                                 \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, NoDecimalIfPrecisionZero, (                                                 \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Precision = 0, .Value = { .Float = R64_CREATE(0, 2, 1) } };              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x1p+2")) == 0);                                                \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, NoDecimalIfPrecisionDefaultAndMantissaEmpty, (                              \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Precision = -1, .Value = { .Float = R64_CREATE(0, 2, 0) } };             \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x1p+2")) == 0);                                                \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesSpecifyRadix, (                                                      \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Precision = -1, .Value = { .Float = R64_CREATE(0, 2, 0) } };             \
+		Format.Type = FSTRING_FORMAT_FLAG_SPECIFY_RADIX;                                                    \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x1.p+2")) == 0);                                               \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesWidth, (                                                             \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(1, 1023, 0x123456789ABCDull) } };          \
+		Format.Width = 26;                                                                                  \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("  -0x1.123456789abcdp+1023")) == 0);                            \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesPadZero, (                                                           \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 1023, 0x123456789ABCDull) } };          \
+		Format.Type = FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;                                                    \
+		Format.Width = 26;                                                                                  \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x0001.123456789abcdp+1023")) == 0);                            \
+	))                                                                                                      \
+	TEST(FString_WriteHexFloat, HandlesLeftJustify, (                                                       \
+		string		   Buffer = LString(30);                                                                \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 1023, 0x123456789ABCDull) } };          \
+		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;                 \
+		Format.Width = 26;                                                                                  \
+		Format.Precision = -1;                                                                              \
+		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CStringL("0x1.123456789abcdp+1023   ")) == 0);                            \
+	))                                                                                                      \
 	TEST(FString_WriteFormat, DelegatesByType, (                                                            \
 		string Buffer = LString(10);                                                                        \
 		fstring_format Format = { .Value = { .Unsigned = 0xABCD } };                                        \
@@ -3275,7 +3375,7 @@ FString(string Format, ...)
 		fstring_format_status Status = FString_WriteFormat(&Format, Buffer);                                \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("43981")) == 0);                                                  \
+		Assert(String_Cmp(Buffer, CStringL("43981")) == 0);                                                 \
 		Buffer.Length = 10;                                                                                 \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
@@ -3283,7 +3383,7 @@ FString(string Format, ...)
 		Status = FString_WriteFormat(&Format, Buffer);                                                      \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("0xabcd")) == 0);                                                 \
+		Assert(String_Cmp(Buffer, CStringL("0xabcd")) == 0);                                                \
 		Buffer.Length = 10;                                                                                 \
 		Format.ContentLength = 0;                                                                           \
 		Format.ActualWidth = 0;                                                                             \
@@ -3292,7 +3392,7 @@ FString(string Format, ...)
 		Status = FString_WriteFormat(&Format, Buffer);                                                      \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
-		Assert(String_Cmp(Buffer, CString("\xc3\x8d")) == 0);                                               \
+		Assert(String_Cmp(Buffer, CStringL("\xc3\x8d")) == 0);                                              \
 	))                                                                                                      \
 	TEST(FString_WriteFormat, HandlesNoWrite, (                                                             \
 		string Buffer = EString();                                                                          \
@@ -3364,7 +3464,7 @@ FString(string Format, ...)
 		string Format = CStringL("Hello, %-y! Today's temperature is %d.");                                 \
 		string Result = FString(Format, CStringL("Jimmy"), 35);                                             \
 		Assert(String_Cmp(Result, Format) == 0);                                                            \
-		Format = CStringL("Hello, %");                             \
+		Format = CStringL("Hello, %");                                                                      \
 		Result = FString(Format, CStringL("Jimmy"), 35);                                                    \
 		Assert(String_Cmp(Result, Format) == 0);                                                            \
 		Format = CStringL("Hello, %-s! Today's temperature is %2147483648$d.");                             \

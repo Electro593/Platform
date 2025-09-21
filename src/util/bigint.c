@@ -25,6 +25,7 @@ typedef struct bigint {
 	EXPORT(bigint,        BigInt,            shalf Value) \
 	EXPORT(bigint,        BigInt_SAllocate,  usize WordCount) \
 	EXPORT(bigint,        BigInt_SInit,      usize WordCount, ...) \
+	EXPORT(bigint,        BigInt_SScalar,    ssize Value) \
 	EXPORT(bigint,        BigInt_SCopy,      bigint A) \
 	\
 	EXPORT(b08,           BigInt_IsZero,     bigint A) \
@@ -90,6 +91,13 @@ BigInt_SInit(usize WordCount, ...)
 	VA_End(Args);
 
 	return Result;
+}
+
+internal bigint
+BigInt_SScalar(ssize Value)
+{
+	if ((shalf) Value == Value) return BigInt(Value);
+	return BigInt_SInit(2, (usize) Value & UHALF_MAX, (usize) Value >> UHALF_BITS);
 }
 
 internal bigint
@@ -438,7 +446,7 @@ internal bigint
 _BigInt_SMul(bigint A, bigint B, usize M)
 {
 	if (M == 1) {
-		usize Product = A.Words[0] * B.Words[0];
+		usize Product = (usize) A.Words[0] * (usize) B.Words[0];
 		if (Product <= ((1ull << (UHALF_BITS - 1)) - 1)) return BigInt(Product);
 		return BigInt_SInit(2, Product & UHALF_MAX, Product >> UHALF_BITS);
 	} else {
@@ -503,7 +511,7 @@ BigInt_SMul(bigint A, bigint B)
 }
 
 internal void
-BigInt_DivideUnsignedSingleword(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
+BigInt_DivideUnsignedSingleWord(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 {
 	if (QuotOut) {
 		*QuotOut = BigInt_SAllocate(MAX(A.WordCount - B.WordCount + 1, 1));
@@ -540,7 +548,7 @@ BigInt_DivideUnsignedSingleword(bigint A, bigint B, bigint *QuotOut, bigint *Rem
 }
 
 internal void
-BigInt_DivideUnsignedMultiword(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
+BigInt_DivideUnsignedMultiWord(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 {
 	// Since A and B are expected to be flattened multiword positive numbers, there won't be any
 	// leading zeroes or 0-counts that we need to consider.
@@ -653,11 +661,11 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 	if (AP.Words[AP.WordCount - 1] == 0) AP.WordCount--;
 	if (BP.Words[BP.WordCount - 1] == 0) BP.WordCount--;
 
-	bigint Quot, Rem;
+	bigint Quot = BigInt(0), Rem = BigInt(0);
 	s08	   Cmp = BigInt_Compare(AP, BP);
 	if (Cmp < 0) {
-		Quot = A;
-		Rem	 = B;
+		Quot = BigInt(0);
+		Rem	 = A;
 	} else if (Cmp == 0) {
 		Quot = BigInt(1);
 		Rem	 = BigInt(0);
@@ -665,9 +673,9 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 		Quot = A;
 		Rem	 = BigInt(0);
 	} else if (BP.WordCount >= 2) {
-		BigInt_DivideUnsignedMultiword(AP, BP, &Quot, &Rem);
+		BigInt_DivideUnsignedMultiWord(AP, BP, QuotOut ? &Quot : NULL, RemOut ? &Rem : NULL);
 	} else {
-		BigInt_DivideUnsignedSingleword(AP, BP, &Quot, &Rem);
+		BigInt_DivideUnsignedSingleWord(AP, BP, QuotOut ? &Quot : NULL, RemOut ? &Rem : NULL);
 	}
 
 	if (IsNegative) {
@@ -679,7 +687,7 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 
 	if (QuotOut) {
 		if (!Quot.WordCount) *QuotOut = Quot;
-		if (Quot.WordCount == 1) *QuotOut = BigInt(Quot.SWords[0]);
+		else if (Quot.WordCount == 1) *QuotOut = BigInt(Quot.SWords[0]);
 		else {
 			*QuotOut	   = Quot;
 			QuotOut->Words = Stack_Allocate(Quot.WordCount * sizeof(uhalf));
@@ -689,7 +697,7 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 
 	if (RemOut) {
 		if (!Rem.WordCount) *RemOut = Rem;
-		if (Rem.WordCount == 1) *RemOut = BigInt(Rem.SWords[0]);
+		else if (Rem.WordCount == 1) *RemOut = BigInt(Rem.SWords[0]);
 		else {
 			*RemOut		  = Rem;
 			RemOut->Words = Stack_Allocate(Rem.WordCount * sizeof(uhalf));
@@ -765,6 +773,16 @@ BigInt_ToInt(bigint A)
         Assert(Result.Words[0] == 1);                                        \
         Assert(Result.Words[1] == 5);                                        \
         Assert(Result.Words[2] == -8);                                       \
+	))                                                                       \
+	TEST(BigInt_SScalar, ConstructsWhenHalfSize, (                           \
+		bigint Result = BigInt_SScalar(S32_MIN);                             \
+		Assert(Result.WordCount == 0);                                       \
+	))                                                                       \
+	TEST(BigInt_SScalar, AllocatesWhenFullSize, (                            \
+		bigint Result = BigInt_SScalar((1234ll << UHALF_BITS) | UHALF_MAX);  \
+		Assert(Result.WordCount == 2);                                       \
+		Assert(Result.Words[0] == UHALF_MAX);                                \
+		Assert(Result.Words[1] == 1234);                                     \
 	))                                                                       \
 	TEST(BigInt_SCopy, ReturnsAllocatedCopy, (                               \
 		bigint Source = BigInt_SInit(3, 100, 200, 300);                      \
@@ -1035,7 +1053,13 @@ BigInt_ToInt(bigint A)
 		Assert(Result.WordCount == 2);                                       \
 		Assert(Result.SWords == Source.SWords);                              \
 	))                                                                       \
-	TEST(BigInt_SMul, MultipliesCorrectly, (                                 \
+	TEST(BigInt_SMul, HandlesSingleWordOverflow, (                           \
+		bigint A = BigInt(16);                                               \
+		bigint B = BigInt(0x10000000);                                       \
+		bigint Result = BigInt_SMul(A, B);                                   \
+		Assert(BigInt_Compare(Result, BigInt_SInit(2, 0, 1)) == 0);          \
+	))                                                                       \
+	TEST(BigInt_SMul, MultipliesMultiWordCorrectly, (                        \
 		bigint A = BigInt_SAllocate(2);                                      \
 		A.SWords[0] = 0;                                                     \
 		A.SWords[1] = 1;                                                     \
