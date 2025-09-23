@@ -66,9 +66,9 @@
 #define R32_SIGN_SHIFT     31
 #define R32_EXPONENT_SHIFT 23
 #define R32_EXPONENT_BIAS  127
-#define R32_MAX            LITERAL_CAST(u32, 0x7F7FFFFF, r32)
-#define R32_NAN(Payload)   LITERAL_CAST(u32, R32_EXPONENT_MASK | (Payload & R32_MANTISSA_MASK), r32)
-#define R32_NNAN(Payload)  LITERAL_CAST(u32, R32_SIGN_MASK | R32_EXPONENT_MASK | (Payload & R32_MANTISSA_MASK), r32)
+#define R32_MAX            FORCE_CAST(u32, 0x7F7FFFFF, r32)
+#define R32_NAN(Payload)   FORCE_CAST(u32, R32_EXPONENT_MASK | (Payload & R32_MANTISSA_MASK), r32)
+#define R32_NNAN(Payload)  FORCE_CAST(u32, R32_SIGN_MASK | R32_EXPONENT_MASK | (Payload & R32_MANTISSA_MASK), r32)
 #define R32_INF            R32_NAN(0)
 #define R32_NINF           R32_NNAN(0)
 #define R32_PI             3.14159265359f
@@ -83,7 +83,8 @@
 #define R64_EXPONENT_SHIFT 52
 #define R64_EXPONENT_BIAS  1023
 #define R64_EXPONENT_MAX   ((R64_EXPONENT_MASK >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS)
-#define R64_CREATE(SIGN, EXPONENT, MANTISSA) LITERAL_CAST(u64, \
+#define R64_EXPONENT_MIN   (0 - R64_EXPONENT_BIAS)
+#define R64_CREATE(SIGN, EXPONENT, MANTISSA) FORCE_CAST(u64, \
 	(((u64) (SIGN) << R64_SIGN_SHIFT) & R64_SIGN_MASK) \
 	| (((u64) ((EXPONENT) + R64_EXPONENT_BIAS) << R64_EXPONENT_SHIFT) & R64_EXPONENT_MASK) \
 	| ((u64) (MANTISSA) & R64_MANTISSA_MASK), r64)
@@ -218,18 +219,18 @@ R32_Ceil(r32 N)
 internal r32
 R32_Abs(r32 N)
 {
-	u32 Binary	= FORCE_CAST(u32, N);
+	u32 Binary	= FORCE_CAST(r32, N, u32);
 	Binary	   &= 0x7FFFFFFF;
-	return FORCE_CAST(r32, Binary);
+	return FORCE_CAST(u32, Binary, r32);
 }
 
 internal r32
 R32_Sign(r32 N)
 {
-	u32 Binary	= FORCE_CAST(u32, N);
+	u32 Binary	= FORCE_CAST(r32, N, u32);
 	Binary	   &= 0x80000000;
 	Binary	   |= 0x3F800000;
-	return FORCE_CAST(r32, Binary);
+	return FORCE_CAST(u32, Binary, r32);
 }
 
 internal r32
@@ -241,7 +242,7 @@ R32_Round(r32 N)
 internal s32
 R32_Exponent(r32 N)
 {
-	u32 Binary	 = FORCE_CAST(u32, N);
+	u32 Binary	 = FORCE_CAST(r32, N, u32);
 	Binary		&= 0x7F800000;
 	Binary	   >>= 23;
 	s32 Signed	 = (s32) Binary - 127;
@@ -303,10 +304,10 @@ R32_sqrt(r32 N)
 internal r32
 R32_cbrt(r32 N)
 {
-	u32 Binary	 = FORCE_CAST(u32, N);
+	u32 Binary	 = FORCE_CAST(r32, N, u32);
 	s32 Exponent = (R32_Exponent(N) / 3) + 127;
 	Binary		 = (Binary & ~R32_EXPONENT_MASK) | (Exponent << 23);
-	r32 X		 = FORCE_CAST(r32, Binary);
+	r32 X		 = FORCE_CAST(u32, Binary, r32);
 	for (u32 I = 0; I < R32_CBRT_ITERATIONS; I++) X = (N / (X * X) + 2 * X) / 3;
 	return X;
 }

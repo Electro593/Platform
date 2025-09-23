@@ -33,12 +33,17 @@ Platform_Stub(void)
 internal void
 _Mem_Set(u08 *D, u08 B, u32 Bytes)
 {
+	if (Mem_Set) {
+		Mem_Set(D, B, Bytes);
+		return;
+	}
 	while (Bytes--) *D++ = B;
 }
 
 internal s08
 _Mem_Cmp(u08 *A, u08 *B, u32 Bytes)
 {
+	if (Mem_Cmp) return Mem_Cmp(A, B, Bytes);
 	while (Bytes) {
 		if (*A > *B) return GREATER;
 		if (*A < *B) return LESS;
@@ -54,16 +59,6 @@ _Mem_BytesUntil(u08 *P, c08 B)
 	u32 Count = 0;
 	while (*P++ != B) Count++;
 	return Count;
-}
-
-internal s08
-_Str_Cmp(c08 *A, c08 *B)
-{
-	usize L1 = _Mem_BytesUntil((u08 *) A, 0);
-	usize L2 = _Mem_BytesUntil((u08 *) B, 0);
-	if (L1 > L2) L1 = L2;
-	L1++;
-	return _Mem_Cmp((u08 *) A, (u08 *) B, L1);
 }
 
 internal string
@@ -162,7 +157,7 @@ Platform_LoadModule(string Name)
 #endif
 
 	b08 UtilIsLoaded = Platform->UtilIsLoaded;
-	Assert(UtilIsLoaded || _Str_Cmp(Name.Text, "util") == 0);
+	Assert(UtilIsLoaded || _Mem_Cmp((u08 *) Name.Text, (u08 *) "util", 4) == 0);
 	if (UtilIsLoaded) {
 		if (HashMap_Get(&Platform->ModuleTable, &Name, &Module)) return Module;
 
@@ -189,11 +184,13 @@ Platform_LoadModule(string Name)
 	Module->Name			 = Name.Text;
 	Module->DebugLoadAddress = NULL;
 #ifdef _DEBUG
-	if (_Str_Cmp(Name.Text, "util") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB000000000;
-	else if (_Str_Cmp(Name.Text, "base") == EQUAL) Module->DebugLoadAddress = (vptr) 0x7DB100000000;
-	else if (_Str_Cmp(Name.Text, "renderer_opengl") == EQUAL)
+	if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "util", 4) == EQUAL)
+		Module->DebugLoadAddress = (vptr) 0x7DB000000000;
+	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "base", 4) == EQUAL)
+		Module->DebugLoadAddress = (vptr) 0x7DB100000000;
+	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "renderer_opengl", 15) == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB200000000;
-	else if (_Str_Cmp(Name.Text, "wayland") == EQUAL)
+	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "wayland", 7) == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB300000000;
 #endif
 

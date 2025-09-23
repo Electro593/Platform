@@ -27,8 +27,7 @@
 
 #define RETURNS(...)
 
-#define FORCE_CAST(Type, Variable)               (*(Type*)&(Variable))
-#define LITERAL_CAST(OldType, Constant, NewType) (*(NewType*)&(OldType){Constant})
+#define FORCE_CAST(OldType, Constant, NewType) (((union { OldType A; NewType B; }){ .A = (Constant) }).B)
 #define OFFSET_OF(Type, Element) ((u64)&(((Type*)0)->Element))
 #define INDEX_2D(X, Y, MaxX) ((X) + ((Y) * (MaxX)))
 #define INDEX_3D(X, Y, Z, MaxX, MaxY) ((X) + ((Y) * (MaxX)) + ((Z) * (MaxX) * (MaxY)))
@@ -41,20 +40,21 @@
 #include <macro.h>
 
 #define Error(Message) do { Platform_Assert(__FILE__, __LINE__, "", Message); STOP; } while(0)
-#define Assert(Expression, ...) \
-    do { \
-        if(!(Expression)) { \
-            Platform_Assert(__FILE__, __LINE__, #Expression, "" __VA_ARGS__); \
-            STOP; \
-        } \
-    } while(0)
 
 #ifdef _DEBUG
+#define Assert(Expression, ...)                                               \
+    do {                                                                      \
+        if (!(Expression)) {                                                  \
+			Platform_Assert(__FILE__, __LINE__, #Expression, "" __VA_ARGS__); \
+			STOP;                                                             \
+		}                                                                     \
+    } while(0)
 #define STOP Intrin_DebugBreak()
 #define NOP Intrin_Nop()
 #else
+#define Assert(...) while(0) { }
 #define STOP Platform_Exit(-1)
-#define NOP
+#define NOP while(0) { }
 #endif
 
 #define NULL ((vptr)0)
@@ -64,23 +64,23 @@
 #define EQUAL   0
 #define GREATER 1
 
-typedef signed char s08;
+typedef signed char	  s08;
 typedef unsigned char u08;
 static_assert(sizeof(s08) == 1, "s08 must be 8-bit!");
 static_assert(sizeof(u08) == 1, "u08 must be 8-bit!");
 
-typedef signed short s16;
+typedef signed short   s16;
 typedef unsigned short u16;
 static_assert(sizeof(s16) == 2, "s16 must be 16-bit!");
 static_assert(sizeof(u16) == 2, "u16 must be 16-bit!");
 
-typedef signed int s32;
+typedef signed int	 s32;
 typedef unsigned int u32;
 static_assert(sizeof(s32) == 4, "s32 must be 32-bit!");
 static_assert(sizeof(u32) == 4, "u32 must be 32-bit!");
 
 #if _WORD_SIZE == 64
-typedef signed long long s64;
+typedef signed long long   s64;
 typedef unsigned long long u64;
 static_assert(sizeof(s64) == 8, "s64 must be 64-bit!");
 static_assert(sizeof(u64) == 8, "u64 must be 64-bit!");

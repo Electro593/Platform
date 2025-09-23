@@ -165,8 +165,8 @@ Elf_HandleRelocations(elf_state *State)
 		vptr				Strtab		 = State->File + StrtabHeader->Offset;
 
 		vptr		PrevTarget = NULL, Cursor = Data;
-		usize		Value, RelocType;
-		elf_symbol *Symbol;
+		usize		Value = 0, RelocType = 0;
+		elf_symbol *Symbol = NULL;
 		while (Cursor < Data + Header->Size) {
 			elf_relocation	 *Rel  = Cursor;
 			elf_relocation_a *Rela = Cursor;
