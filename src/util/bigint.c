@@ -56,6 +56,18 @@ typedef struct bigint {
 
 #ifdef INCLUDE_SOURCE
 
+// internal void
+// BigInt_Print(bigint A)
+// {
+// 	if (A.WordCount)
+// 		for (usize I = 0; I < A.WordCount; I++)
+// 			Platform_WriteConsole(
+// 				FString(CNStringL("%.8x"), A.Words[A.WordCount - I - 1])
+// 			);
+// 	else Platform_WriteConsole(FString(CNStringL("%x"), (uhalf) A.Word));
+// 	Platform_WriteConsole(CNStringL("\n"));
+// }
+
 internal bigint
 BigInt(shalf Value)
 {
@@ -293,7 +305,7 @@ BigInt_SShift(bigint A, ssize ShiftBy)
 
 	shalf Msb;
 	uhalf MsbMask = AC ? ~AP.Words[AP.WordCount - 1] : AP.Words[AP.WordCount - 1];
-	if (!Intrin_BitScanForward((uhalf *) &Msb, MsbMask)) Msb = -1;
+	if (!Intrin_BitScanReverse((uhalf *) &Msb, MsbMask)) Msb = -1;
 	Msb++;
 
 	uhalf  AH, AL, DW;
@@ -678,7 +690,6 @@ BigInt_SDivRem(bigint A, bigint B, bigint *QuotOut, bigint *RemOut)
 	if (!BP.WordCount) BP.SWords = &B.Word, BP.WordCount = 1;
 
 	s08 Cmp = BigInt_Compare(AP, BP);
-	if (AP.Words[AP.WordCount - 1] == 0) AP.WordCount--;
 	if (BP.Words[BP.WordCount - 1] == 0) BP.WordCount--;
 
 	bigint Quot = BigInt(0), Rem = BigInt(0);
@@ -985,9 +996,17 @@ BigInt_ToInt(bigint A)
 		Assert(Result.SWords[0] == SHALF_MIN);                               \
 		Assert(Result.SWords[1] == 0);                                       \
 	))                                                                       \
-	TEST(BigInt_SShift, HandlesSignedOverflow, (                             \
+	TEST(BigInt_SShift, HandlesFullWordSignedOverflow, (                     \
 		bigint A = BigInt_SInit(2, 0x8ac722fe, 0);                           \
 		bigint Result = BigInt_SShift(A, SHALF_BITS);                        \
+		Assert(Result.WordCount == 3);                                       \
+		Assert(Result.SWords[0] == 0);                                       \
+		Assert(Result.SWords[1] == 0x8ac722fe);                              \
+		Assert(Result.SWords[2] == 0);                                       \
+	))                                                                       \
+	TEST(BigInt_SShift, HandlesPartialWordSignedOverflow, (                  \
+		bigint A = BigInt_SInit(2, 0x8ac722feu >> 1, 0);                     \
+		bigint Result = BigInt_SShift(A, SHALF_BITS + 1);                    \
 		Assert(Result.WordCount == 3);                                       \
 		Assert(Result.SWords[0] == 0);                                       \
 		Assert(Result.SWords[1] == 0x8ac722fe);                              \

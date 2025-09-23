@@ -17,7 +17,8 @@
 #define CNStringL(Literal) CLStringL(Literal, sizeof(Literal))
 #define CLStringL(LITERAL, LENGTH) (string){ .Text = LITERAL, .Length = LENGTH, .Count = LENGTH, .Encoding = STRING_ENCODING_ASCII }
 #define CLEStringL(LITERAL, LENGTH, ENCODING) CLEString(LITERAL, LENGTH, ENCODING)
-#define CFStringL(Literal, ...) FString(CStringL(Literal), __VA_ARGS__)
+#define CFStringL(LITERAL, ...) FString(CStringL(LITERAL), __VA_ARGS__)
+#define CFNStringL(LITERAL, ...) FString(CNStringL(LITERAL), __VA_ARGS__)
 #define CFString(Format, ...) FString(CString(Format), __VA_ARGS__)
 
 typedef enum string_encoding : u08 {
@@ -1785,7 +1786,7 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 	usize PadCharLen   = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
 	r64 Value	 = Format->Value.Float;
-	u64 Binary	 = *(u64 *) &Value;
+	u64 Binary	 = FORCE_CAST(r64, Value, u64);
 	b08 Negative = Binary >> 63;
 	s64 Exponent = (ssize) ((Binary >> 52) & 0x7FF) - 1023;
 	u64 Mantissa = Binary & ((1ull << 52) - 1);
@@ -1912,11 +1913,21 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 	return FSTRING_FORMAT_VALID;
 }
 
+/// @brief Write a floating point value into the buffer, based on the format. Alignment, width,
+/// precision, signage, radixing, grouping, and 0-padding are considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
+/// it will contain the updated actual width. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only the
+/// format's actual width and content size will be updated. Otherwise, the buffer will be written
+/// into with its specified encoding.
+/// @return
+/// - `FSTRING_FORMAT_VALID`: The format was written successfully.
+///
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
 internal fstring_format_status
-FString_WriteStdFloat(fstring_format *Format, string Buffer)
+FString_WriteFloat(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
-	Stack_Push();
 
 	b08 IsLeft		 = !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
 	b08 SpecifyRadix = !!(Format->Type & FSTRING_FORMAT_FLAG_SPECIFY_RADIX);
@@ -1925,50 +1936,59 @@ FString_WriteStdFloat(fstring_format *Format, string Buffer)
 	b08 IsUpper		 = !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
 	b08 IsGrouped	 = !!(Format->Type & FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);
 	b08 PadZero		 = !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
+	b08 IsExp		 = !!(Format->Type & FSTRING_FORMAT_FLAG_FLOAT_EXP);
+	b08 IsFit		 = !!(Format->Type & FSTRING_FORMAT_FLAG_FLOAT_FIT);
+	b08 IsHex		 = !!(Format->Type & FSTRING_FORMAT_FLAG_FLOAT_HEX);
+
+	r64 Value  = Format->Value.Float;
+	u64 Binary = FORCE_CAST(r64, Value, u64);
+
+	b08	  Negative = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
+	ssize Exponent =
+		(ssize) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
+	u64 Mantissa = Binary & R64_MANTISSA_MASK;
+
+	if (Exponent == R64_EXPONENT_MAX) {
+		c08	   SpecialChars[4];
+		string SpecialStr = CLString(SpecialChars, 4);
+		if (Mantissa) Mem_Cpy(SpecialChars + 1, IsUpper ? "NAN" : "nan", 3);
+		else Mem_Cpy(SpecialChars + 1, IsUpper ? "INF" : "inf", 3);
+		if (Negative) SpecialChars[0] = '-';
+		else if (PrefixSign) SpecialChars[0] = '+';
+		else if (PrefixSpace) SpecialChars[0] = ' ';
+		else String_BumpBytes(&SpecialStr, 1);
+
+		fstring_format NewFormat	 = *Format;
+		NewFormat.Value.String		 = &SpecialStr;
+		fstring_format_status Status = FString_WriteString(&NewFormat, Buffer);
+		Format->ActualWidth			 = NewFormat.ActualWidth;
+		return Status;
+	}
+
+	if (IsHex) return FString_WriteHexFloat(Format, Buffer);
+
+	Stack_Push();
 
 	u32	  PadCodepoint = PadZero && !IsLeft ? '0' : ' ';
 	usize PadCharLen   = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
-	r64 Value	 = Format->Value.Float;
-	u64 Binary	 = *(u64 *) &Value;
-	b08 Negative = Binary >> 63;
-	s64 Exponent = (ssize) ((Binary >> 52) & 0x7FF) - 1023;
-	u64 Mantissa = Binary & ((1ull << 52) - 1);
 	if (Exponent == -1023) Exponent = -1022;
 	else Mantissa |= 1ull << 52;
+	if (!Mantissa) Exponent = 0;
 
-	usize WholeBits			= Exponent < 0 ? 0 : Exponent + 1;
+	usize WholeBits			= Exponent < 0 ? 0 : Exponent;
 	usize FracBits			= Exponent > 52 ? 0 : 52 - Exponent;
 	usize MantissaWholePart = FracBits > 52 ? 0 : Mantissa >> FracBits;
 	usize MantissaFracPart	= FracBits > 52 ? Mantissa : Mantissa & ((1ul << FracBits) - 1);
 	u32	  FracPartLSB;
-	if (!Intrin_BitScanForward(&FracPartLSB, MantissaFracPart)) FracPartLSB = 0;
+	if (!Intrin_BitScanForward(&FracPartLSB, MantissaFracPart)) FracPartLSB = 52;
 	MantissaFracPart >>= FracPartLSB;
-	FracBits		  -= FracPartLSB;
+	FracBits		  -= MIN(FracBits, FracPartLSB);
 
-	bigint Five		   = BigInt(5);
-	bigint Ten		   = BigInt(10);
-	bigint FracDivisor = BigInt(1);
-	usize  FracDigits  = Format->Precision < 0 ? 6 : Format->Precision;
-	bigint FracPart	   = BigInt(0);
-	bigint MinDigitDivisor;
-	for (usize I = 0; I < FracBits; I++) {
-		if (FracBits - I - 1 == FracDigits) MinDigitDivisor = FracDivisor;
-		FracPart = BigInt_SMul(FracPart, Five);
-		if (I < 53 && (MantissaFracPart & (1ull << I)))
-			FracPart = BigInt_SAdd(FracPart, BigInt_SMul(FracDivisor, Five));
-		FracDivisor = BigInt_SMul(FracDivisor, Ten);
-	}
-	if (FracDigits < FracBits) {
-		bigint Quotient		 = BigInt_SDiv(FracPart, MinDigitDivisor);
-		ssize  RoundingDigit = BigInt_SRem(Quotient, Ten).Word;
-		if (RoundingDigit >= 5) {
-			bigint Addend = BigInt_SMul(BigInt(10), MinDigitDivisor);
-			FracPart	  = BigInt_SAdd(FracPart, Addend);
-			if (!BigInt_IsZero(BigInt_SDiv(FracPart, FracDivisor))) MantissaWholePart++;
-		}
-	}
-
+	// Compute the whole portion of the result. Thankfully, this just involves left shifting the
+	// mantissa's whole part and computing the nubmer of digits it'll be represented by.
+	bigint Five			= BigInt(5);
+	bigint Ten			= BigInt(10);
 	usize  WholeDigits	= 0;
 	bigint WholeDivisor = BigInt(1);
 	usize  WholeShift	= WholeBits < 52 ? 0 : WholeBits - 52;
@@ -1978,16 +1998,112 @@ FString_WriteStdFloat(fstring_format *Format, string Buffer)
 		WholeDigits++;
 	} while (BigInt_Compare(WholePart, WholeDivisor) >= 0);
 
+	// Compute the fractional portion of the result, but as an integer. For example, 0.5625 would be
+	// 5625. This is done by adding a 5 at each digit place where its respective bit is set, and
+	// repeatedly multiplying the result by five. Using the 5625 example, this would be 5 + 0 (1e1)
+	// -> 25 (1e2) -> 125 (1e3) -> 5000 + 625 (1e4)
+	bigint FracDivisor	   = BigInt(1);
+	usize  FracDigits	   = Format->Precision < 0 ? 6 : Format->Precision;
+	bigint FracPart		   = BigInt(0);
+	bigint MinDigitDivisor = BigInt(0);
+	for (usize I = 0; I < FracBits; I++) {
+		if (FracBits - I - 1 == FracDigits) MinDigitDivisor = FracDivisor;
+		FracPart = BigInt_SMul(FracPart, Five);
+		if (I < 53 && (MantissaFracPart & (1ull << I)))
+			FracPart = BigInt_SAdd(FracPart, BigInt_SMul(FracDivisor, Five));
+		FracDivisor = BigInt_SMul(FracDivisor, Ten);
+	}
+
+	// If we're displaying in scientific notation, roll WholePart into FracPart (or vice versa)
+	// until WholePart is between 1 and 9, or 0 if the number is 0.
+	ssize PowTen = 0;
+	if (IsExp) {
+		if (!BigInt_IsZero(WholePart)) {
+			while (BigInt_Compare(WholePart, Ten) >= 0) {
+				bigint Digit;
+				BigInt_SDivRem(WholePart, Ten, &WholePart, &Digit);
+				FracPart	= BigInt_SAdd(FracPart, BigInt_SMul(Digit, FracDivisor));
+				FracDivisor = BigInt_SMul(FracDivisor, Ten);
+				if (!BigInt_IsZero(MinDigitDivisor))
+					MinDigitDivisor = BigInt_SMul(MinDigitDivisor, Ten);
+				FracBits++;
+				PowTen++;
+			}
+		} else if (!BigInt_IsZero(FracPart)) {
+			while (BigInt_IsZero(WholePart)) {
+				FracDivisor = BigInt_SDiv(FracDivisor, Ten);
+				if (!BigInt_IsZero(MinDigitDivisor))
+					MinDigitDivisor = BigInt_SDiv(MinDigitDivisor, Ten);
+				WholePart = BigInt_SRem(BigInt_SDiv(FracPart, FracDivisor), Ten);
+				FracBits--;
+				PowTen--;
+			}
+		}
+		WholeDivisor = BigInt(10);
+		WholeDigits	 = 1;
+	}
+
+	// FracBits is the actual number of digits in FracPart. If the precision is less, we'll be
+	// truncating, so we have to round the next smallest digit.
+	if (FracDigits < FracBits) {
+		bigint RoundingDigit = BigInt_SRem(BigInt_SDiv(FracPart, MinDigitDivisor), Ten);
+		if (BigInt_Compare(RoundingDigit, Five) >= 0) {
+			FracPart = BigInt_SAdd(FracPart, BigInt_SMul(MinDigitDivisor, Ten));
+
+			// Rounding may have flowed over into the whole part.
+			if (!BigInt_IsZero(BigInt_SDiv(FracPart, FracDivisor))) {
+				WholePart = BigInt_SAdd(WholePart, BigInt(1));
+
+				// Rounding may have added a new whole digit. If so, either roll the ones place back
+				// into FracPart for scientific notation, or update WholeDigits & co.
+				if (!BigInt_IsZero(BigInt_SDiv(WholePart, WholeDivisor))) {
+					if (IsExp) {
+						bigint Digit;
+						BigInt_SDivRem(WholePart, Ten, &WholePart, &Digit);
+						FracPart	= BigInt_SAdd(FracPart, BigInt_SMul(Digit, FracDivisor));
+						FracDivisor = BigInt_SMul(FracDivisor, Ten);
+						FracBits++;
+						PowTen++;
+					} else {
+						WholeDivisor = BigInt_SMul(WholeDivisor, Ten);
+						WholeDigits++;
+					}
+				}
+			}
+		}
+	}
+
+	b08 NegativePowTen = PowTen < 0;
+	PowTen			   = NegativePowTen ? -PowTen : PowTen;
+	usize ExpDigits	   = IsExp ? 2 : 0;
+	usize ExpDivisor   = 10;
+	while (PowTen / 10 >= ExpDivisor) {
+		ExpDivisor *= 10;
+		ExpDigits++;
+	}
+
 	string SignString	 = Negative	   ? CStringL("-")
 						 : PrefixSign  ? CStringL("+")
 						 : PrefixSpace ? CStringL(" ")
 									   : EString();
 	string GroupString	 = IsGrouped ? CStringL(",") : EString();
 	string DecimalString = FracDigits || SpecifyRadix ? CStringL(".") : EString();
+	string ExpString	 = IsExp ? (IsUpper ? CStringL("E") : CStringL("e")) : EString();
+	string ExpSignString = IsExp ? (NegativePowTen ? CStringL("-") : CStringL("+")) : EString();
 	usize  DigitLen		 = String_GetCodepointLength('0', Buffer.Encoding);
 
-	usize ContentLength = SignString.Length + DecimalString.Length + FracDigits * DigitLen;
-	usize ContentCount	= SignString.Count + DecimalString.Count + FracDigits;
+	usize ContentLength = SignString.Length
+						+ DecimalString.Length
+						+ FracDigits * DigitLen
+						+ ExpString.Length
+						+ ExpSignString.Length
+						+ ExpDigits * DigitLen;
+	usize ContentCount = SignString.Count
+					   + DecimalString.Count
+					   + FracDigits
+					   + ExpString.Count
+					   + ExpSignString.Count
+					   + ExpDigits;
 
 	usize TotalWholeDigits = WholeDigits;
 	if (PadCodepoint == '0' && Format->Width > ContentCount) {
@@ -2021,9 +2137,10 @@ FString_WriteStdFloat(fstring_format *Format, string Buffer)
 
 		u32 Codepoint = '0';
 		if (I >= ExtraWholeDigits) {
-			WholeDivisor  = BigInt_SDiv(WholeDivisor, Ten);
-			ssize Digit	  = BigInt_SRem(BigInt_SDiv(WholePart, WholeDivisor), Ten).Word;
-			Codepoint	 += Digit;
+			WholeDivisor	 = BigInt_SDiv(WholeDivisor, Ten);
+			bigint Quotient	 = BigInt_SDiv(WholePart, WholeDivisor);
+			ssize  Digit	 = BigInt_SRem(Quotient, Ten).Word;
+			Codepoint		+= Digit;
 		}
 
 		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
@@ -2045,63 +2162,19 @@ FString_WriteStdFloat(fstring_format *Format, string Buffer)
 		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
 	}
 
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, ExpString));
+	String_BumpBytes(&Buffer, String_Cpy(Buffer, ExpSignString));
+
+	for (usize I = 0; I < ExpDigits; I++) {
+		u32 Codepoint  = '0' + ((PowTen / ExpDivisor) % 10);
+		ExpDivisor	  /= 10;
+		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
+	}
+
 	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	Stack_Pop();
 	return FSTRING_FORMAT_VALID;
-}
-
-/// @brief Write a floating point value into the buffer, based on the format. Alignment, width,
-/// precision, signage, radixing, grouping, and 0-padding are considered.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
-/// @return
-/// - `FSTRING_FORMAT_VALID`: The format was written successfully.
-///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
-internal fstring_format_status
-FString_WriteFloat(fstring_format *Format, string Buffer)
-{
-	Assert(Format);
-
-	b08 PrefixSign	= !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SIGN);
-	b08 PrefixSpace = !!(Format->Type & FSTRING_FORMAT_FLAG_PREFIX_SPACE);
-	b08 IsUpper		= !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
-
-	r64 Value  = Format->Value.Float;
-	u64 Binary = *(u64 *) &Value;
-
-	b08	  Negative = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
-	ssize Exponent =
-		(ssize) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
-	usize Mantissa = Binary & R64_MANTISSA_MASK;
-
-	if (Exponent == R64_EXPONENT_MAX) {
-		c08	   SpecialChars[4];
-		string SpecialStr = CLString(SpecialChars, 4);
-		if (Mantissa) Mem_Cpy(SpecialChars + 1, IsUpper ? "NAN" : "nan", 3);
-		else Mem_Cpy(SpecialChars + 1, IsUpper ? "INF" : "inf", 3);
-		if (Negative) SpecialChars[0] = '-';
-		else if (PrefixSign) SpecialChars[0] = '+';
-		else if (PrefixSpace) SpecialChars[0] = ' ';
-		else String_BumpBytes(&SpecialStr, 1);
-
-		fstring_format NewFormat	 = *Format;
-		NewFormat.Value.String		 = &SpecialStr;
-		fstring_format_status Status = FString_WriteString(&NewFormat, Buffer);
-
-		Format->ActualWidth	  = NewFormat.ActualWidth;
-		Format->ContentLength = NewFormat.ContentLength;
-		return Status;
-	}
-
-	if (Format->Type & FSTRING_FORMAT_FLAG_FLOAT_STD) return FString_WriteStdFloat(Format, Buffer);
-	if (Format->Type & FSTRING_FORMAT_FLAG_FLOAT_HEX) return FString_WriteHexFloat(Format, Buffer);
-
-	return FSTRING_FORMAT_NOT_IMPLEMENTED;
 }
 
 /// @brief Writes a formatted value into the provided buffer.
@@ -2250,6 +2323,7 @@ FVString(string Format, va_list Args)
 	fstring_format_list	  FormatList;
 	fstring_format_status Status;
 
+	usize  TotalFormats	  = USIZE_MAX;
 	string OriginalFormat = Format;
 	string ErrorString	  = EString();
 
@@ -2260,7 +2334,7 @@ FVString(string Format, va_list Args)
 		ErrorString.Length = 1;
 		goto failed;
 	}
-	usize TotalFormats = FormatList.FormatCount;
+	TotalFormats = FormatList.FormatCount;
 
 	// Now we populate its params with Args
 	Status = FVString_UpdateParamReferences(&FormatList, Args);
@@ -3553,120 +3627,122 @@ FString(string Format, ...)
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("0x0_0001.8p+0")) == 0);                                         \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, PrintsFloat, (                                                              \
+	TEST(FString_WriteFloat, PrintsFloat, (                                                                 \
 		string		   Buffer = LString(30);                                                                \
-		fstring_format Format = { .Value = { .Float = -1234.567890 } };                                     \
-		Format.Precision = -1;                                                                              \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format Format = { .Precision = -1, .Value = { .Float = -1234.567890 } };                    \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("-1234.567890")) == 0);                                          \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesPrefixSpace, (                                                       \
+	TEST(FString_WriteFloat, HandlesPrefixSpace, (                                                          \
 		string		   Buffer = LString(10);                                                                \
-		fstring_format Format = { .Value = { .Float = 0.5625 } };                                           \
-		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SPACE;                                                     \
-		Format.Precision = -1;                                                                              \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format Format = { .Precision = -1, .Value = { .Float = 0.5625 } };                          \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD | FSTRING_FORMAT_FLAG_PREFIX_SPACE;                     \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL(" 0.562500")) == 0);                                             \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesPrefixSign, (                                                        \
+	TEST(FString_WriteFloat, HandlesPrefixSign, (                                                           \
 		string		   Buffer = LString(16);                                                                \
-		fstring_format Format = { .Value = { .Float = 12 } };                                               \
-		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE;                   \
-		Format.Precision = -1;                                                                              \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format Format = { .Precision = -1, .Value = { .Float = 12 } };                              \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		Format.Type |= FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE;                  \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("+12.000000")) == 0);                                            \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, PrecisionExtendsAndRounds, (                                                \
+	TEST(FString_WriteFloat, PrecisionExtendsAndRounds, (                                                   \
 		string		   Buffer = LString(15);                                                                \
 		fstring_format Format = { .Precision = 7, .Value = { .Float = 1.23456789 } };                       \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("1.2345679")) == 0);                                             \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, PrecisionTruncatesAndRounds, (                                              \
+	TEST(FString_WriteFloat, PrecisionTruncatesAndRounds, (                                                 \
 		string		   Buffer = LString(10);                                                                \
-		fstring_format Format = { .Value = { .Float = 1.23456789 } };                                       \
-		Format.Precision = 2;                                                                               \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format Format = { .Precision = 2, .Value = { .Float = 1.23456789 } };                       \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("1.23")) == 0);                                                  \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, CanRoundToOnesPlace, (                                                      \
+	TEST(FString_WriteFloat, CanRoundToOnesPlace, (                                                         \
 		string		   Buffer = LString(10);                                                                \
 		fstring_format Format = { .Precision = 1, .Value = { .Float = 219.96875 } };                        \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("220.0")) == 0);                                                 \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, NoDecimalIfPrecisionZero, (                                                 \
+	TEST(FString_WriteFloat, NoDecimalIfPrecisionZero, (                                                    \
 		string		   Buffer = LString(10);                                                                \
 		fstring_format Format = { .Precision = 0, .Value = { .Float = 123.456 } };                          \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("123")) == 0);                                                   \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesSpecifyRadix, (                                                      \
+	TEST(FString_WriteFloat, HandlesSpecifyRadix, (                                                         \
 		string		   Buffer = LString(10);                                                                \
 		fstring_format Format = { .Precision = 0, .Value = { .Float = 123.456 } };                          \
-		Format.Type = FSTRING_FORMAT_FLAG_SPECIFY_RADIX;                                                    \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD | FSTRING_FORMAT_FLAG_SPECIFY_RADIX;                    \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("123.")) == 0);                                                  \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesWidth, (                                                             \
+	TEST(FString_WriteFloat, HandlesWidth, (                                                                \
 		string		   Buffer = LString(10);                                                                \
-		fstring_format Format = { .Precision = 3, .Value = { .Float = -123.456 } };                         \
-		Format.Width = 10;                                                                                  \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format Format = { .Precision = 3, .Width = 10, .Value = { .Float = -123.456 } };            \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("  -123.456")) == 0);                                            \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesPadZero, (                                                           \
+	TEST(FString_WriteFloat, HandlesPadZero, (                                                              \
 		string		   Buffer = LString(10);                                                                \
-		fstring_format Format = { .Precision = 3, .Value = { .Float = -123.456 } };                         \
-		Format.Type = FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;                                                    \
-		Format.Width = 10;                                                                                  \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format Format = { .Precision = 3, .Width = 10, .Value = { .Float = -123.456 } };            \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;                    \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("-00123.456")) == 0);                                            \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesLeftJustify, (                                                       \
+	TEST(FString_WriteFloat, HandlesLeftJustify, (                                                          \
 		string		   Buffer = LString(10);                                                                \
-		fstring_format Format = { .Precision = 3, .Value = { .Float = -123.456 } };                         \
-		Format.Type = FSTRING_FORMAT_FLAG_LEFT_JUSTIFY | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;                 \
-		Format.Width = 10;                                                                                  \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format Format = { .Precision = 3, .Width = 10, .Value = { .Float = -123.456 } };            \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
+		Format.Type |= FSTRING_FORMAT_FLAG_LEFT_JUSTIFY | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;                \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("-123.456  ")) == 0);                                            \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesSeparateGroups, (                                                    \
+	TEST(FString_WriteFloat, HandlesSeparateGroups, (                                                       \
 		string		   Buffer = LString(20);                                                                \
 		fstring_format Format = { .Precision = 3, .Value = { .Float = -1234567.890 } };                     \
-		Format.Type = FSTRING_FORMAT_FLAG_SEPARATE_GROUPS;                                                  \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD | FSTRING_FORMAT_FLAG_SEPARATE_GROUPS;                  \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("-1,234,567.890")) == 0);                                        \
 	))                                                                                                      \
-	TEST(FString_WriteStdFloat, HandlesSeparateGroupsAndZeroPad, (                                          \
+	TEST(FString_WriteFloat, HandlesSeparateGroupsAndZeroPad, (                                             \
 		string		   Buffer = LString(20);                                                                \
 		fstring_format Format = { .Precision = 0, .Width = 13, .Value = { .Float = -1234 } };               \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_STD;                                                        \
 		Format.Type = FSTRING_FORMAT_FLAG_SEPARATE_GROUPS | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;              \
-		fstring_format_status Status = FString_WriteStdFloat(&Format, Buffer);                              \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL("-0,000,001,234")) == 0);                                        \
@@ -3716,6 +3792,73 @@ FString(string Format, ...)
 		Buffer.Length = Format.ActualWidth;                                                                 \
 		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Buffer, CStringL(" NAN      ")) == 0);                                            \
+	))                                                                                                      \
+	TEST(FString_WriteFloat, StdHandlesLargeExponent, (                                                     \
+		string		   Buffer = LString(420);                                                               \
+		r64 Float = R64_CREATE(1, R64_EXPONENT_MAX-1, R64_MANTISSA_MASK);                                   \
+		fstring_format Format = { .Value = { .Float = Float } };                                            \
+		Format.Precision = 2;                                                                               \
+		Format.Width = 416;                                                                                 \
+		Format.Type = FSTRING_FORMAT_FLAG_SEPARATE_GROUPS | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;              \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		c08 *Expected = "-0,179,769,313,486,231,570,814,527,423,731,704,356,798,070,567,525,844,996,598,917,476,803,157,260,780,028,538,760,589,558,632,766,878,171,540,458,953,514,382,464,234,321,326,889,464,182,768,467,546,703,537,516,986,049,910,576,551,282,076,245,490,090,389,328,944,075,868,508,455,133,942,304,583,236,903,222,948,165,808,559,332,123,348,274,797,826,204,144,723,168,738,177,180,919,299,881,250,404,026,184,124,858,368.00"; \
+		Assert(String_Cmp(Buffer, CString(Expected)) == 0);                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+	))                                                                                                      \
+	TEST(FString_WriteFloat, StdHandlesSmallExponent, (                                                     \
+		string		   Buffer = LString(1100);                                                              \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(1, R64_EXPONENT_MIN, 1) } };               \
+		Format.Precision = 1076;                                                                            \
+		Format.Width = 1082;                                                                                \
+		Format.Type = FSTRING_FORMAT_FLAG_SEPARATE_GROUPS | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;              \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		c08 *Expected = "-0,000.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000494065645841246544176568792868221372365059802614324764425585682500675507270208751865299836361635992379796564695445717730926656710355939796398774796010781878126300713190311404527845817167848982103688718636056998730723050006387409153564984387312473397273169615140031715385398074126238565591171026658556686768187039560310624931945271591492455329305456544401127480129709999541931989409080416563324524757147869014726780159355238611550134803526493472019379026810710749170333222684475333572083243193609238289345836806010601150616980975307834227731832924790498252473077637592724787465608477820373446969953364701797267771758512566055119913150489110145103786273816725095583738973359899366480994116420570263709027924276754456522908753868250641971826553344726562500"; \
+		Assert(String_Cmp(Buffer, CString(Expected)) == 0);                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+	))                                                                                                      \
+	TEST(FString_WriteFloat, StdHandlesZero, (                                                              \
+		string		   Buffer = LString(10);                                                                \
+		fstring_format Format = { .Precision = 1, .Value = { .Float = 0 } };                                \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(String_Cmp(Buffer, CStringL("0.0")) == 0);                                                   \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+	))                                                                                                      \
+	TEST(FString_WriteFloat, ExpHandlesLargeExponent, (                                                     \
+		string		   Buffer = LString(330);                                                               \
+		fstring_format Format = { .Precision = 308, .Value = { .Float = -1.7976931348623157e308 } };        \
+		Format.Width = 319;                                                                                 \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_EXP;                                                        \
+		Format.Type |= FSTRING_FORMAT_FLAG_SEPARATE_GROUPS | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;             \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		c08 *Expected = "-0,001.79769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368e+308"; \
+		Assert(String_Cmp(Buffer, CString(Expected)) == 0);                                                 \
+	))                                                                                                      \
+	TEST(FString_WriteFloat, ExpHandlesZero, (                                                              \
+		string		   Buffer = LString(10);                                                                \
+		fstring_format Format = { .Precision = 1, .Value = { .Float = 0 } };                                \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_EXP;                                                        \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		Assert(String_Cmp(Buffer, CString("0.0e+00")) == 0);                                                \
+	))                                                                                                      \
+	TEST(FString_WriteFloat, ExpHandlesSmallExponent, (                                                     \
+		string		   Buffer = LString(770);                                                               \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(1, R64_EXPONENT_MIN, 1) } };               \
+		Format.Precision = 752;                                                                             \
+		Format.Width = 763;                                                                                 \
+		Format.Type = FSTRING_FORMAT_FLAG_FLOAT_EXP;                                                        \
+		Format.Type |= FSTRING_FORMAT_FLAG_SEPARATE_GROUPS | FSTRING_FORMAT_FLAG_PAD_WITH_ZERO;             \
+		fstring_format_status Status = FString_WriteFloat(&Format, Buffer);                                 \
+		Buffer.Length = Format.ActualWidth;                                                                 \
+		Assert(Status == FSTRING_FORMAT_VALID);                                                             \
+		c08 *Expected = "-0,004.94065645841246544176568792868221372365059802614324764425585682500675507270208751865299836361635992379796564695445717730926656710355939796398774796010781878126300713190311404527845817167848982103688718636056998730723050006387409153564984387312473397273169615140031715385398074126238565591171026658556686768187039560310624931945271591492455329305456544401127480129709999541931989409080416563324524757147869014726780159355238611550134803526493472019379026810710749170333222684475333572083243193609238289345836806010601150616980975307834227731832924790498252473077637592724787465608477820373446969953364701797267771758512566055119913150489110145103786273816725095583738973359899366480994116420570263709027924276754456522908753868250641971826553344726562500e-324"; \
+		Assert(String_Cmp(Buffer, CString(Expected)) == 0);                                                 \
 	))                                                                                                      \
 	TEST(FString_WriteFormat, DelegatesByType, (                                                            \
 		string Buffer = LString(10);                                                                        \
