@@ -50,23 +50,13 @@ typedef struct bigint {
 	EXPORT(bigint,        BigInt_SRem,       bigint A, bigint B) \
 	\
 	EXPORT(s08,           BigInt_Compare,    bigint A, bigint B) \
-	EXPORT(ssize,         BigInt_ToInt,      bigint A)
+	EXPORT(ssize,         BigInt_ToInt,      bigint A) \
+	EXPORT(void,          BigInt_Print,      bigint A) \
+	//
 
 #endif
 
 #ifdef INCLUDE_SOURCE
-
-// internal void
-// BigInt_Print(bigint A)
-// {
-// 	if (A.WordCount)
-// 		for (usize I = 0; I < A.WordCount; I++)
-// 			Platform_WriteConsole(
-// 				FString(CNStringL("%.8x"), A.Words[A.WordCount - I - 1])
-// 			);
-// 	else Platform_WriteConsole(FString(CNStringL("%x"), (uhalf) A.Word));
-// 	Platform_WriteConsole(CNStringL("\n"));
-// }
 
 internal bigint
 BigInt(shalf Value)
@@ -650,10 +640,14 @@ BigInt_DivideUnsignedMultiWord(bigint A, bigint B, bigint *QuotOut, bigint *RemO
 
 	if (RemOut) {
 		// Shift the remainder (now U) into RemOut
-		for (usize I = 0; I < U.WordCount - 1; I++)
-			RemOut->Words[I] =
-				(U.Words[I + 1] << (UHALF_BITS - NormShift)) | (U.Words[I] >> NormShift);
-		RemOut->Words[U.WordCount - 1] = U.Words[U.WordCount - 1] >> NormShift;
+		if (NormShift) {
+			for (usize I = 0; I < V.WordCount - 1; I++)
+				RemOut->Words[I] =
+					(U.Words[I + 1] << (UHALF_BITS - NormShift)) | (U.Words[I] >> NormShift);
+			RemOut->Words[V.WordCount - 1] = U.Words[V.WordCount - 1] >> NormShift;
+		} else {
+			Mem_Cpy(RemOut->Words, U.Words, sizeof(uhalf) * V.WordCount);
+		}
 	}
 
 	Stack_Pop();
@@ -776,6 +770,16 @@ BigInt_ToInt(bigint A)
 	if (A.WordCount == 1) return A.SWords[0];
 	Assert(A.WordCount == 2);
 	return ((ssize) A.SWords[1] << SHALF_BITS) | (usize) A.Words[0];
+}
+
+internal void
+BigInt_Print(bigint A)
+{
+	if (A.WordCount)
+		for (usize I = 0; I < A.WordCount; I++)
+			Platform_WriteConsole(CFNStringL("%.8x", A.Words[A.WordCount - I - 1]));
+	else Platform_WriteConsole(CFNStringL("%x", (uhalf) A.Word));
+	Platform_WriteConsole(CNStringL("\n"));
 }
 
 #ifndef REGION_BIGINT_TESTS
