@@ -33,7 +33,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/platform",
 			"args": [
-				"-RunTests"
+				// "-RunTests"
 			],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",

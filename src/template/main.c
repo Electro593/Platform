@@ -11,11 +11,10 @@
 #include <shared.h>
 
 #define INCLUDE_HEADER
-#include "main.c"
 #include <util/main.c>
+#include <platform/main.c>
+#include "main.c"
 #undef INCLUDE_HEADER
-
-#include <platform/platform.h>
 
 #define INCLUDE_SOURCE
 #include "main.c"
@@ -28,7 +27,7 @@ extern $module$_funcs _F;
 
 // #include <...>
 
-#if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
+#ifdef INCLUDE_HEADER
 
 #define $MODULE$_MODULE_NAME CStringL("$module$")
 
@@ -60,7 +59,7 @@ typedef struct $module$_funcs {
 $module$_state _G;
 $module$_funcs _F;
 
-external API_EXPORT void
+external void
 Load(platform_state *Platform, platform_module *Module)
 {
 	_F = ($module$_funcs) {
@@ -72,7 +71,8 @@ Load(platform_state *Platform, platform_module *Module)
 	Module->Data  = &_G;
 	Module->Funcs = &_F;
 
-#define EXPORT(R, S, N, ...) S##_##N = Platform->Functions.S##_##N;
+	platform_funcs *PlatformFuncs = Platform->Funcs;
+#define EXPORT(R, N, ...) N = PlatformFuncs->N;
 #define X PLATFORM_FUNCS
 #include <x.h>
 
@@ -83,15 +83,15 @@ Load(platform_state *Platform, platform_module *Module)
 #include <x.h>
 }
 
-external API_EXPORT void
+external void
 Init(platform_state *Platform)
 { }
 
-external API_EXPORT void
+external void
 Update(platform_state *Platform)
 { }
 
-external API_EXPORT void
+external void
 Unload(platform_state *Platform)
 { }
 #endif

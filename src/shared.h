@@ -23,7 +23,7 @@
 #define persist  static
 #define internal static
 #define intrin   static inline
-#define external
+#define external API_EXPORT
 
 #define RETURNS(...)
 
@@ -117,8 +117,7 @@ typedef char c08;
 typedef u16	 c16;
 typedef u32	 c32;
 
-typedef struct platform_state	platform_state;
-typedef struct platform_exports platform_exports;
+typedef struct platform_state platform_state;
 
 #define TYPES \
     ENUM(S08,  s08) \
@@ -162,15 +161,11 @@ typedef struct type {
 	u16		Size;
 } type;
 
-#ifndef NO_SYMBOLS
-
 global type TYPE_NONE = { TYPEID_NONE, 0 };
 #define ENUM(Name, Type) \
     global type TYPE_##Name = {TYPEID_##Name, sizeof(Type)};
 TYPES
 #undef ENUM
-
-#endif
 
 // TODO fix this whole mess up
 inline internal type

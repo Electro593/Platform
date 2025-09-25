@@ -28,7 +28,7 @@ __asm__(
 
 #define CHECK(Status) ((ssize)(Status) >= 0 || (ssize)(Status) < -4096)
 
-#include <platform/platform.c>
+#include <platform/main.c>
 #include <platform/linux/elf.c>
 
 #define VALIDATE(Result, ErrorMessage) \
@@ -235,7 +235,7 @@ Platform_IsModuleBackendOpened(platform_module *Module)
 internal void
 Platform_OpenModuleBackend(platform_module *Module)
 {
-	s32 Error = Elf_Open(&Module->ELF, Module->FileName, Platform->PageSize);
+	s32 Error = Elf_Open(&Module->ELF, Module->FileName, _G.PageSize);
 	Assert(!Error, "Failed to read elf");
 	Error = Elf_LoadProgram(&Module->ELF, Module->DebugLoadAddress);
 	Assert(!Error, "Failed to load elf");
@@ -260,16 +260,16 @@ Platform_Exit(u32 ExitCode)
 internal void
 Platform_SetupArgTable(usize ArgCount, c08 **Args)
 {
-	Platform->ArgCount = ArgCount;
-	Platform->Args	   = Heap_AllocateA(Platform->Heap, ArgCount * sizeof(string));
-	for (usize I = 0; I < ArgCount; I++) Platform->Args[I] = CString(Args[I]);
+	_G.ArgCount = ArgCount;
+	_G.Args	   = Heap_AllocateA(_G.Heap, ArgCount * sizeof(string));
+	for (usize I = 0; I < ArgCount; I++) _G.Args[I] = CString(Args[I]);
 }
 
 internal void
 Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 {
-	Platform->EnvTable = HashMap_InitCustom(
-		Platform->Heap,
+	_G.EnvTable = HashMap_InitCustom(
+		_G.Heap,
 		sizeof(string),
 		sizeof(string),
 		EnvCount * 2,
@@ -290,20 +290,19 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 		usize  ValueSize = Mem_BytesUntil((u08 *) Param + KeySize + 1, '\0');
 		string Value	 = CLString(Param + KeySize + 1, ValueSize);
 
-		HashMap_Add(&Platform->EnvTable, &Key, &Value);
+		HashMap_Add(&_G.EnvTable, &Key, &Value);
 	}
 }
 
 external void
 Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
-	platform_state _P = { 0 };
-	Platform		  = &_P;
-
-#define EXPORT(ReturnType, Namespace, Name, ...) \
-	Platform->Functions.Namespace##_##Name = Namespace##_##Name;
+	_F = (platform_funcs) {
+#define EXPORT(R, N, ...) N,
 #define X PLATFORM_FUNCS
 #include <x.h>
+	};
+	_G.Funcs = &_F;
 
 	VALIDATE(
 		Sys_GetClockRes(SYS_CLOCK_REALTIME, &ClockResolution),
@@ -324,9 +323,9 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		while (AuxVector->Type != ELF_AT_NULL) AuxCount++, AuxVector++;
 	}
 
-	Platform->PageSize = 4096;	// Most common page size
+	_G.PageSize = 4096;	// Most common page size
 	for (u64 I = 0; I < AuxCount; I++)
-		if (AuxVectors[I].Type == ELF_AT_PAGESZ) Platform->PageSize = AuxVectors[I].Value;
+		if (AuxVectors[I].Type == ELF_AT_PAGESZ) _G.PageSize = AuxVectors[I].Value;
 
 	Platform_LoadModule(UTIL_MODULE_NAME);
 	Platform_SetupArgTable(ArgCount, Args);
@@ -334,23 +333,23 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	Platform_LoadModule(CStringL("base"));
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
 		stack Stack;
-		if (Platform->UtilIsLoaded) Stack = Stack_Get();
-		Module->Init(Platform);
-		if (Platform->UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		Module->Init(&_G);
+		if (_G.UtilIsLoaded) Stack_Set(Stack);
 	}
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
 		stack Stack;
-		if (Platform->UtilIsLoaded) Stack = Stack_Get();
-		Module->Deinit(Platform);
-		if (Platform->UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		Module->Deinit(&_G);
+		if (_G.UtilIsLoaded) Stack_Set(Stack);
 		Platform_UnloadModule(Module);
 	}
 
-	Heap_FreeA(Platform->Args);
-	HashMap_Free(&Platform->EnvTable);
+	Heap_FreeA(_G.Args);
+	HashMap_Free(&_G.EnvTable);
 
 	Stack_Pop();
 	Platform_Exit(0);

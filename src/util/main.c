@@ -12,9 +12,8 @@
 
 #define INCLUDE_HEADER
 #include "main.c"
+#include <platform/main.c>
 #undef INCLUDE_HEADER
-
-#include <platform/platform.h>
 
 #define INCLUDE_SOURCE
 #include "main.c"
@@ -36,7 +35,7 @@ extern struct util_funcs _F;
 #include <util/font.c>
 #include <util/file.c>
 
-#if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
+#ifdef INCLUDE_HEADER
 
 #define UTIL_MODULE_NAME CStringL("util")
 
@@ -56,20 +55,17 @@ typedef struct util_state {
 } util_state;
 
 typedef struct util_funcs {
-#define EXPORT(R, N, ...) \
-            R (*N)(__VA_ARGS__);
+#define EXPORT(R, N, ...) R (*N)(__VA_ARGS__);
 #define X UTIL_FUNCS
 #include <x.h>
 } util_funcs;
 
 #if defined(_UTIL_MODULE)
-#define EXPORT(R, N, ...) \
-            internal R N(__VA_ARGS__);
+#define DEFAULT(R, N, ...) internal R N(__VA_ARGS__);
 #define X UTIL_FUNCS
 #include <x.h>
 #else
-#define EXPORT(R, N, ...) \
-            global R (*N)(__VA_ARGS__);
+#define EXPORT(R, N, ...) global R (*N)(__VA_ARGS__);
 #define X UTIL_FUNCS
 #include <x.h>
 #endif
@@ -79,10 +75,11 @@ typedef struct util_funcs {
 util_state _G;
 util_funcs _F;
 
-external API_EXPORT void
+external void
 Load(platform_state *Platform, platform_module *Module)
 {
-#define EXPORT(R, S, N, ...) S##_##N = Platform->Functions.S##_##N;
+	platform_funcs *PlatformFuncs = Platform->Funcs;
+#define EXPORT(R, N, ...) N = PlatformFuncs->N;
 #define X PLATFORM_FUNCS
 #include <x.h>
 
@@ -105,7 +102,7 @@ BIGINT_TESTS
 STRING_TESTS
 #undef TEST
 
-external API_EXPORT void
+external void
 Init(platform_state *Platform)
 {
 	b08 RunTests = FALSE;

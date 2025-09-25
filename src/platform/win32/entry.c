@@ -7,7 +7,7 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include <platform/platform.c>
+#include <platform/main.c>
 
 global win32_window			PrimaryWindow;
 global win32_device_context DeviceContext;
@@ -263,7 +263,7 @@ Platform_CreateWindow(void)
 	b32 Res = Win32_RegisterRawInputDevices(&RawInputDevice, 1, sizeof(win32_raw_input_device));
 	Assert(Res == TRUE);
 
-	Platform->WindowedApp = TRUE;
+	_G.WindowedApp = TRUE;
 }
 
 internal vptr
@@ -296,7 +296,7 @@ internal b08
 Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 {
 	string Name;
-	if (Platform->UtilIsLoaded) {
+	if (_G.UtilIsLoaded) {
 		Stack_Push();
 		Name = SString(CNString(FileName));
 	} else {
@@ -341,7 +341,7 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 		NULL
 	);
 
-	if (Platform->UtilIsLoaded) Stack_Pop();
+	if (_G.UtilIsLoaded) Stack_Pop();
 	else Platform_FreeMemory(Name.Text, Name.Length);
 
 	if (GivenHandle != INVALID_HANDLE_VALUE) {
@@ -532,8 +532,8 @@ Platform_HideCursor(win32_window Window)
 {
 	Win32_SetCursor(NULL);
 
-	Win32_GetCursorPos(&Platform->RestoreCursorPos);
-	Win32_ScreenToClient(Window, &Platform->RestoreCursorPos);
+	Win32_GetCursorPos(&_G.RestoreCursorPos);
+	Win32_ScreenToClient(Window, &_G.RestoreCursorPos);
 
 	win32_rect ClipRect;
 	Win32_GetClientRect(Window, &ClipRect);
@@ -547,8 +547,8 @@ Platform_ShowCursor(win32_window Window)
 {
 	Win32_ClipCursor(NULL);
 
-	Win32_ClientToScreen(Window, &Platform->RestoreCursorPos);
-	Win32_SetCursorPos(Platform->RestoreCursorPos.X, Platform->RestoreCursorPos.Y);
+	Win32_ClientToScreen(Window, &_G.RestoreCursorPos);
+	Win32_SetCursorPos(_G.RestoreCursorPos.X, _G.RestoreCursorPos.Y);
 
 	Win32_SetCursor(Win32_LoadCursorA(NULL, IDC_ARROW));
 }
@@ -559,40 +559,40 @@ Platform_WindowCallback(win32_window Window, u32 Message, s64 WParam, s64 LParam
 	switch (Message) {
 		case WM_DESTROY:
 		case WM_CLOSE  : {
-			Platform->ExecutionState = EXECUTION_ENDED;
+			_G.ExecutionState = EXECUTION_ENDED;
 		}
 			return 0;
 
 		case WM_SIZE: {
-			Platform->WindowSize.X	= (s16) LParam;
-			Platform->WindowSize.Y	= (s16) (LParam >> 16);
-			Platform->Updates	   |= WINDOW_RESIZED;
+			_G.WindowSize.X	= (s16) LParam;
+			_G.WindowSize.Y	= (s16) (LParam >> 16);
+			_G.Updates	   |= WINDOW_RESIZED;
 		}
 			return 0;
 
 		case WM_SETFOCUS: {
-			if (Platform->FocusState == FOCUS_NONE) {
-				if (Platform->CursorIsDisabled) Platform_HideCursor(Window);
+			if (_G.FocusState == FOCUS_NONE) {
+				if (_G.CursorIsDisabled) Platform_HideCursor(Window);
 
-				Mem_Set(Platform->Keys, 0, sizeof(Platform->Keys));
-				Mem_Set(Platform->Buttons, 0, sizeof(Platform->Buttons));
+				Mem_Set(_G.Keys, 0, sizeof(_G.Keys));
+				Mem_Set(_G.Buttons, 0, sizeof(_G.Buttons));
 
-				Platform->FocusState = FOCUS_CLIENT;
+				_G.FocusState = FOCUS_CLIENT;
 			}
 		}
 			return 0;
 
 		case WM_KILLFOCUS: {
-			// if(Platform->CursorIsDisabled)
+			// if(_G.CursorIsDisabled)
 			//     Platform_ShowCursor(Window);
 
-			Platform->FocusState = FOCUS_NONE;
+			_G.FocusState = FOCUS_NONE;
 		}
 			return 0;
 
 		case WM_MOUSEACTIVATE: {
 			if (((LParam >> 16) & 0xFFFF) == WM_LBUTTONDOWN) {
-				if ((LParam & 0xFFFF) != HTCLIENT) Platform->FocusState = FOCUS_FRAME;
+				if ((LParam & 0xFFFF) != HTCLIENT) _G.FocusState = FOCUS_FRAME;
 			}
 		}
 			return MA_ACTIVATEANDEAT;
@@ -623,16 +623,16 @@ Platform_WindowCallback(win32_window Window, u32 Message, s64 WParam, s64 LParam
 			if (Data->Mouse.Flags & MOUSE_MOVE_ABSOLUTE) {
 				Assert(FALSE, "Absolute mouse movement not supported.");
 			} else {
-				Platform->CursorPos = (v2s32) { Platform->CursorPos.X + Data->Mouse.LastX,
-												Platform->CursorPos.Y - Data->Mouse.LastY };
+				_G.CursorPos = (v2s32) { _G.CursorPos.X + Data->Mouse.LastX,
+												_G.CursorPos.Y - Data->Mouse.LastY };
 			}
 
 			// Automatically goes through RI_MOUSE_BUTTON_1_DOWN/UP,
 			// RI_MOUSE_BUTTON_2_DOWN/UP, etc.
 			for (u32 I = 0; I < 6; I++)
-				if (Data->Mouse.ButtonFlags & (1 << (2 * I))) Platform->Buttons[I] = PRESSED;
-				else if (Data->Mouse.ButtonFlags & (2 << (2 * I))) Platform->Buttons[I] = RELEASED;
-				else if (Platform->Buttons[I] == PRESSED) Platform->Buttons[I] = HELD;
+				if (Data->Mouse.ButtonFlags & (1 << (2 * I))) _G.Buttons[I] = PRESSED;
+				else if (Data->Mouse.ButtonFlags & (2 << (2 * I))) _G.Buttons[I] = RELEASED;
+				else if (_G.Buttons[I] == PRESSED) _G.Buttons[I] = HELD;
 
 			Stack_Pop();
 		}
@@ -663,10 +663,10 @@ Platform_WindowCallback(win32_window Window, u32 Message, s64 WParam, s64 LParam
 			}
 
 			if (IsUp == TRUE) KeyState = RELEASED;
-			else if (Platform->Keys[ScanCode] == RELEASED) KeyState = PRESSED;
-			// else if(Platform->Keys) KeyState = PRESSED;
+			else if (_G.Keys[ScanCode] == RELEASED) KeyState = PRESSED;
+			// else if(_G.Keys) KeyState = PRESSED;
 
-			Platform->Keys[ScanCode] = KeyState;
+			_G.Keys[ScanCode] = KeyState;
 		}
 			return 0;
 	}
@@ -679,26 +679,26 @@ Platform_ParseCommandLine(void)
 {
 	// Get and split the CLI arguments
 	c16	 *CmdLine = Win32_GetCommandLineW();
-	c16 **Args	  = Win32_CommandLineToArgvW(CmdLine, (s32 *) &Platform->ArgCount);
-	u32	 *Sizes	  = Platform_AllocateMemory(Platform->ArgCount * sizeof(u32));
+	c16 **Args	  = Win32_CommandLineToArgvW(CmdLine, (s32 *) &_G.ArgCount);
+	u32	 *Sizes	  = Platform_AllocateMemory(_G.ArgCount * sizeof(u32));
 
 	// Find and allocate the total size after converting to utf-8
-	u32 Size = Platform->ArgCount * sizeof(string);
-	for (u32 I = 0; I < Platform->ArgCount; I++) {
+	u32 Size = _G.ArgCount * sizeof(string);
+	for (u32 I = 0; I < _G.ArgCount; I++) {
 		Sizes[I]  = Win32_WideCharToMultiByte(CP_UTF8, 0, Args[I], -1, NULL, 0, NULL, NULL);
 		Size	 += Sizes[I];
 	}
-	Platform->Args = Platform_AllocateMemory(Size);
+	_G.Args = Platform_AllocateMemory(Size);
 
-	c08 *Cursor = (c08 *) (Platform->Args + Platform->ArgCount);
-	for (u32 I = 0; I < Platform->ArgCount; I++) {
-		Platform->Args[I] = CLStringL(Cursor, Sizes[I]);
+	c08 *Cursor = (c08 *) (_G.Args + _G.ArgCount);
+	for (u32 I = 0; I < _G.ArgCount; I++) {
+		_G.Args[I] = CLStringL(Cursor, Sizes[I]);
 		u32 S			  = Win32_WideCharToMultiByte(
 			CP_UTF8,
 			0,
 			Args[I],
 			-1,
-			Platform->Args[I].Text,
+			_G.Args[I].Text,
 			Sizes[I],
 			NULL,
 			NULL
@@ -708,7 +708,7 @@ Platform_ParseCommandLine(void)
 	}
 
 	Win32_LocalFree(Args);
-	Platform_FreeMemory(Sizes, Platform->ArgCount * sizeof(u32));
+	Platform_FreeMemory(Sizes, _G.ArgCount * sizeof(u32));
 }
 
 internal void
@@ -721,13 +721,12 @@ Platform_Exit(u32 ExitCode)
 external void
 Platform_Entry(void)
 {
-	platform_state _P = { 0 };
-	Platform		  = &_P;
-
-#define EXPORT(ReturnType, Namespace, Name, ...) \
-      Platform->Functions.Namespace##_##Name = Namespace##_##Name;
+	_F = (platform_funcs) {
+#define EXPORT(R, N, ...) N,
 #define X PLATFORM_FUNCS
 #include <x.h>
+	};
+	_G.Funcs = &_F;
 
 	Platform_LoadWin32();
 	Platform_ParseCommandLine();
@@ -739,11 +738,11 @@ Platform_Entry(void)
 
 	Platform_LoadModule(CStringL("base"));
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
 		stack Stack;
-		if (Platform->UtilIsLoaded) Stack = Stack_Get();
-		Module->Init(Platform);
-		if (Platform->UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		Module->Init(&_G);
+		if (_G.UtilIsLoaded) Stack_Set(Stack);
 	}
 
 	s64 CountsPerSecond;
@@ -752,19 +751,19 @@ Platform_Entry(void)
 	s64 StartTime;
 	Win32_QueryPerformanceCounter(&StartTime);
 
-	while (Platform->ExecutionState == EXECUTION_RUNNING) {
+	while (_G.ExecutionState == EXECUTION_RUNNING) {
 		// Will reload the modules if necessary
-		HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+		HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
 			stack Stack;
-			if (Platform->UtilIsLoaded) Stack = Stack_Get();
+			if (_G.UtilIsLoaded) Stack = Stack_Get();
 			Platform_ReloadModule(Module);
-			if (Platform->UtilIsLoaded) Stack_Set(Stack);
+			if (_G.UtilIsLoaded) Stack_Set(Stack);
 		}
 
 		win32_message Message;
 		while (Win32_PeekMessageA(&Message, PrimaryWindow, 0, 0, PM_REMOVE)) {
 			if (Message.Message == WM_QUIT) {
-				Platform->ExecutionState = EXECUTION_ENDED;
+				_G.ExecutionState = EXECUTION_ENDED;
 				break;
 			}
 
@@ -772,35 +771,35 @@ Platform_Entry(void)
 			Win32_DispatchMessageA(&Message);
 		}
 
-		if (Platform->WindowedApp) {
-			if (Platform->CursorIsDisabled) {
+		if (_G.WindowedApp) {
+			if (_G.CursorIsDisabled) {
 				// HACK: Not sure why, but the cursor keeps reappearing
 				// otherwise
 				Win32_SetCursor(NULL);
 			}
 
-			if (Platform->FocusState == FOCUS_CLIENT
-				&& !Platform->CursorIsDisabled
-				&& Platform->Buttons[Button_Left] == PRESSED)
+			if (_G.FocusState == FOCUS_CLIENT
+				&& !_G.CursorIsDisabled
+				&& _G.Buttons[Button_Left] == PRESSED)
 			{
 				Platform_HideCursor(PrimaryWindow);
-				Platform->Updates		   |= CURSOR_DISABLED;
-				Platform->CursorIsDisabled	= TRUE;
+				_G.Updates		   |= CURSOR_DISABLED;
+				_G.CursorIsDisabled	= TRUE;
 			}
-			if (Platform->CursorIsDisabled && Platform->Keys[ScanCode_Escape] == PRESSED) {
+			if (_G.CursorIsDisabled && _G.Keys[ScanCode_Escape] == PRESSED) {
 				Platform_ShowCursor(PrimaryWindow);
-				Platform->CursorIsDisabled = FALSE;
+				_G.CursorIsDisabled = FALSE;
 			}
 		}
 
-		HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+		HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
 			stack Stack;
-			if (Platform->UtilIsLoaded) Stack = Stack_Get();
-			Module->Update(Platform);
-			if (Platform->UtilIsLoaded) Stack_Set(Stack);
+			if (_G.UtilIsLoaded) Stack = Stack_Get();
+			Module->Update(&_G);
+			if (_G.UtilIsLoaded) Stack_Set(Stack);
 		}
 
-		if (Platform->WindowedApp) Win32_SwapBuffers(DeviceContext);
+		if (_G.WindowedApp) Win32_SwapBuffers(DeviceContext);
 
 		s64 EndTime;
 		Win32_QueryPerformanceCounter(&EndTime);
@@ -808,22 +807,22 @@ Platform_Entry(void)
 		s64 ElapsedTime = EndTime - StartTime;
 		StartTime		= EndTime;
 
-		Platform->FPS = CountsPerSecond / (r64) ElapsedTime;
+		_G.FPS = CountsPerSecond / (r64) ElapsedTime;
 	}
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &Platform->ModuleTable) {
+	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
 		if (Module->IsUtil) continue;
 
 		stack Stack;
-		if (Platform->UtilIsLoaded) Stack = Stack_Get();
-		Module->Deinit(Platform);
-		if (Platform->UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		Module->Deinit(&_G);
+		if (_G.UtilIsLoaded) Stack_Set(Stack);
 		Platform_UnloadModule(Module);
 	}
 
 	Stack_Pop();
 
-	UtilModule->Deinit(Platform);
+	UtilModule->Deinit(&_G);
 	Platform_UnloadModule(UtilModule);
 
 	Platform_Exit(0);

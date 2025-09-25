@@ -12,7 +12,7 @@
 
 #define INCLUDE_HEADER
 #include <util/main.c>
-#include <platform/platform.h>
+#include <platform/main.c>
 #include "main.c"
 #undef INCLUDE_HEADER
 
@@ -28,7 +28,7 @@ extern wayland_funcs _F;
 #include <wayland/api.c>
 #include <wayland/wayland.c>
 
-#if defined(INCLUDE_HEADER) && !defined(NO_SYMBOLS)
+#ifdef INCLUDE_HEADER
 
 #define WAYLAND_MODULE_NAME CStringL("wayland")
 
@@ -87,7 +87,7 @@ typedef struct wayland_funcs {
 wayland_state _G;
 wayland_funcs _F;
 
-external API_EXPORT void
+external void
 Load(platform_state *Platform, platform_module *Module)
 {
 	_F = (wayland_funcs) {
@@ -99,7 +99,8 @@ Load(platform_state *Platform, platform_module *Module)
 	Module->Data  = &_G;
 	Module->Funcs = &_F;
 
-#define EXPORT(R, S, N, ...) S##_##N = Platform->Functions.S##_##N;
+	platform_funcs *PlatformFuncs = Platform->Funcs;
+#define EXPORT(R, N, ...) N = PlatformFuncs->N;
 #define X PLATFORM_FUNCS
 #include <x.h>
 
@@ -110,7 +111,7 @@ Load(platform_state *Platform, platform_module *Module)
 #include <x.h>
 }
 
-external API_EXPORT void
+external void
 Deinit(platform_state *Platform)
 {
 	Wayland_TryClose();
