@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
@@ -18,26 +18,28 @@ typedef enum wayland_data_offer_error	  wayland_data_offer_error;
 typedef enum wayland_data_source_error	  wayland_data_source_error;
 typedef enum wayland_data_device_error	  wayland_data_device_error;
 typedef enum wayland_data_device_manager_drag_and_drop_action
-											 wayland_data_device_manager_drag_and_drop_action;
+	wayland_data_device_manager_drag_and_drop_action;
 typedef enum wayland_shell_error			 wayland_shell_error;
 typedef enum wayland_shell_surface_resize	 wayland_shell_surface_resize;
 typedef enum wayland_shell_surface_transient wayland_shell_surface_transient;
-typedef enum wayland_shell_surface_fullscreen_method wayland_shell_surface_fullscreen_method;
-typedef enum wayland_surface_error					 wayland_surface_error;
-typedef enum wayland_seat_capability				 wayland_seat_capability;
-typedef enum wayland_seat_error						 wayland_seat_error;
-typedef enum wayland_pointer_error					 wayland_pointer_error;
-typedef enum wayland_pointer_button_state			 wayland_pointer_button_state;
-typedef enum wayland_pointer_axis					 wayland_pointer_axis;
-typedef enum wayland_pointer_axis_source			 wayland_pointer_axis_source;
-typedef enum wayland_pointer_axis_relative_direction wayland_pointer_axis_relative_direction;
-typedef enum wayland_keyboard_keymap_format			 wayland_keyboard_keymap_format;
-typedef enum wayland_keyboard_key_state				 wayland_keyboard_key_state;
-typedef enum wayland_output_subpixel				 wayland_output_subpixel;
-typedef enum wayland_output_transform				 wayland_output_transform;
-typedef enum wayland_output_mode					 wayland_output_mode;
-typedef enum wayland_subcompositor_error			 wayland_subcompositor_error;
-typedef enum wayland_subsurface_error				 wayland_subsurface_error;
+typedef enum wayland_shell_surface_fullscreen_method
+									 wayland_shell_surface_fullscreen_method;
+typedef enum wayland_surface_error	 wayland_surface_error;
+typedef enum wayland_seat_capability wayland_seat_capability;
+typedef enum wayland_seat_error		 wayland_seat_error;
+typedef enum wayland_pointer_error	 wayland_pointer_error;
+typedef enum wayland_pointer_button_state wayland_pointer_button_state;
+typedef enum wayland_pointer_axis		  wayland_pointer_axis;
+typedef enum wayland_pointer_axis_source  wayland_pointer_axis_source;
+typedef enum wayland_pointer_axis_relative_direction
+	wayland_pointer_axis_relative_direction;
+typedef enum wayland_keyboard_keymap_format wayland_keyboard_keymap_format;
+typedef enum wayland_keyboard_key_state		wayland_keyboard_key_state;
+typedef enum wayland_output_subpixel		wayland_output_subpixel;
+typedef enum wayland_output_transform		wayland_output_transform;
+typedef enum wayland_output_mode			wayland_output_mode;
+typedef enum wayland_subcompositor_error	wayland_subcompositor_error;
+typedef enum wayland_subsurface_error		wayland_subsurface_error;
 
 typedef struct wayland_array	wayland_array;
 typedef union wayland_primitive wayland_primitive;
@@ -423,7 +425,12 @@ struct wayland_registry {
 
 	u32 (*Bind)(wayland_registry *This, u32 Name);
 
-	void (*HandleGlobal)(wayland_registry *This, u32 Name, string Interface, u32 Version);
+	void (*HandleGlobal)(
+		wayland_registry *This,
+		u32				  Name,
+		string			  Interface,
+		u32				  Version
+	);
 	void (*HandleGlobalRemove)(wayland_registry *This, u32 Name);
 };
 
@@ -458,11 +465,17 @@ struct wayland_shared_memory_pool {
 struct wayland_shared_memory {
 	wayland_interface Header;
 
-	wayland_shared_memory_pool
-		*(*CreatePool)(wayland_shared_memory *This, s32 FileDescriptor, s32 Size);
+	wayland_shared_memory_pool *(*CreatePool)(
+		wayland_shared_memory *This,
+		s32					   FileDescriptor,
+		s32					   Size
+	);
 	void (*Release)(wayland_shared_memory *This);
 
-	void (*HandleFormat)(wayland_shared_memory *This, wayland_shared_memory_format Format);
+	void (*HandleFormat)(
+		wayland_shared_memory		*This,
+		wayland_shared_memory_format Format
+	);
 };
 
 struct wayland_buffer {
@@ -477,7 +490,11 @@ struct wayland_data_offer {
 	wayland_interface Header;
 
 	void (*Accept)(wayland_data_offer *This, u32 Serial, string MimeType);
-	void (*Receive)(wayland_data_offer *This, string MimeType, s32 FileDescriptor);
+	void (*Receive)(
+		wayland_data_offer *This,
+		string				MimeType,
+		s32					FileDescriptor
+	);
 	void (*Destroy)(wayland_data_offer *This);
 	void (*Finish)(wayland_data_offer *This);
 	void (*SetActions)(
@@ -508,7 +525,11 @@ struct wayland_data_source {
 	);
 
 	void (*HandleTarget)(wayland_data_source *This, string MimeType);
-	void (*HandleSend)(wayland_data_source *This, string MimeType, s32 FileDescriptor);
+	void (*HandleSend)(
+		wayland_data_source *This,
+		string				 MimeType,
+		s32					 FileDescriptor
+	);
 	void (*HandleCancelled)(wayland_data_source *This);
 	void (*HandleDragAndDropPerformed)(wayland_data_source *This);
 	void (*HandleDragAndDropFinished)(wayland_data_source *This);
@@ -528,7 +549,11 @@ struct wayland_data_device {
 		wayland_surface		*Icon,
 		u32					 Serial
 	);
-	void (*SetSelection)(wayland_data_device *This, wayland_data_source *Source, u32 Serial);
+	void (*SetSelection)(
+		wayland_data_device *This,
+		wayland_data_source *Source,
+		u32					 Serial
+	);
 	void (*Release)(wayland_data_device *This);
 
 	void (*HandleDataOffer)(wayland_data_device *This, u32 NewDataOfferId);
@@ -541,22 +566,34 @@ struct wayland_data_device {
 		wayland_data_offer	*DataOffer
 	);
 	void (*HandleLeave)(wayland_data_device *This);
-	void (*HandleMotion)(wayland_data_device *This, u32 Time, wayland_fixed X, wayland_fixed Y);
+	void (*HandleMotion)(
+		wayland_data_device *This,
+		u32					 Time,
+		wayland_fixed		 X,
+		wayland_fixed		 Y
+	);
 	void (*HandleDrop)(wayland_data_device *This);
-	void (*HandleSelection)(wayland_data_device *This, wayland_data_offer *DataOffer);
+	void (*HandleSelection)(
+		wayland_data_device *This,
+		wayland_data_offer	*DataOffer
+	);
 };
 
 struct wayland_data_device_manager {
 	wayland_interface Header;
 
 	wayland_data_source *(*CreateDataSource)(wayland_data_device_manager *This);
-	wayland_data_device *(*GetDataDevice)(wayland_data_device_manager *This, wayland_seat *Seat);
+	wayland_data_device *(*GetDataDevice)(
+		wayland_data_device_manager *This,
+		wayland_seat				*Seat
+	);
 };
 
 struct wayland_shell {
 	wayland_interface Header;
 
-	wayland_shell_surface *(*GetShellSurface)(wayland_shell *This, wayland_surface *Surface);
+	wayland_shell_surface
+		*(*GetShellSurface)(wayland_shell *This, wayland_surface *Surface);
 };
 
 struct wayland_shell_surface {
@@ -617,9 +654,18 @@ struct wayland_surface {
 	void (*SetOpaqueRegion)(wayland_surface *This, wayland_region *Region);
 	void (*SetInputRegion)(wayland_surface *This, wayland_region *Region);
 	void (*Commit)(wayland_surface *This);
-	void (*SetBufferTransform)(wayland_surface *This, wayland_output_transform Transform);
+	void (*SetBufferTransform)(
+		wayland_surface			*This,
+		wayland_output_transform Transform
+	);
 	void (*SetBufferScale)(wayland_surface *This, s32 Scale);
-	void (*DamageBuffer)(wayland_surface *This, s32 X, s32 Y, s32 Width, s32 Height);
+	void (*DamageBuffer)(
+		wayland_surface *This,
+		s32				 X,
+		s32				 Y,
+		s32				 Width,
+		s32				 Height
+	);
 	void (*Offset)(wayland_surface *This, s32 X, s32 Y);
 
 	void (*HandleEnter)(wayland_surface *This, wayland_output *Output);
@@ -639,7 +685,10 @@ struct wayland_seat {
 	wayland_touch *(*GetTouch)(wayland_seat *This);
 	void (*Release)(wayland_seat *This);
 
-	void (*HandleCapabilities)(wayland_seat *This, wayland_seat_capability Capabilities);
+	void (*HandleCapabilities)(
+		wayland_seat		   *This,
+		wayland_seat_capability Capabilities
+	);
 	void (*HandleName)(wayland_seat *This, string Name);
 };
 
@@ -662,7 +711,11 @@ struct wayland_pointer {
 		wayland_fixed	 SurfaceX,
 		wayland_fixed	 SurfaceY
 	);
-	void (*HandleLeave)(wayland_pointer *This, u32 Serial, wayland_surface *Surface);
+	void (*HandleLeave)(
+		wayland_pointer *This,
+		u32				 Serial,
+		wayland_surface *Surface
+	);
 	void (*HandleMotion)(
 		wayland_pointer *This,
 		u32				 Time,
@@ -683,10 +736,25 @@ struct wayland_pointer {
 		wayland_fixed		 Value
 	);
 	void (*HandleFrame)(wayland_pointer *This);
-	void (*HandleAxisSource)(wayland_pointer *This, wayland_pointer_axis_source AxisSource);
-	void (*HandleAxisStop)(wayland_pointer *This, u32 Time, wayland_pointer_axis AxisStop);
-	void (*HandleAxisDiscrete)(wayland_pointer *This, wayland_pointer_axis Axis, s32 Discrete);
-	void (*HandleAxisValue120)(wayland_pointer *This, wayland_pointer_axis Axis, s32 Value120);
+	void (*HandleAxisSource)(
+		wayland_pointer			   *This,
+		wayland_pointer_axis_source AxisSource
+	);
+	void (*HandleAxisStop)(
+		wayland_pointer		*This,
+		u32					 Time,
+		wayland_pointer_axis AxisStop
+	);
+	void (*HandleAxisDiscrete)(
+		wayland_pointer		*This,
+		wayland_pointer_axis Axis,
+		s32					 Discrete
+	);
+	void (*HandleAxisValue120)(
+		wayland_pointer		*This,
+		wayland_pointer_axis Axis,
+		s32					 Value120
+	);
 	void (*HandleAxisRelativeDirection)(
 		wayland_pointer						   *This,
 		wayland_pointer_axis					Axis,
@@ -706,7 +774,11 @@ struct wayland_keyboard {
 		wayland_surface	 *Surface,
 		wayland_array	  Keys
 	);
-	void (*HandleLeave)(wayland_keyboard *This, u32 Serial, wayland_surface *Surface);
+	void (*HandleLeave)(
+		wayland_keyboard *This,
+		u32				  Serial,
+		wayland_surface	 *Surface
+	);
 	void (*HandleKey)(
 		wayland_keyboard		  *This,
 		u32						   Serial,
@@ -740,11 +812,26 @@ struct wayland_touch {
 		wayland_fixed	 Y
 	);
 	void (*HandleUp)(wayland_touch *This, u32 Serial, u32 Time, s32 Id);
-	void (*HandleMotion)(wayland_touch *This, u32 Motion, s32 Id, wayland_fixed X, wayland_fixed Y);
+	void (*HandleMotion)(
+		wayland_touch *This,
+		u32			   Motion,
+		s32			   Id,
+		wayland_fixed  X,
+		wayland_fixed  Y
+	);
 	void (*HandleFrame)(wayland_touch *This);
 	void (*HandleCancel)(wayland_touch *This);
-	void (*HandleShape)(wayland_touch *This, s32 Id, wayland_fixed Major, wayland_fixed Minor);
-	void (*HandleOrientation)(wayland_touch *This, s32 Id, wayland_fixed Orientation);
+	void (*HandleShape)(
+		wayland_touch *This,
+		s32			   Id,
+		wayland_fixed  Major,
+		wayland_fixed  Minor
+	);
+	void (*HandleOrientation)(
+		wayland_touch *This,
+		s32			   Id,
+		wayland_fixed  Orientation
+	);
 };
 
 struct wayland_output {
@@ -1117,31 +1204,48 @@ static wayland_fixes WaylandFixesPrototype = {
 };
 
 static wayland_interface *WaylandPrototypes[] = {
-	[WAYLAND_OBJECT_TYPE_DISPLAY]	 = (wayland_interface *) &WaylandDisplayPrototype,
-	[WAYLAND_OBJECT_TYPE_REGISTRY]	 = (wayland_interface *) &WaylandRegistryPrototype,
-	[WAYLAND_OBJECT_TYPE_CALLBACK]	 = (wayland_interface *) &WaylandCallbackPrototype,
-	[WAYLAND_OBJECT_TYPE_COMPOSITOR] = (wayland_interface *) &WaylandCompositorPrototype,
+	[WAYLAND_OBJECT_TYPE_DISPLAY] =
+		(wayland_interface *) &WaylandDisplayPrototype,
+	[WAYLAND_OBJECT_TYPE_REGISTRY] =
+		(wayland_interface *) &WaylandRegistryPrototype,
+	[WAYLAND_OBJECT_TYPE_CALLBACK] =
+		(wayland_interface *) &WaylandCallbackPrototype,
+	[WAYLAND_OBJECT_TYPE_COMPOSITOR] =
+		(wayland_interface *) &WaylandCompositorPrototype,
 	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL] =
 		(wayland_interface *) &WaylandSharedMemoryPoolPrototype,
-	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY] = (wayland_interface *) &WaylandSharedMemoryPrototype,
-	[WAYLAND_OBJECT_TYPE_BUFFER]		= (wayland_interface *) &WaylandBufferPrototype,
-	[WAYLAND_OBJECT_TYPE_DATA_OFFER]	= (wayland_interface *) &WaylandDataOfferPrototype,
-	[WAYLAND_OBJECT_TYPE_DATA_SOURCE]	= (wayland_interface *) &WaylandDataSourcePrototype,
-	[WAYLAND_OBJECT_TYPE_DATA_DEVICE]	= (wayland_interface *) &WaylandDataDevicePrototype,
+	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY] =
+		(wayland_interface *) &WaylandSharedMemoryPrototype,
+	[WAYLAND_OBJECT_TYPE_BUFFER] =
+		(wayland_interface *) &WaylandBufferPrototype,
+	[WAYLAND_OBJECT_TYPE_DATA_OFFER] =
+		(wayland_interface *) &WaylandDataOfferPrototype,
+	[WAYLAND_OBJECT_TYPE_DATA_SOURCE] =
+		(wayland_interface *) &WaylandDataSourcePrototype,
+	[WAYLAND_OBJECT_TYPE_DATA_DEVICE] =
+		(wayland_interface *) &WaylandDataDevicePrototype,
 	[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] =
 		(wayland_interface *) &WaylandDataDeviceManagerPrototype,
-	[WAYLAND_OBJECT_TYPE_SHELL]			= (wayland_interface *) &WaylandShellPrototype,
-	[WAYLAND_OBJECT_TYPE_SHELL_SURFACE] = (wayland_interface *) &WaylandShellSurfacePrototype,
-	[WAYLAND_OBJECT_TYPE_SURFACE]		= (wayland_interface *) &WaylandSurfacePrototype,
-	[WAYLAND_OBJECT_TYPE_SEAT]			= (wayland_interface *) &WaylandSeatPrototype,
-	[WAYLAND_OBJECT_TYPE_POINTER]		= (wayland_interface *) &WaylandPointerPrototype,
-	[WAYLAND_OBJECT_TYPE_KEYBOARD]		= (wayland_interface *) &WaylandKeyboardPrototype,
-	[WAYLAND_OBJECT_TYPE_TOUCH]			= (wayland_interface *) &WaylandTouchPrototype,
-	[WAYLAND_OBJECT_TYPE_OUTPUT]		= (wayland_interface *) &WaylandOutputPrototype,
-	[WAYLAND_OBJECT_TYPE_REGION]		= (wayland_interface *) &WaylandRegionPrototype,
-	[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR] = (wayland_interface *) &WaylandSubcompositorPrototype,
-	[WAYLAND_OBJECT_TYPE_SUBSURFACE]	= (wayland_interface *) &WaylandSubsurfacePrototype,
-	[WAYLAND_OBJECT_TYPE_FIXES]			= (wayland_interface *) &WaylandFixesPrototype,
+	[WAYLAND_OBJECT_TYPE_SHELL] = (wayland_interface *) &WaylandShellPrototype,
+	[WAYLAND_OBJECT_TYPE_SHELL_SURFACE] =
+		(wayland_interface *) &WaylandShellSurfacePrototype,
+	[WAYLAND_OBJECT_TYPE_SURFACE] =
+		(wayland_interface *) &WaylandSurfacePrototype,
+	[WAYLAND_OBJECT_TYPE_SEAT] = (wayland_interface *) &WaylandSeatPrototype,
+	[WAYLAND_OBJECT_TYPE_POINTER] =
+		(wayland_interface *) &WaylandPointerPrototype,
+	[WAYLAND_OBJECT_TYPE_KEYBOARD] =
+		(wayland_interface *) &WaylandKeyboardPrototype,
+	[WAYLAND_OBJECT_TYPE_TOUCH] = (wayland_interface *) &WaylandTouchPrototype,
+	[WAYLAND_OBJECT_TYPE_OUTPUT] =
+		(wayland_interface *) &WaylandOutputPrototype,
+	[WAYLAND_OBJECT_TYPE_REGION] =
+		(wayland_interface *) &WaylandRegionPrototype,
+	[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR] =
+		(wayland_interface *) &WaylandSubcompositorPrototype,
+	[WAYLAND_OBJECT_TYPE_SUBSURFACE] =
+		(wayland_interface *) &WaylandSubsurfacePrototype,
+	[WAYLAND_OBJECT_TYPE_FIXES] = (wayland_interface *) &WaylandFixesPrototype,
 };
 
 internal u32
@@ -1182,34 +1286,31 @@ Wayland_ConnectToServerSocket(file_handle *Socket)
 		return TRUE;
 	}
 
-	string XdgRuntimeDir = Platform_GetEnvParam(CStringL("XDG_RUNTIME_DIR"));
-	Stack_Push();
-	XdgRuntimeDir = String_Cat(XdgRuntimeDir, CStringL("/"));
-
+	string XdgRuntimeDir  = Platform_GetEnvParam(CStringL("XDG_RUNTIME_DIR"));
 	string WaylandDisplay = Platform_GetEnvParam(CStringL("WAYLAND_DISPLAY"));
 
+	Stack_Push();
+	b08 Connected = TRUE;
+
 	if (WaylandDisplay.Length) {
-		string SocketPath = String_Cat(XdgRuntimeDir, WaylandDisplay);
+		string SocketPath = FStringL("%s/%s", XdgRuntimeDir, WaylandDisplay);
 
 		if (!Platform_ConnectToLocalSocket(SocketPath, Socket)) {
-			WaylandDisplay = CNStringL("wayland-0");
-			SocketPath	   = String_Cat(XdgRuntimeDir, WaylandDisplay);
-
-			if (!Platform_ConnectToLocalSocket(SocketPath, Socket)) {
-				Stack_Pop();
-				return FALSE;
-			}
+			SocketPath = FStringL("%s/wayland-0", XdgRuntimeDir);
+			if (!Platform_ConnectToLocalSocket(SocketPath, Socket))
+				Connected = FALSE;
 		}
 	}
 
 	Stack_Pop();
-	return TRUE;
+	return Connected;
 }
 
 internal void
 Wayland_SendWord(u32 Word)
 {
-	usize BytesWritten = Platform_WriteFile(_G.Socket, &Word, sizeof(u32), (usize) -1);
+	usize BytesWritten =
+		Platform_WriteFile(_G.Socket, &Word, sizeof(u32), (usize) -1);
 	Assert(BytesWritten = sizeof(u32));
 }
 
@@ -1229,20 +1330,28 @@ internal wayland_message *
 Wayland_ReadMessage(void)
 {
 	u32	  Header[2];
-	usize BytesRead =
-		Platform_ReadFile(_G.Socket, (vptr) Header, sizeof(wayland_message), (usize) -1);
+	usize BytesRead = Platform_ReadFile(
+		_G.Socket,
+		(vptr) Header,
+		sizeof(wayland_message),
+		(usize) -1
+	);
 	Assert(BytesRead == sizeof(wayland_message));
 
 	u32 ObjectId = Header[0];
 	u16 Size	 = Header[1] >> 16;
 	u16 Opcode	 = Header[1] & 0xFFFF;
 
-	wayland_message *Message = Stack_Allocate(Size);
-	Message->ObjectId		 = ObjectId;
-	Message->Opcode			 = Opcode;
-	Message->Size			 = Size;
-	BytesRead +=
-		Platform_ReadFile(_G.Socket, Message->Data, Size - sizeof(wayland_message), (usize) -1);
+	wayland_message *Message  = Stack_Allocate(Size);
+	Message->ObjectId		  = ObjectId;
+	Message->Opcode			  = Opcode;
+	Message->Size			  = Size;
+	BytesRead				 += Platform_ReadFile(
+		   _G.Socket,
+		   Message->Data,
+		   Size - sizeof(wayland_message),
+		   (usize) -1
+	   );
 	Assert(BytesRead == Size);
 
 	return Message;
@@ -1304,8 +1413,9 @@ Wayland_ParseString(wayland_message *Message, usize *I)
 	u32 Length	= Message->Data[*I];
 	*I		   += 1;
 
-	Prim.String	 = CLString((c08 *) &Message->Data[*I], Length);
-	*I			+= (Prim.String.Length + 3) / 4;
+	Prim.String =
+		CLEString((c08 *) &Message->Data[*I], Length, STRING_ENCODING_ASCII);
+	*I += (Prim.String.Length + 3) / 4;
 
 	return Prim;
 }
@@ -1341,7 +1451,9 @@ internal void
 Wayland_Display_HandleEvent(wayland_display *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
-		case 0: TRYCALL(This, HandleError, Message, Object, Uint, String); break;
+		case 0:
+			TRYCALL(This, HandleError, Message, Object, Uint, String);
+			break;
 		case 1: TRYCALL(This, HandleDeleteId, Message, Uint); break;
 	}
 }
@@ -1349,7 +1461,8 @@ Wayland_Display_HandleEvent(wayland_display *This, wayland_message *Message)
 internal wayland_callback *
 Wayland_Display_Sync(wayland_display *This)
 {
-	wayland_callback *Callback = Wayland_CreateObject(WAYLAND_OBJECT_TYPE_CALLBACK);
+	wayland_callback *Callback =
+		Wayland_CreateObject(WAYLAND_OBJECT_TYPE_CALLBACK);
 	Wayland_SendMessage(This->Header.Id, 0, 1, Callback->Header.Id);
 	return Callback;
 }
@@ -1357,7 +1470,8 @@ Wayland_Display_Sync(wayland_display *This)
 internal wayland_registry *
 Wayland_Display_GetRegistry(wayland_display *This)
 {
-	wayland_registry *Registry = Wayland_CreateObject(WAYLAND_OBJECT_TYPE_REGISTRY);
+	wayland_registry *Registry =
+		Wayland_CreateObject(WAYLAND_OBJECT_TYPE_REGISTRY);
 	Wayland_SendMessage(This->Header.Id, 1, 1, Registry->Header.Id);
 	return Registry;
 }

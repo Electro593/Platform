@@ -1,16 +1,17 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
 #define TTF_MAKE_TAG(_0, _1, _2, _3) (((_0)<<24) | ((_1)<<16) | ((_2)<<8) | (_3))
-// #define TTF_MAKE_TAG(_0,_1,_2,_3) (((_3)<<24) | ((_2)<<16) | ((_1)<<8) | (_0))
+// #define TTF_MAKE_TAG(_0,_1,_2,_3) (((_3)<<24) | ((_2)<<16) | ((_1)<<8) |
+// (_0))
 
 #define _SWAPENDIAN16(Data) ((((Data)&0xFF)<<8) | (((Data)>>8)&0xFF))
 
@@ -210,23 +211,24 @@ typedef struct font_glyph {
 
 #ifdef INCLUDE_SOURCE
 
-//TODO: Use this
-// internal u32
-// Font_CalculateChecksum(u32 *Table, u32 Size)
-// {
-// 	u32 Sum = 0;
-// 	Size	= (Size + 3) / 4;
-// 	while (Size--) {
-// 		u32 Value  = *Table++;
-// 		Sum		  += SWAPENDIAN32(Value);
-// 	}
-// 	return Sum;
-// }
+// TODO: Use this
+//  internal u32
+//  Font_CalculateChecksum(u32 *Table, u32 Size)
+//  {
+//  	u32 Sum = 0;
+//  	Size	= (Size + 3) / 4;
+//  	while (Size--) {
+//  		u32 Value  = *Table++;
+//  		Sum		  += SWAPENDIAN32(Value);
+//  	}
+//  	return Sum;
+//  }
 
 internal u32
 Font_GetGlyphOffset(font Font, u32 GlyphIndex)
 {
-	if (Font.head->IndexToLocFormat == TTF_LOCA_SHORT_OFFSETS) return Font.loca->Shorts[GlyphIndex] * 2;
+	if (Font.head->IndexToLocFormat == TTF_LOCA_SHORT_OFFSETS)
+		return Font.loca->Shorts[GlyphIndex] * 2;
 	else return Font.loca->Longs[GlyphIndex];
 }
 
@@ -265,7 +267,10 @@ Font_LoadFontDir(font *Font)
 	SWAPENDIAN16(FontDir->Offset.SearchRange);
 	SWAPENDIAN16(FontDir->Offset.EntrySelector);
 	SWAPENDIAN16(FontDir->Offset.RangeShift);
-	Assert(FontDir->Offset.ScalerType == 0x00010000 || FontDir->Offset.ScalerType == TTF_TAG_true);
+	Assert(
+		FontDir->Offset.ScalerType == 0x00010000
+		|| FontDir->Offset.ScalerType == TTF_TAG_true
+	);
 	for (u32 T = 0; T < FontDir->Offset.TableCount; T++) {
 		SWAPENDIAN32(FontDir->Tables[T].Tag);
 		SWAPENDIAN32(FontDir->Tables[T].Checksum);
@@ -290,7 +295,8 @@ Font_LoadcmapTable(font *Font)
 			case TTF_CMAP_PLATFORM_MICROSOFT: {
 				switch (cmap->Records[I].PlatformSpecificID) {
 					case TTF_CMAP_MICROSOFT_UNICODEBMP: {
-						Encoding->Header = (vptr) ((u08 *) cmap + cmap->Records[I].Offset);
+						Encoding->Header =
+							(vptr) ((u08 *) cmap + cmap->Records[I].Offset);
 						SWAPENDIAN16(Encoding->Header->Format);
 						SWAPENDIAN16(Encoding->Header->Length);
 						SWAPENDIAN16(Encoding->Header->Language);
@@ -302,21 +308,30 @@ Font_LoadcmapTable(font *Font)
 	Assert(Encoding->Header);
 	switch (Encoding->Header->Format) {
 		case 4: {
-			u08 *Data = (u08 *) (Encoding->Header + 1);
-			Encoding->Type4.SegCountX2
-				= SWAPENDIAN16(*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, SegCountX2)));
-			Encoding->Type4.SearchRange
-				= SWAPENDIAN16(*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, SearchRange)));
-			Encoding->Type4.EntrySelector
-				= SWAPENDIAN16(*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, EntrySelector)));
-			Encoding->Type4.RangeShift
-				= SWAPENDIAN16(*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, RangeShift)));
-			Data						 += OFFSET_OF(ttf_cmap_subtable_4, EndCodes);
-			Encoding->Type4.EndCodes	  = (u16 *) (Data + 0 * Encoding->Type4.SegCountX2);
-			Encoding->Type4.StartCodes	  = (u16 *) (Data + 1 * Encoding->Type4.SegCountX2);
-			Encoding->Type4.Deltas		  = (s16 *) (Data + 2 * Encoding->Type4.SegCountX2);
-			Encoding->Type4.RangeOffsets  = (u16 *) (Data + 3 * Encoding->Type4.SegCountX2);
-			Encoding->Type4.GlyphIdArray  = (u16 *) (Data + 4 * Encoding->Type4.SegCountX2);
+			u08 *Data				   = (u08 *) (Encoding->Header + 1);
+			Encoding->Type4.SegCountX2 = SWAPENDIAN16(
+				*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, SegCountX2))
+			);
+			Encoding->Type4.SearchRange = SWAPENDIAN16(
+				*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, SearchRange))
+			);
+			Encoding->Type4.EntrySelector = SWAPENDIAN16(
+				*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, EntrySelector))
+			);
+			Encoding->Type4.RangeShift = SWAPENDIAN16(
+				*(u16 *) (Data + OFFSET_OF(ttf_cmap_subtable_4, RangeShift))
+			);
+			Data += OFFSET_OF(ttf_cmap_subtable_4, EndCodes);
+			Encoding->Type4.EndCodes =
+				(u16 *) (Data + 0 * Encoding->Type4.SegCountX2);
+			Encoding->Type4.StartCodes =
+				(u16 *) (Data + 1 * Encoding->Type4.SegCountX2);
+			Encoding->Type4.Deltas =
+				(s16 *) (Data + 2 * Encoding->Type4.SegCountX2);
+			Encoding->Type4.RangeOffsets =
+				(u16 *) (Data + 3 * Encoding->Type4.SegCountX2);
+			Encoding->Type4.GlyphIdArray =
+				(u16 *) (Data + 4 * Encoding->Type4.SegCountX2);
 			for (u32 I = 0; I < (u32) Encoding->Type4.SegCountX2 / 2; I++) {
 				SWAPENDIAN16(Encoding->Type4.EndCodes[I]);
 				SWAPENDIAN16(Encoding->Type4.StartCodes[I]);
@@ -324,8 +339,10 @@ Font_LoadcmapTable(font *Font)
 				SWAPENDIAN16(Encoding->Type4.RangeOffsets[I]);
 			}
 			Data			  += 4 * Encoding->Type4.SegCountX2;
-			u32 RemainingSize  = Encoding->Header->Length - (u32) ((u64) Data - (u64) Encoding->Header);
-			for (u32 I = 0; I < RemainingSize / 2; I++) SWAPENDIAN16(Encoding->Type4.GlyphIdArray[I]);
+			u32 RemainingSize  = Encoding->Header->Length
+							  - (u32) ((u64) Data - (u64) Encoding->Header);
+			for (u32 I = 0; I < RemainingSize / 2; I++)
+				SWAPENDIAN16(Encoding->Type4.GlyphIdArray[I]);
 		}
 	}
 }
@@ -416,9 +433,11 @@ Font_LoadhmtxTable(font *Font)
 		SWAPENDIAN16(Font->hmtx.HMetrics[I].AdvanceX);
 		SWAPENDIAN16(Font->hmtx.HMetrics[I].LeftBearing);
 	}
-	Font->hmtx.ExtraBearings
-		= (ttf_fword *) ((u08 *) hmtx + Font->hhea->HMetricCount * sizeof(struct ttf_hmetric));
-	for (u32 I = 0; I < (u32) Font->maxp->GlyphCount - Font->hhea->HMetricCount; I++)
+	Font->hmtx.ExtraBearings =
+		(ttf_fword *) ((u08 *) hmtx
+					   + Font->hhea->HMetricCount * sizeof(struct ttf_hmetric));
+	for (u32 I = 0; I < (u32) Font->maxp->GlyphCount - Font->hhea->HMetricCount;
+		 I++)
 		SWAPENDIAN16(Font->hmtx.ExtraBearings[I]);
 }
 
@@ -428,9 +447,11 @@ Font_LoadlocaTable(font *Font)
 	Font->loca = Font_FindTable(Font, TTF_TAG_loca);
 	Assert(Font->loca);
 	if (Font->head->IndexToLocFormat == TTF_LOCA_SHORT_OFFSETS)
-		for (u32 I = 0; I <= Font->maxp->GlyphCount; I++) SWAPENDIAN16(Font->loca->Shorts[I]);
+		for (u32 I = 0; I <= Font->maxp->GlyphCount; I++)
+			SWAPENDIAN16(Font->loca->Shorts[I]);
 	else
-		for (u32 I = 0; I <= Font->maxp->GlyphCount; I++) SWAPENDIAN32(Font->loca->Longs[I]);
+		for (u32 I = 0; I <= Font->maxp->GlyphCount; I++)
+			SWAPENDIAN32(Font->loca->Longs[I]);
 }
 
 internal void
@@ -459,7 +480,7 @@ internal font
 Font_Init(u08 *FileData)
 {
 	Assert(FileData);
-	font Font	  = {0};
+	font Font	  = { 0 };
 	Font.FileBase = FileData;
 
 	Font_LoadFontDir(&Font);
@@ -494,7 +515,9 @@ Font_GetGlyphIndex(font Font, u32 Codepoint)
 				u32 Offset = Table->RangeOffsets[Index] / 2;
 				if (Offset) {
 					u32 CodepointOffset = Codepoint - Table->StartCodes[Index];
-					GlyphIndex			= *(Table->RangeOffsets + Index + Offset + CodepointOffset);
+					GlyphIndex			= *(
+						 Table->RangeOffsets + Index + Offset + CodepointOffset
+					 );
 					if (GlyphIndex) GlyphIndex += Table->Deltas[Index];
 				} else {
 					GlyphIndex = Codepoint + Table->Deltas[Index];
@@ -540,14 +563,17 @@ Font_FindSegments(msdf_shape *Shape, u08 *Data)
 		}
 		if (V == EndPointsOfContours[C]) {
 			C++;
-			SegmentCounts[C] = SegmentCounts[C - 1] + (EndPointsOfContours[C] - EndPointsOfContours[C - 1]);
+			SegmentCounts[C] =
+				SegmentCounts[C - 1]
+				+ (EndPointsOfContours[C] - EndPointsOfContours[C - 1]);
 		}
 	}
 
-	Shape->Segments = Stack_Allocate(Shape->SegmentCount * sizeof(msdf_segment));
+	Shape->Segments =
+		Stack_Allocate(Shape->SegmentCount * sizeof(msdf_segment));
 	Mem_Set(Shape->Segments, 0, Shape->SegmentCount * sizeof(msdf_segment));
 
-	v2s32 Pos  = {0};
+	v2s32 Pos  = { 0 };
 	WasControl = FALSE;
 	for (u32 V = 0, F = 0; F < VertexCount; V++, F++) {
 		if (Flags[F] & TTF_VERTEX_SHORT_X) {
@@ -596,8 +622,11 @@ Font_FindSegments(msdf_shape *Shape, u08 *Data)
 	}
 
 	u32 C = 0, E = 0, V = 0;
-	Shape->Contours	 = Stack_Allocate(Shape->ContourCount * sizeof(msdf_contour));
-	Shape->Edges	 = Stack_Allocate((Shape->ContourCount + Shape->SegmentCount) * sizeof(msdf_edge));
+	Shape->Contours =
+		Stack_Allocate(Shape->ContourCount * sizeof(msdf_contour));
+	Shape->Edges = Stack_Allocate(
+		(Shape->ContourCount + Shape->SegmentCount) * sizeof(msdf_edge)
+	);
 	Shape->EdgeCount = 0;
 	for (; C < Shape->ContourCount; C++) {
 		u32 StartV = V, StartE = E, StartEV = V;
@@ -605,18 +634,22 @@ Font_FindSegments(msdf_shape *Shape, u08 *Data)
 		Shape->Edges[E].Segments = Shape->Segments + V;
 		Shape->Edges[E].Color	 = 0b101;
 
-		for (; V < SegmentCounts[C] - 1; V++) Shape->Segments[V].P2 = Shape->Segments[V + 1].P1;
+		for (; V < SegmentCounts[C] - 1; V++)
+			Shape->Segments[V].P2 = Shape->Segments[V + 1].P1;
 		Shape->Segments[V].P2 = Shape->Segments[StartV].P1;
 
 		r32	  Cross, Dot;
 		v2r32 FirstDir, PrevDir, CurrDir, NextDir;
 		for (V = StartV; V < SegmentCounts[C]; V++) {
 			if (Shape->Segments[V].CPCount == 0) {
-				CurrDir = V2r32_Sub(Shape->Segments[V].P2, Shape->Segments[V].P1);
+				CurrDir =
+					V2r32_Sub(Shape->Segments[V].P2, Shape->Segments[V].P1);
 				NextDir = CurrDir;
 			} else {
-				CurrDir = V2r32_Sub(Shape->Segments[V].C1, Shape->Segments[V].P1);
-				NextDir = V2r32_Sub(Shape->Segments[V].P2, Shape->Segments[V].C1);
+				CurrDir =
+					V2r32_Sub(Shape->Segments[V].C1, Shape->Segments[V].P1);
+				NextDir =
+					V2r32_Sub(Shape->Segments[V].P2, Shape->Segments[V].C1);
 			}
 
 			if (V != StartV) {
@@ -631,7 +664,8 @@ Font_FindSegments(msdf_shape *Shape, u08 *Data)
 					E++;
 					Shape->Edges[E].Segments = Shape->Segments + V;
 
-					if (Shape->Edges[E - 1].Color == 0b110) Shape->Edges[E].Color = 0b011;
+					if (Shape->Edges[E - 1].Color == 0b110)
+						Shape->Edges[E].Color = 0b011;
 					else Shape->Edges[E].Color = 0b110;
 				}
 			} else FirstDir = CurrDir;
@@ -649,12 +683,13 @@ Font_FindSegments(msdf_shape *Shape, u08 *Data)
 			Cross	 = V2r32_Cross(PrevDir, FirstDir);
 			Dot		 = V2r32_Dot(PrevDir, PrevDir);
 			if (Dot < 0 || R32_Abs(Cross) >= SIN_ALPHA) {
-				u32 OldSegCount					 = Shape->Edges[E - 1].SegmentCount;
-				u32 NewSegCount					 = Shape->Edges[E - 1].SegmentCount / 2;
+				u32 OldSegCount = Shape->Edges[E - 1].SegmentCount;
+				u32 NewSegCount = Shape->Edges[E - 1].SegmentCount / 2;
 				Shape->Edges[E - 1].SegmentCount = NewSegCount;
 				Shape->Edges[E].SegmentCount	 = OldSegCount - NewSegCount;
-				Shape->Edges[E].Segments		 = Shape->Segments + StartEV + NewSegCount;
-				Shape->Edges[E].Color			 = 0b110;
+				Shape->Edges[E].Segments =
+					Shape->Segments + StartEV + NewSegCount;
+				Shape->Edges[E].Color = 0b110;
 				Shape->Contours[C].EdgeCount++;
 				E++;
 			} else Shape->Contours[C].Edges[0].Color = 0b111;
@@ -668,15 +703,18 @@ Font_FindSegments(msdf_shape *Shape, u08 *Data)
 internal font_glyph
 Font_GetGlyph(font Font, u32 Codepoint, r32 Scale)
 {
-	font_glyph Glyph	  = {0};
+	font_glyph Glyph	  = { 0 };
 	u32		   GlyphIndex = Font_GetGlyphIndex(Font, Codepoint);
 
 	if (GlyphIndex < Font.hhea->HMetricCount) {
 		Glyph.Advance	= Font.hmtx.HMetrics[GlyphIndex].AdvanceX * Scale;
 		Glyph.Bearing.X = Font.hmtx.HMetrics[GlyphIndex].LeftBearing * Scale;
 	} else {
-		Glyph.Advance	= Font.hmtx.HMetrics[Font.hhea->HMetricCount - 1].AdvanceX * Scale;
-		Glyph.Bearing.X = Font.hmtx.ExtraBearings[GlyphIndex - Font.hhea->HMetricCount] * Scale;
+		Glyph.Advance =
+			Font.hmtx.HMetrics[Font.hhea->HMetricCount - 1].AdvanceX * Scale;
+		Glyph.Bearing.X =
+			Font.hmtx.ExtraBearings[GlyphIndex - Font.hhea->HMetricCount]
+			* Scale;
 	}
 
 	u32		   Offset	  = Font_GetGlyphOffset(Font, GlyphIndex);
@@ -685,7 +723,7 @@ Font_GetGlyph(font Font, u32 Codepoint, r32 Scale)
 
 	if (NextOffset == Offset) {
 		Glyph.Bearing.Y = 0;
-		Glyph.Size		= (v2r32) {0};
+		Glyph.Size		= (v2r32) { 0 };
 	} else {
 		Glyph.Shape.Bounds.X = GlyphData->XMin;
 		Glyph.Shape.Bounds.Y = GlyphData->YMin;
@@ -696,7 +734,7 @@ Font_GetGlyph(font Font, u32 Codepoint, r32 Scale)
 		r32 EX				 = Glyph.Shape.Bounds.Z * Scale;
 		r32 EY				 = -Glyph.Shape.Bounds.Y * Scale;
 		Glyph.Bearing.Y		 = -EY;
-		Glyph.Size			 = (v2r32) {EX - SX, EY - SY};
+		Glyph.Size			 = (v2r32) { EX - SX, EY - SY };
 
 		Glyph.Shape.ContourCount = GlyphData->ContourCount;
 		Font_FindSegments(&Glyph.Shape, GlyphData->Data);
@@ -726,15 +764,22 @@ Font_GetGlyph(font Font, u32 Codepoint, r32 Scale)
 				);
 				if ((s32) E <= (s32) Contour.EdgeCount - 2)
 					Assert(
-						Edge.Segments + Edge.SegmentCount == Glyph.Shape.Contours[C].Edges[E + 1].Segments
+						Edge.Segments + Edge.SegmentCount
+						== Glyph.Shape.Contours[C].Edges[E + 1].Segments
 					);
 				SegCount += Edge.SegmentCount;
 			}
 
 			Assert(SegCount >= Contour.EdgeCount);
 			if ((s32) C <= (s32) Glyph.Shape.ContourCount - 2) {
-				Assert(Contour.Edges + Contour.EdgeCount == Glyph.Shape.Contours[C + 1].Edges);
-				Assert(Contour.Edges[0].Segments + SegCount == Glyph.Shape.Contours[C + 1].Edges[0].Segments);
+				Assert(
+					Contour.Edges + Contour.EdgeCount
+					== Glyph.Shape.Contours[C + 1].Edges
+				);
+				Assert(
+					Contour.Edges[0].Segments + SegCount
+					== Glyph.Shape.Contours[C + 1].Edges[0].Segments
+				);
 			}
 
 			TotalE += Contour.EdgeCount;
@@ -743,7 +788,8 @@ Font_GetGlyph(font Font, u32 Codepoint, r32 Scale)
 		Assert(Glyph.Shape.EdgeCount == TotalE);
 		Assert(Glyph.Shape.SegmentCount == TotalV);
 		Assert(Glyph.Shape.SegmentCount >= Glyph.Shape.EdgeCount);
-		for (u32 V = 0; V < Glyph.Shape.SegmentCount; V++) Assert(Glyph.Shape.Segments[V].CPCount <= 1);
+		for (u32 V = 0; V < Glyph.Shape.SegmentCount; V++)
+			Assert(Glyph.Shape.Segments[V].CPCount <= 1);
 	}
 
 	return Glyph;

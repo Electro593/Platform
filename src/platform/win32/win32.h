@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #define INVALID_HANDLE_VALUE ((vptr)(s64)-1)
 
@@ -78,7 +78,12 @@ typedef win32_handle   win32_window;
 typedef win32_instance win32_module;
 
 typedef u32(API_ENTRY *func_Win32_ThreadCallback)(vptr Parameter);
-typedef s64(API_ENTRY *func_Win32_WindowCallback)(win32_window Window, u32 Message, s64 WParam, s64 LParam);
+typedef s64(API_ENTRY *func_Win32_WindowCallback)(
+	win32_window Window,
+	u32			 Message,
+	s64			 WParam,
+	s64			 LParam
+);
 
 #define PAGE_READWRITE 0x04
 
@@ -730,16 +735,17 @@ typedef struct win32_teb {
 		win32_unicode_string				  CSDVersion;
 		struct win32_activation_context_data *ActivationContextData;
 		struct win32_assembly_storage_map	 *ProcessAssemblyStorageMap;
-		struct win32_activation_context_data *SystemDefaultActivationContextData;
-		struct win32_assembly_storage_map	 *SystemAssemblyStorageMap;
-		u64									  MinimumStackCommit;
-		vptr								  SparePointers[4];
-		u32									  SpareUlongs[5];
-		u08									  _Padding7_[4];
-		vptr								  WerRegistrationData;
-		vptr								  WerShipAssertPtr;
-		vptr								  Unused;
-		vptr								  ImageHeaderHash;
+		struct win32_activation_context_data
+										  *SystemDefaultActivationContextData;
+		struct win32_assembly_storage_map *SystemAssemblyStorageMap;
+		u64								   MinimumStackCommit;
+		vptr							   SparePointers[4];
+		u32								   SpareUlongs[5];
+		u08								   _Padding7_[4];
+		vptr							   WerRegistrationData;
+		vptr							   WerShipAssertPtr;
+		vptr							   Unused;
+		vptr							   ImageHeaderHash;
 		union {
 			u32 TracingFlags;
 			struct {

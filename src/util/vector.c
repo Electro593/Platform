@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
@@ -418,19 +418,19 @@ M4x4r32_Rotation(r32 Theta, v3r32 Axis)
 	S		= R32_sin(Theta);
 
 	m4x4r32 Result;
-	Result.V[0] = (v4r32) {X * X * (1 - C) + C,
-						   Y * X * (1 - C) - Z * S,
-						   Z * X * (1 - C) + Y * S,
-						   0};
-	Result.V[1] = (v4r32) {X * Y * (1 - C) + Z * S,
-						   Y * Y * (1 - C) + C,
-						   Z * Y * (1 - C) - X * S,
-						   0};
-	Result.V[2] = (v4r32) {X * Z * (1 - C) - Y * S,
-						   Y * Z * (1 - C) + X * S,
-						   Z * Z * (1 - C) + C,
-						   0};
-	Result.V[3] = (v4r32) {0, 0, 0, 1};
+	Result.V[0] = (v4r32) { X * X * (1 - C) + C,
+							Y * X * (1 - C) - Z * S,
+							Z * X * (1 - C) + Y * S,
+							0 };
+	Result.V[1] = (v4r32) { X * Y * (1 - C) + Z * S,
+							Y * Y * (1 - C) + C,
+							Z * Y * (1 - C) - X * S,
+							0 };
+	Result.V[2] = (v4r32) { X * Z * (1 - C) - Y * S,
+							Y * Z * (1 - C) + X * S,
+							Z * Z * (1 - C) + C,
+							0 };
+	Result.V[3] = (v4r32) { 0, 0, 0, 1 };
 	return Result;
 }
 
@@ -438,10 +438,14 @@ internal m4x4r32
 M4x4r32_Transpose(m4x4r32 M)
 {
 	m4x4r32 Result;
-	Result.V[0] = (v4r32) {M.V[0].E[0], M.V[1].E[0], M.V[2].E[0], M.V[3].E[0]};
-	Result.V[1] = (v4r32) {M.V[0].E[1], M.V[1].E[1], M.V[2].E[1], M.V[3].E[1]};
-	Result.V[2] = (v4r32) {M.V[0].E[2], M.V[1].E[2], M.V[2].E[2], M.V[3].E[2]};
-	Result.V[3] = (v4r32) {M.V[0].E[3], M.V[1].E[3], M.V[2].E[3], M.V[3].E[3]};
+	Result.V[0] =
+		(v4r32) { M.V[0].E[0], M.V[1].E[0], M.V[2].E[0], M.V[3].E[0] };
+	Result.V[1] =
+		(v4r32) { M.V[0].E[1], M.V[1].E[1], M.V[2].E[1], M.V[3].E[1] };
+	Result.V[2] =
+		(v4r32) { M.V[0].E[2], M.V[1].E[2], M.V[2].E[2], M.V[3].E[2] };
+	Result.V[3] =
+		(v4r32) { M.V[0].E[3], M.V[1].E[3], M.V[2].E[3], M.V[3].E[3] };
 	return Result;
 }
 
@@ -482,7 +486,13 @@ M4x4r32_Mul(m4x4r32 A, m4x4r32 B)
 }
 
 internal b08
-RayPlaneIntersection(v3r32 PlanePoint, v3r32 PlaneNormal, v3r32 RayPoint, v3r32 RayDir, r32 *T)
+RayPlaneIntersection(
+	v3r32 PlanePoint,
+	v3r32 PlaneNormal,
+	v3r32 RayPoint,
+	v3r32 RayDir,
+	r32	 *T
+)
 {
 	v3r32 P0 = PlanePoint;
 	v3r32 N	 = PlaneNormal;

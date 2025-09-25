@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #if _X64
 
@@ -70,7 +70,7 @@ typedef struct sys_sockaddr_unix {
 typedef struct sys_sockaddr {
 	u16 Family;
 	union {
-		c08 MinData[14];
+		c08	 MinData[14];
 		char Data[];
 	};
 } sys_sockaddr;

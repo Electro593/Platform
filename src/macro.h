@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 // CREDIT https://gitlab.inria.fr/gustedt/p99/-/blob/master/p99/p99_for.h
 
@@ -22,7 +22,26 @@
 #define _MAC_STRINGIFY(S) #S
 #define MAC_STRINGIFY(S) _MAC_STRINGIFY(S)
 
-#define _MAC_ARGCOUNT_(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, I, ...) I
+#define _MAC_ARGCOUNT_( \
+	_0,                 \
+	_1,                 \
+	_2,                 \
+	_3,                 \
+	_4,                 \
+	_5,                 \
+	_6,                 \
+	_7,                 \
+	_8,                 \
+	_9,                 \
+	_10,                \
+	_11,                \
+	_12,                \
+	_13,                \
+	_14,                \
+	_15,                \
+	I,                  \
+	...                 \
+) I
 #define _MAC_ARGCOUNT(...) _MAC_ARGCOUNT_(__VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,)
 #define MAC_ARGCOUNT(...) _MAC_ARGCOUNT(__VA_OPT__(,) __VA_ARGS__)
 

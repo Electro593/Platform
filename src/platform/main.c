@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #if !defined(INCLUDE_SOURCE) && !defined(INCLUDE_HEADER)
 #include <shared.h>
@@ -311,7 +311,11 @@ typedef enum scancode {
 	ScanCode_Pause = 0xFF,	// 0xE11D45,
 } scancode;
 
-typedef enum button { Button_Left = 0, Button_Right = 1, Button_Middle = 2 } button;
+typedef enum button {
+	Button_Left	  = 0,
+	Button_Right  = 1,
+	Button_Middle = 2
+} button;
 
 typedef enum key_state {
 	RELEASED = 0,
@@ -320,11 +324,17 @@ typedef enum key_state {
 } key_state;
 
 typedef enum file_mode {
-	FILE_READ	= 0x0001,
-	FILE_WRITE	= 0x0002,
-	FILE_CREATE = 0x0004,				// If the file doesn't exist, create it
-	FILE_APPEND = 0x0008 | FILE_WRITE,	// If writing, all writes seek to the end of the file
-	FILE_CLEAR	= 0x0010 | FILE_WRITE,	// If writing, empty the file if it already exists
+	FILE_READ  = 0x0001,
+	FILE_WRITE = 0x0002,
+
+	// If the file doesn't exist, create it
+	FILE_CREATE = 0x0004,
+
+	// If writing, all writes seek to the end of the file
+	FILE_APPEND = 0x0008 | FILE_WRITE,
+
+	// If writing, empty the file if it already exists
+	FILE_CLEAR = 0x0010 | FILE_WRITE,
 } file_mode;
 
 struct platform_state {
@@ -418,7 +428,9 @@ internal string
 _CString(c08 *Chars)
 {
 	u32 Length = _Mem_BytesUntil((u08 *) Chars, 0);
-	return (string) { .Text = Chars, .Encoding = STRING_ENCODING_ASCII, .Length = Length };
+	return (string) { .Text		= Chars,
+					  .Encoding = STRING_ENCODING_ASCII,
+					  .Length	= Length };
 }
 
 internal void
@@ -467,7 +479,8 @@ Platform_ReloadModule(platform_module *Module)
 	datetime LastWriteTime;
 	Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
 	if (Platform_IsModuleBackendOpened(Module)) {
-		if (Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS) return FALSE;
+		if (Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS)
+			return FALSE;
 
 		Platform_UnloadModule(Module);
 	}
@@ -516,7 +529,9 @@ Platform_LoadModule(string Name)
 
 		Module = Heap_AllocateA(
 			_G.Heap,
-			sizeof(platform_module) + Name.Length + sizeof(PLATFORM_DYNLIB_SUFFIX)
+			sizeof(platform_module)
+				+ Name.Length
+				+ sizeof(PLATFORM_DYNLIB_SUFFIX)
 		);
 		Mem_Set(Module, 0, sizeof(platform_module));
 		HashMap_Add(&_G.ModuleTable, &Name, &Module);
@@ -541,7 +556,8 @@ Platform_LoadModule(string Name)
 		Module->DebugLoadAddress = (vptr) 0x7DB000000000;
 	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "base", 4) == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB100000000;
-	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "renderer_opengl", 15) == EQUAL)
+	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "renderer_opengl", 15)
+			 == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB200000000;
 	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "wayland", 7) == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB300000000;

@@ -1,17 +1,18 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 internal elf_section_header *
 Elf_GetSectionHeader(elf_state *State, u64 Index)
 {
 	if (!State->SectionHeaderTable) return 0;
-	return (vptr) (State->SectionHeaderTable + State->Header->SectionHeaderSize * Index);
+	return (vptr) (State->SectionHeaderTable
+				   + State->Header->SectionHeaderSize * Index);
 }
 
 internal u08 *
@@ -27,7 +28,8 @@ internal elf_program_header *
 Elf_GetProgramHeader(elf_state *State, u64 Index)
 {
 	if (!State->ProgramHeaderTable) return 0;
-	return (vptr) (State->ProgramHeaderTable + State->Header->ProgramHeaderSize * Index);
+	return (vptr) (State->ProgramHeaderTable
+				   + State->Header->ProgramHeaderSize * Index);
 }
 
 internal b08
@@ -74,11 +76,13 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 		if ((N & B) != B) return NULL;
 	}
 
-	elf_section_header *SymtabHeader = Elf_GetSectionHeader(State, Table->Header->Link);
-	elf_symbol		   *Symtab		 = (vptr) State->File + SymtabHeader->Offset;
+	elf_section_header *SymtabHeader =
+		Elf_GetSectionHeader(State, Table->Header->Link);
+	elf_symbol *Symtab = (vptr) State->File + SymtabHeader->Offset;
 
-	elf_section_header *StrtabHeader = Elf_GetSectionHeader(State, SymtabHeader->Link);
-	c08				   *Strtab		 = (vptr) State->File + StrtabHeader->Offset;
+	elf_section_header *StrtabHeader =
+		Elf_GetSectionHeader(State, SymtabHeader->Link);
+	c08 *Strtab = (vptr) State->File + StrtabHeader->Offset;
 
 	u32	 SymIndex	= Table->Buckets[Hash % Table->BucketCount];
 	u32 *ChainEntry = Table->Chain + SymIndex - Table->SymbolOffset;
@@ -148,21 +152,24 @@ Elf_HandleRelocations(elf_state *State)
 	for (usize I = 0; I < State->SectionHeaderCount; I++) {
 		elf_section_header *Header = Elf_GetSectionHeader(State, I);
 		vptr				Data   = State->File + Header->Offset;
-		char			   *Name   = (char *) (State->SectionNameTable + Header->Name);
+		char *Name = (char *) (State->SectionNameTable + Header->Name);
 
 		b08 IsRela = Elf_CheckName(Name, ".rela");
 		b08 IsRel  = !IsRela && Elf_CheckName(Name, ".rel");
 
 		if (!IsRela && !IsRel) continue;
 
-		elf_section_header *SymtabHeader = Elf_GetSectionHeader(State, Header->Link);
-		vptr				Symtab		 = State->File + SymtabHeader->Offset;
+		elf_section_header *SymtabHeader =
+			Elf_GetSectionHeader(State, Header->Link);
+		vptr Symtab = State->File + SymtabHeader->Offset;
 
-		elf_section_header *TargetHeader = Elf_GetSectionHeader(State, Header->Info);
-		vptr				TargetBase	 = State->File + TargetHeader->Offset;
+		elf_section_header *TargetHeader =
+			Elf_GetSectionHeader(State, Header->Info);
+		vptr TargetBase = State->File + TargetHeader->Offset;
 
-		elf_section_header *StrtabHeader = Elf_GetSectionHeader(State, SymtabHeader->Link);
-		vptr				Strtab		 = State->File + StrtabHeader->Offset;
+		elf_section_header *StrtabHeader =
+			Elf_GetSectionHeader(State, SymtabHeader->Link);
+		vptr Strtab = State->File + StrtabHeader->Offset;
 
 		vptr		PrevTarget = NULL, Cursor = Data;
 		usize		Value = 0, RelocType = 0;
@@ -192,13 +199,16 @@ Elf_HandleRelocations(elf_state *State)
 				SymbolIndex = Rela->Info >> 32;
 				RelocType	= Rela->Info & 0xFFFFFFFF;
 			}
-			Symbol = (elf_symbol *) (Symtab + SymtabHeader->EntrySize * SymbolIndex);
+			Symbol =
+				(elf_symbol *) (Symtab + SymtabHeader->EntrySize * SymbolIndex);
 
 			Value = Elf_ComputeRelocation(
 				State,
 				RelocType,
 				Value,
-				(usize) State->ImageAddress - State->VAddrOffset + Symbol->Value,
+				(usize) State->ImageAddress
+					- State->VAddrOffset
+					+ Symbol->Value,
 				(usize) State->ImageAddress
 			);
 
@@ -206,7 +216,8 @@ Elf_HandleRelocations(elf_state *State)
 			Cursor	   += Header->EntrySize;
 		}
 
-		if (PrevTarget) Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
+		if (PrevTarget)
+			Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
 	}
 
 	return ELF_ERROR_SUCCESS;
@@ -223,7 +234,8 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
 			switch (Header->Type) {
 				case ELF_SEGMENT_TYPE_LOAD: {
-					if (MinVAddr > Header->VirtualAddress) MinVAddr = Header->VirtualAddress;
+					if (MinVAddr > Header->VirtualAddress)
+						MinVAddr = Header->VirtualAddress;
 					if (MaxVAddr < Header->VirtualAddress + Header->MemSize)
 						MaxVAddr = Header->VirtualAddress + Header->MemSize;
 				} break;
@@ -255,9 +267,15 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 					usize Padding  = Header->VirtualAddress & PageMask;
 					vptr  ProgBase = Base + (Header->VirtualAddress - MinVAddr);
 					s32	  Prot	   = 0
-							 | ((Header->Flags & ELF_SEGMENT_FLAG_READ) ? SYS_PROT_READ : 0)
-							 | ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE : 0)
-							 | ((Header->Flags & ELF_SEGMENT_FLAG_EXEC) ? SYS_PROT_EXEC : 0);
+							 | ((Header->Flags & ELF_SEGMENT_FLAG_READ)
+									? SYS_PROT_READ
+									: 0)
+							 | ((Header->Flags & ELF_SEGMENT_FLAG_WRITE)
+									? SYS_PROT_WRITE
+									: 0)
+							 | ((Header->Flags & ELF_SEGMENT_FLAG_EXEC)
+									? SYS_PROT_EXEC
+									: 0);
 					s32 Flags = SYS_MAP_PRIVATE | SYS_MAP_FIXED;
 
 					// Try to map the file portion into memory
@@ -270,21 +288,28 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 							State->FileDescriptor,
 							Header->Offset - Padding
 						);
-						if ((usize) Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
+						if ((usize) Addr & PageMask)
+							return ELF_ERROR_INVALID_MEM_MAP;
 					}
 
 					// Try to map the nobits portion into memory
 					if (Header->MemSize > Header->FileSize) {
 						usize NoBitsPadding =
-							State->PageSize - (((usize) ProgBase + Header->FileSize) & PageMask);
+							State->PageSize
+							- (((usize) ProgBase + Header->FileSize)
+							   & PageMask);
 						_Mem_Set(ProgBase + Header->FileSize, 0, NoBitsPadding);
 
-						if (Header->MemSize > Header->FileSize + NoBitsPadding) {
-							vptr NoBitsBase =
-								(vptr) (((usize) ProgBase + Header->FileSize + PageMask)
-										& ~PageMask);
-							usize NoBitsExtra = Header->MemSize - Header->FileSize - NoBitsPadding;
-							vptr  Addr		  = Sys_MemMap(
+						if (Header->MemSize > Header->FileSize + NoBitsPadding)
+						{
+							vptr  NoBitsBase  = (vptr) (((usize) ProgBase
+														 + Header->FileSize
+														 + PageMask)
+														& ~PageMask);
+							usize NoBitsExtra = Header->MemSize
+											  - Header->FileSize
+											  - NoBitsPadding;
+							vptr Addr = Sys_MemMap(
 								NoBitsBase,
 								NoBitsExtra,
 								Prot,
@@ -292,7 +317,8 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 								-1,
 								0
 							);
-							if ((usize) Addr & PageMask) return ELF_ERROR_INVALID_MEM_MAP;
+							if ((usize) Addr & PageMask)
+								return ELF_ERROR_INVALID_MEM_MAP;
 							_Mem_Set(NoBitsBase, 0, NoBitsExtra);
 						}
 					}
@@ -313,11 +339,15 @@ Elf_FixPermsAfterReloc(elf_state *State)
 		elf_program_header *Header = Elf_GetProgramHeader(State, I);
 		if (Header->Type == ELF_SEGMENT_TYPE_GNU_RELRO) {
 			usize PageMask = State->PageSize - 1;
-			u32	 *Data = (vptr) State->ImageAddress - State->VAddrOffset + Header->VirtualAddress;
-			s32	  Prot = 0
-					 | ((Header->Flags & ELF_SEGMENT_FLAG_READ) ? SYS_PROT_READ : 0)
-					 | ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE : 0)
-					 | ((Header->Flags & ELF_SEGMENT_FLAG_EXEC) ? SYS_PROT_EXEC : 0);
+			u32	 *Data	   = (vptr) State->ImageAddress
+					  - State->VAddrOffset
+					  + Header->VirtualAddress;
+			s32 Prot =
+				0
+				| ((Header->Flags & ELF_SEGMENT_FLAG_READ) ? SYS_PROT_READ : 0)
+				| ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE
+															: 0)
+				| ((Header->Flags & ELF_SEGMENT_FLAG_EXEC) ? SYS_PROT_EXEC : 0);
 			Sys_MemProtect(
 				(vptr) ((usize) Data & ~PageMask),
 				(Header->MemSize + PageMask) & ~PageMask,
@@ -334,16 +364,23 @@ Elf_SetupAndValidate(elf_state *State)
 {
 	State->Header = (vptr) State->File;
 
-	if (_Mem_Cmp(State->Header->Ident.MagicNumber, (u08 *) ELF_MAGIC_NUMBER, 4) != EQUAL)
+	if (_Mem_Cmp(State->Header->Ident.MagicNumber, (u08 *) ELF_MAGIC_NUMBER, 4)
+		!= EQUAL)
 		return ELF_ERROR_INVALID_FORMAT;
-	if (State->Header->Ident.FileClass != ELF_EXPECTED_CLASS) return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Ident.DataEncoding != ELF_EXPECTED_ENCODING) return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Ident.FileVersion != ELF_EXPECTED_VERSION) return ELF_ERROR_NOT_SUPPORTED;
+	if (State->Header->Ident.FileClass != ELF_EXPECTED_CLASS)
+		return ELF_ERROR_NOT_SUPPORTED;
+	if (State->Header->Ident.DataEncoding != ELF_EXPECTED_ENCODING)
+		return ELF_ERROR_NOT_SUPPORTED;
+	if (State->Header->Ident.FileVersion != ELF_EXPECTED_VERSION)
+		return ELF_ERROR_NOT_SUPPORTED;
 
 	if (State->Header->Type != ELF_TYPE_DYNAMIC) return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Machine != ELF_EXPECTED_MACHINE) return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Version != ELF_EXPECTED_VERSION) return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->ElfHeaderSize < sizeof(elf_header)) return ELF_ERROR_INVALID_FORMAT;
+	if (State->Header->Machine != ELF_EXPECTED_MACHINE)
+		return ELF_ERROR_NOT_SUPPORTED;
+	if (State->Header->Version != ELF_EXPECTED_VERSION)
+		return ELF_ERROR_NOT_SUPPORTED;
+	if (State->Header->ElfHeaderSize < sizeof(elf_header))
+		return ELF_ERROR_INVALID_FORMAT;
 	if (State->Header->SectionHeaderSize < sizeof(elf_section_header))
 		return ELF_ERROR_INVALID_FORMAT;
 	if (State->Header->ProgramHeaderSize < sizeof(elf_program_header))
@@ -351,7 +388,8 @@ Elf_SetupAndValidate(elf_state *State)
 
 	State->SectionHeaderCount = State->Header->SectionHeaderCount;
 	if (State->SectionHeaderCount || State->Header->SectionHeaderTableOffset) {
-		State->SectionHeaderTable = State->File + State->Header->SectionHeaderTableOffset;
+		State->SectionHeaderTable =
+			State->File + State->Header->SectionHeaderTableOffset;
 
 		State->NullSectionHeader = Elf_GetSectionHeader(State, 0);
 		if (State->NullSectionHeader->Name) return ELF_ERROR_INVALID_FORMAT;
@@ -361,18 +399,26 @@ Elf_SetupAndValidate(elf_state *State)
 		if (State->NullSectionHeader->Address) return ELF_ERROR_INVALID_FORMAT;
 		if (State->NullSectionHeader->Offset) return ELF_ERROR_INVALID_FORMAT;
 		if (State->NullSectionHeader->Info) return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->AddressAlignment) return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->EntrySize) return ELF_ERROR_INVALID_FORMAT;
+		if (State->NullSectionHeader->AddressAlignment)
+			return ELF_ERROR_INVALID_FORMAT;
+		if (State->NullSectionHeader->EntrySize)
+			return ELF_ERROR_INVALID_FORMAT;
 
-		if (!State->SectionHeaderCount) State->SectionHeaderCount = State->NullSectionHeader->Size;
-		else if (State->NullSectionHeader->Size) return ELF_ERROR_INVALID_FORMAT;
+		if (!State->SectionHeaderCount)
+			State->SectionHeaderCount = State->NullSectionHeader->Size;
+		else if (State->NullSectionHeader->Size)
+			return ELF_ERROR_INVALID_FORMAT;
 
 		u64 Index = State->Header->SectionNameTableIndex;
-		if (Index == ELF_SECTION_INDEX_EXTENDED) Index = State->NullSectionHeader->Link;
-		else if (Index >= ELF_SECTION_INDEX_LORESERVE) return ELF_ERROR_INVALID_FORMAT;
-		else if (State->NullSectionHeader->Link) return ELF_ERROR_INVALID_FORMAT;
+		if (Index == ELF_SECTION_INDEX_EXTENDED)
+			Index = State->NullSectionHeader->Link;
+		else if (Index >= ELF_SECTION_INDEX_LORESERVE)
+			return ELF_ERROR_INVALID_FORMAT;
+		else if (State->NullSectionHeader->Link)
+			return ELF_ERROR_INVALID_FORMAT;
 		State->SectionNameSectionHeader = Elf_GetSectionHeader(State, Index);
-		State->SectionNameTable = (c08 *) Elf_GetSection(State, State->SectionNameSectionHeader);
+		State->SectionNameTable =
+			(c08 *) Elf_GetSection(State, State->SectionNameSectionHeader);
 
 		for (usize I = 0; I < State->SectionHeaderCount; I++) {
 			elf_section_header *Header = Elf_GetSectionHeader(State, I);
@@ -392,12 +438,16 @@ Elf_SetupAndValidate(elf_state *State)
 					State->GnuHashTable.BloomShift	 = ((u32 *) Data)[3];
 					State->GnuHashTable.Bloom32		 = (u32 *) Data + 4;
 
-					usize BloomWords = State->GnuHashTable.BloomSize
-									 * ((State->Header->Ident.FileClass == ELF_CLASS_32) ? 1 : 2);
+					usize BloomWords =
+						State->GnuHashTable.BloomSize
+						* ((State->Header->Ident.FileClass == ELF_CLASS_32)
+							   ? 1
+							   : 2);
 
-					State->GnuHashTable.Buckets = State->GnuHashTable.Bloom32 + BloomWords;
-					State->GnuHashTable.Chain =
-						State->GnuHashTable.Buckets + State->GnuHashTable.BucketCount;
+					State->GnuHashTable.Buckets =
+						State->GnuHashTable.Bloom32 + BloomWords;
+					State->GnuHashTable.Chain = State->GnuHashTable.Buckets
+											  + State->GnuHashTable.BucketCount;
 				}
 			}
 		}
@@ -407,7 +457,8 @@ Elf_SetupAndValidate(elf_state *State)
 	}
 
 	if (State->Header->ProgramHeaderCount) {
-		State->ProgramHeaderTable = State->File + State->Header->ProgramHeaderTableOffset;
+		State->ProgramHeaderTable =
+			State->File + State->Header->ProgramHeaderTableOffset;
 
 		b08 FoundLoadable	   = FALSE;
 		b08 FoundPHDR		   = FALSE;
@@ -417,13 +468,15 @@ Elf_SetupAndValidate(elf_state *State)
 		for (u32 I = 0; I < State->Header->ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
 			if (NextMustBeLoadable) {
-				if (Header->Type != ELF_SEGMENT_TYPE_LOAD) return ELF_ERROR_INVALID_FORMAT;
+				if (Header->Type != ELF_SEGMENT_TYPE_LOAD)
+					return ELF_ERROR_INVALID_FORMAT;
 				NextMustBeLoadable = FALSE;
 			}
 			switch (Header->Type) {
 				case ELF_SEGMENT_TYPE_NULL: break;
 				case ELF_SEGMENT_TYPE_LOAD:
-					if (Header->FileSize > Header->MemSize) return ELF_ERROR_INVALID_FORMAT;
+					if (Header->FileSize > Header->MemSize)
+						return ELF_ERROR_INVALID_FORMAT;
 					break;
 				case ELF_SEGMENT_TYPE_DYNAMIC: break;
 				case ELF_SEGMENT_TYPE_INTERP:
@@ -432,8 +485,10 @@ Elf_SetupAndValidate(elf_state *State)
 					FoundInterp		   = TRUE;
 					NextMustBeLoadable = TRUE;
 					break;
-				case ELF_SEGMENT_TYPE_NOTE : break;
-				case ELF_SEGMENT_TYPE_SHLIB: return ELF_ERROR_INVALID_FORMAT; break;
+				case ELF_SEGMENT_TYPE_NOTE: break;
+				case ELF_SEGMENT_TYPE_SHLIB:
+					return ELF_ERROR_INVALID_FORMAT;
+					break;
 				case ELF_SEGMENT_TYPE_PHDR:
 					if (FoundLoadable) return ELF_ERROR_INVALID_FORMAT;
 					if (FoundPHDR) return ELF_ERROR_INVALID_FORMAT;
@@ -444,7 +499,8 @@ Elf_SetupAndValidate(elf_state *State)
 			}
 		}
 	} else {
-		if (State->Header->ProgramHeaderTableOffset) return ELF_ERROR_INVALID_FORMAT;
+		if (State->Header->ProgramHeaderTableOffset)
+			return ELF_ERROR_INVALID_FORMAT;
 	}
 
 	return ELF_ERROR_SUCCESS;
@@ -467,11 +523,18 @@ Elf_Open(elf_state *State, c08 *FileName, usize PageSize)
 	if (!CHECK((s32) State->FileDescriptor)) return ELF_ERROR_UNKNOWN;
 
 	sys_stat Stat;
-	if (!CHECK(Sys_FileStat(State->FileDescriptor, &Stat))) return ELF_ERROR_UNKNOWN;
+	if (!CHECK(Sys_FileStat(State->FileDescriptor, &Stat)))
+		return ELF_ERROR_UNKNOWN;
 	State->FileSize = Stat.Size;
 
-	State->File =
-		Sys_MemMap(NULL, State->FileSize, SYS_PROT_READ, SYS_MAP_PRIVATE, State->FileDescriptor, 0);
+	State->File = Sys_MemMap(
+		NULL,
+		State->FileSize,
+		SYS_PROT_READ,
+		SYS_MAP_PRIVATE,
+		State->FileDescriptor,
+		0
+	);
 	if (!CHECK(State->File)) return ELF_ERROR_UNKNOWN;
 
 	elf_error Error = Elf_SetupAndValidate(State);
@@ -508,8 +571,12 @@ Elf_GetProcAddress(elf_state *State, c08 *ProcName, vptr *ProcOut)
 
 	vptr Addr = NULL;
 	switch (State->LookupType) {
-		case ELF_LOOKUP_LINEAR	: Addr = Elf_LookupSymbol_Linear(State, ProcName); break;
-		case ELF_LOOKUP_GNU_HASH: Addr = Elf_LookupSymbol_GnuHash(State, ProcName); break;
+		case ELF_LOOKUP_LINEAR:
+			Addr = Elf_LookupSymbol_Linear(State, ProcName);
+			break;
+		case ELF_LOOKUP_GNU_HASH:
+			Addr = Elf_LookupSymbol_GnuHash(State, ProcName);
+			break;
 	}
 
 	if (!Addr) return ELF_ERROR_NOT_FOUND;

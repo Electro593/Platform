@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
@@ -37,7 +37,12 @@ Wayland_Display_HandleDeleteId(wayland_display *This, u32 Id)
 }
 
 internal void
-Wayland_Registry_HandleGlobal(wayland_registry *This, u32 Name, string Interface, u32 Version)
+Wayland_Registry_HandleGlobal(
+	wayland_registry *This,
+	u32				  Name,
+	string			  Interface,
+	u32				  Version
+)
 {
 	STOP;
 }
@@ -72,12 +77,13 @@ Wayland_TryInit(void)
 
 	if (_G.Connected) {
 		_G.HeapSize = 16 * 1024 * 1024;
-		_G.Heap		= Heap_Init(Platform_AllocateMemory(_G.HeapSize), _G.HeapSize);
+		_G.Heap = Heap_Init(Platform_AllocateMemory(_G.HeapSize), _G.HeapSize);
 
-		_G.IdTable = HashMap_Init(_G.Heap, sizeof(u32), sizeof(wayland_interface *));
+		_G.IdTable =
+			HashMap_Init(_G.Heap, sizeof(u32), sizeof(wayland_interface *));
 
-		_G.NextObjectId			   = 1;
-		_G.Display				   = Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY);
+		_G.NextObjectId = 1;
+		_G.Display		= Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY);
 		_G.Display->HandleError	   = Wayland_Display_HandleError;
 		_G.Display->HandleDeleteId = Wayland_Display_HandleDeleteId;
 

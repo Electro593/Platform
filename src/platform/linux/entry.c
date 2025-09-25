@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef _WIN32
 _WIN32
@@ -89,7 +89,8 @@ Platform_ConnectToLocalSocket(string Name, file_handle *FileHandleOut)
 	Assert(FileHandleOut);
 	if (Name.Length >= sizeof((sys_sockaddr_unix) {}.Data)) return FALSE;
 
-	s32 FileDescriptor = Sys_Socket(SYS_ADDRESS_FAMILY_UNIX, SYS_SOCKET_STREAM, 0);
+	s32 FileDescriptor =
+		Sys_Socket(SYS_ADDRESS_FAMILY_UNIX, SYS_SOCKET_STREAM, 0);
 	if (FileDescriptor < 0) return FALSE;
 
 	sys_sockaddr_unix Address;
@@ -97,7 +98,11 @@ Platform_ConnectToLocalSocket(string Name, file_handle *FileHandleOut)
 	Mem_Cpy(Address.Data, Name.Text, Name.Length);
 	Address.Data[Name.Length] = 0;
 
-	s32 Result = Sys_Connect(FileDescriptor, (sys_sockaddr *) &Address, sizeof(sys_sockaddr_unix));
+	s32 Result = Sys_Connect(
+		FileDescriptor,
+		(sys_sockaddr *) &Address,
+		sizeof(sys_sockaddr_unix)
+	);
 	if (Result < 0) {
 		Sys_Close(FileDescriptor);
 		return FALSE;
@@ -115,7 +120,8 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 
 	// TODO Append is incorrect, need to handle offsets better with win32
 
-	if ((OpenMode & FILE_READ) && (OpenMode & FILE_WRITE)) Flags |= SYS_OPEN_READWRITE;
+	if ((OpenMode & FILE_READ) && (OpenMode & FILE_WRITE))
+		Flags |= SYS_OPEN_READWRITE;
 	else if (OpenMode & FILE_READ) Flags |= SYS_OPEN_READONLY;
 	else if (OpenMode & FILE_WRITE) Flags |= SYS_OPEN_WRITEONLY;
 	else return FALSE;
@@ -170,7 +176,10 @@ Platform_WriteFile(file_handle FileHandle, vptr Src, u64 Length, u64 Offset)
 internal void
 Platform_WriteConsole(string Message)
 {
-	VALIDATE(Sys_Write(SYS_FILE_OUT, Message.Text, Message.Length), "Failed to write to stdout");
+	VALIDATE(
+		Sys_Write(SYS_FILE_OUT, Message.Text, Message.Length),
+		"Failed to write to stdout"
+	);
 }
 
 internal void
@@ -261,7 +270,7 @@ internal void
 Platform_SetupArgTable(usize ArgCount, c08 **Args)
 {
 	_G.ArgCount = ArgCount;
-	_G.Args	   = Heap_AllocateA(_G.Heap, ArgCount * sizeof(string));
+	_G.Args		= Heap_AllocateA(_G.Heap, ArgCount * sizeof(string));
 	for (usize I = 0; I < ArgCount; I++) _G.Args[I] = CString(Args[I]);
 }
 
@@ -285,10 +294,11 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 		c08 *Param = EnvParams[I];
 
 		usize  KeySize = Mem_BytesUntil((u08 *) Param, '=');
-		string Key	   = CLString(Param, KeySize);
+		string Key	   = CLEString(Param, KeySize, STRING_ENCODING_ASCII);
 
 		usize  ValueSize = Mem_BytesUntil((u08 *) Param + KeySize + 1, '\0');
-		string Value	 = CLString(Param + KeySize + 1, ValueSize);
+		string Value =
+			CLEString(Param + KeySize + 1, ValueSize, STRING_ENCODING_ASCII);
 
 		HashMap_Add(&_G.EnvTable, &Key, &Value);
 	}
@@ -323,9 +333,10 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		while (AuxVector->Type != ELF_AT_NULL) AuxCount++, AuxVector++;
 	}
 
-	_G.PageSize = 4096;	// Most common page size
+	_G.PageSize = 4096;	 // Most common page size
 	for (u64 I = 0; I < AuxCount; I++)
-		if (AuxVectors[I].Type == ELF_AT_PAGESZ) _G.PageSize = AuxVectors[I].Value;
+		if (AuxVectors[I].Type == ELF_AT_PAGESZ)
+			_G.PageSize = AuxVectors[I].Value;
 
 	Platform_LoadModule(UTIL_MODULE_NAME);
 	Platform_SetupArgTable(ArgCount, Args);
@@ -333,14 +344,32 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	Platform_LoadModule(CStringL("base"));
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
+	HASHMAP_FOREACH (
+		I,
+		Hash,
+		string,
+		Key,
+		platform_module *,
+		Module,
+		&_G.ModuleTable
+	)
+	{
 		stack Stack;
 		if (_G.UtilIsLoaded) Stack = Stack_Get();
 		Module->Init(&_G);
 		if (_G.UtilIsLoaded) Stack_Set(Stack);
 	}
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
+	HASHMAP_FOREACH (
+		I,
+		Hash,
+		string,
+		Key,
+		platform_module *,
+		Module,
+		&_G.ModuleTable
+	)
+	{
 		stack Stack;
 		if (_G.UtilIsLoaded) Stack = Stack_Get();
 		Module->Deinit(&_G);

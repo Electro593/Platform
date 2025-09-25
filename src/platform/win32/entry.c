@@ -1,11 +1,11 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #include <platform/main.c>
 
@@ -16,13 +16,16 @@ global s64					CounterFrequency = 0;
 internal void
 Platform_LoadWin32(void)
 {
-	win32_teb		 *TEB	 = (win32_teb *) Intrin_ReadGSQWord(48);
-	win32_list_entry *Entry	 = TEB->PEB->Ldr->MemoryOrderList.Next;
-	u32				  Offset = OFFSET_OF(win32_ldr_data_table_entry, MemoryOrderLinks);
-	Entry					 = Entry->Next->Next;
+	win32_teb		 *TEB	= (win32_teb *) Intrin_ReadGSQWord(48);
+	win32_list_entry *Entry = TEB->PEB->Ldr->MemoryOrderList.Next;
+	u32 Offset = OFFSET_OF(win32_ldr_data_table_entry, MemoryOrderLinks);
+	Entry	   = Entry->Next->Next;
 	win32_ldr_data_table_entry *TableEntry =
 		(win32_ldr_data_table_entry *) ((u08 *) Entry
-										- OFFSET_OF(win32_ldr_data_table_entry, MemoryOrderLinks));
+										- OFFSET_OF(
+											win32_ldr_data_table_entry,
+											MemoryOrderLinks
+										));
 	win32_module Kernel32 = TableEntry->DllBase;
 
 	win32_image_dos_header *DOSHeader = (win32_image_dos_header *) Kernel32;
@@ -30,10 +33,14 @@ Platform_LoadWin32(void)
 		(win32_image_nt_headers *) ((u08 *) DOSHeader + DOSHeader->e_lfanew);
 	win32_image_export_directory *ExportDirectory =
 		(win32_image_export_directory *) ((u08 *) DOSHeader
-										  + NTHeaders->OptionalHeader.ExportTable.VirtualAddress);
-	u32 *ExportNameTable	= (u32 *) ((u08 *) DOSHeader + ExportDirectory->AddressOfNames);
-	u16 *ExportOrdinalTable = (u16 *) ((u08 *) DOSHeader + ExportDirectory->AddressOfNameOrdinals);
-	u32 *ExportAddressTable = (u32 *) ((u08 *) DOSHeader + ExportDirectory->AddressOfFunctions);
+										  + NTHeaders->OptionalHeader
+												.ExportTable.VirtualAddress);
+	u32 *ExportNameTable =
+		(u32 *) ((u08 *) DOSHeader + ExportDirectory->AddressOfNames);
+	u16 *ExportOrdinalTable =
+		(u16 *) ((u08 *) DOSHeader + ExportDirectory->AddressOfNameOrdinals);
+	u32 *ExportAddressTable =
+		(u32 *) ((u08 *) DOSHeader + ExportDirectory->AddressOfFunctions);
 
 	u32 Index;
 	u32 Low	 = 0;
@@ -55,10 +62,12 @@ Platform_LoadWin32(void)
 
 	u16 GetProcAddressOrdinal = ExportOrdinalTable[Index];
 	u32 GetProcAddressRVA	  = ExportAddressTable[GetProcAddressOrdinal];
-	Win32_GetProcAddress = (func_Win32_GetProcAddress *) ((u08 *) DOSHeader + GetProcAddressRVA);
+	Win32_GetProcAddress =
+		(func_Win32_GetProcAddress *) ((u08 *) DOSHeader + GetProcAddressRVA);
 
-	Win32_LoadLibraryA = (func_Win32_LoadLibraryA *) Win32_GetProcAddress(Kernel32, "LoadLibraryA");
-	win32_module Gdi32 = Win32_LoadLibraryA("gdi32.dll");
+	Win32_LoadLibraryA = (func_Win32_LoadLibraryA *)
+		Win32_GetProcAddress(Kernel32, "LoadLibraryA");
+	win32_module Gdi32	 = Win32_LoadLibraryA("gdi32.dll");
 	win32_module User32	 = Win32_LoadLibraryA("user32.dll");
 	win32_module Shell32 = Win32_LoadLibraryA("shell32.dll");
 
@@ -81,9 +90,10 @@ Platform_LoadWGL(void)
 #include <x.h>
 
 	win32_window_class_a DummyWindowClass = { 0 };
-	DummyWindowClass.Callback			  = (func_Win32_WindowCallback) Win32_DefWindowProcA;
-	DummyWindowClass.Instance			  = Win32_GetModuleHandleA(NULL);
-	DummyWindowClass.ClassName			  = "VoxarcDummyWindowClass";
+	DummyWindowClass.Callback =
+		(func_Win32_WindowCallback) Win32_DefWindowProcA;
+	DummyWindowClass.Instance  = Win32_GetModuleHandleA(NULL);
+	DummyWindowClass.ClassName = "VoxarcDummyWindowClass";
 
 	Win32_RegisterClassA(&DummyWindowClass);
 	win32_window DummyWindow = Win32_CreateWindowExA(
@@ -104,18 +114,24 @@ Platform_LoadWGL(void)
 	vptr DummyDeviceContext = Win32_GetDC(DummyWindow);
 
 	win32_pixel_format_descriptor PixelFormatDescriptor = { 0 };
-	PixelFormatDescriptor.Size							= sizeof(win32_pixel_format_descriptor);
-	PixelFormatDescriptor.Version						= 1;
-	PixelFormatDescriptor.PixelType						= PFD_TYPE_RGBA;
-	PixelFormatDescriptor.Flags		  = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLE_BUFFER;
+	PixelFormatDescriptor.Size		= sizeof(win32_pixel_format_descriptor);
+	PixelFormatDescriptor.Version	= 1;
+	PixelFormatDescriptor.PixelType = PFD_TYPE_RGBA;
+	PixelFormatDescriptor.Flags =
+		PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLE_BUFFER;
 	PixelFormatDescriptor.ColorBits	  = 32;
 	PixelFormatDescriptor.AlphaBits	  = 8;
 	PixelFormatDescriptor.LayerType	  = PFD_MAIN_PLANE;
 	PixelFormatDescriptor.DepthBits	  = 24;
 	PixelFormatDescriptor.StencilBits = 8;
 
-	s32 PixelFormat = Win32_ChoosePixelFormat(DummyDeviceContext, &PixelFormatDescriptor);
-	Win32_SetPixelFormat(DummyDeviceContext, PixelFormat, &PixelFormatDescriptor);
+	s32 PixelFormat =
+		Win32_ChoosePixelFormat(DummyDeviceContext, &PixelFormatDescriptor);
+	Win32_SetPixelFormat(
+		DummyDeviceContext,
+		PixelFormat,
+		&PixelFormatDescriptor
+	);
 	vptr DummyRenderContext = WGL_CreateContext(DummyDeviceContext);
 	WGL_MakeCurrent(DummyDeviceContext, DummyRenderContext);
 
@@ -163,7 +179,14 @@ Platform_LoadOpenGL(void)
 	win32_pixel_format_descriptor PixelFormatDescriptor;
 	s32							  PixelFormat;
 	u32							  FormatCount;
-	WGL_ChoosePixelFormatARB(DeviceContext, PixelFormatAttribs, 0, 1, &PixelFormat, &FormatCount);
+	WGL_ChoosePixelFormatARB(
+		DeviceContext,
+		PixelFormatAttribs,
+		0,
+		1,
+		&PixelFormat,
+		&FormatCount
+	);
 	Win32_DescribePixelFormat(
 		DeviceContext,
 		PixelFormat,
@@ -213,7 +236,12 @@ Platform_LoadOpenGL(void)
 }
 #endif
 
-internal s64 Platform_WindowCallback(win32_window Window, u32 Message, s64 WParam, s64 LParam);
+internal s64 Platform_WindowCallback(
+	win32_window Window,
+	u32			 Message,
+	s64			 WParam,
+	s64			 LParam
+);
 
 internal void
 Platform_CreateWindow(void)
@@ -227,8 +255,8 @@ Platform_CreateWindow(void)
 	WindowClass.Instance			 = Win32_GetModuleHandleA(NULL);
 	WindowClass.Icon				 = Win32_LoadIconA(NULL, IDI_APPLICATION);
 	WindowClass.Cursor				 = Win32_LoadCursorA(NULL, IDC_ARROW);
-	WindowClass.Background			 = (win32_brush) Win32_GetStockObject(BRUSH_BLACK);
-	WindowClass.ClassName			 = "VoxarcWindowClass";
+	WindowClass.Background = (win32_brush) Win32_GetStockObject(BRUSH_BLACK);
+	WindowClass.ClassName  = "VoxarcWindowClass";
 	Win32_RegisterClassA(&WindowClass);
 
 	PrimaryWindow = Win32_CreateWindowExA(
@@ -260,7 +288,11 @@ Platform_CreateWindow(void)
 	RawInputDevice.Usage	 = HID_USAGE_GENERIC_MOUSE;
 	RawInputDevice.Flags	 = 0;
 	RawInputDevice.Target	 = PrimaryWindow;
-	b32 Res = Win32_RegisterRawInputDevices(&RawInputDevice, 1, sizeof(win32_raw_input_device));
+	b32 Res					 = Win32_RegisterRawInputDevices(
+		 &RawInputDevice,
+		 1,
+		 sizeof(win32_raw_input_device)
+	 );
 	Assert(Res == TRUE);
 
 	_G.WindowedApp = TRUE;
@@ -269,7 +301,8 @@ Platform_CreateWindow(void)
 internal vptr
 Platform_AllocateMemory(u64 Size)
 {
-	vptr MemoryBlock = Win32_VirtualAlloc(0, Size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	vptr MemoryBlock =
+		Win32_VirtualAlloc(0, Size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	Assert(MemoryBlock);
 	return MemoryBlock;
 }
@@ -298,7 +331,7 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 	string Name;
 	if (_G.UtilIsLoaded) {
 		Stack_Push();
-		Name = SString(CNString(FileName));
+		Name = FNStringL("%s", FileName);
 	} else {
 		Name.Length = _Mem_BytesUntil((u08 *) FileName, 0);
 		Name.Text	= Platform_AllocateMemory(Name.Length);
@@ -365,7 +398,13 @@ Platform_ReadFile(file_handle FileHandle, vptr Dest, u64 Length, u64 Offset)
 	while (Length) {
 		u32 BytesRead;
 		u32 BytesToRead = Length % (U32_MAX + 1ULL);
-		b08 Success = Win32_ReadFile(FileHandle.Handle, Dest, BytesToRead, &BytesRead, &Overlapped);
+		b08 Success		= Win32_ReadFile(
+			FileHandle.Handle,
+			Dest,
+			BytesToRead,
+			&BytesRead,
+			&Overlapped
+		);
 
 		if (!Success) {
 			u32 DEBUG_Err = Win32_GetLastError();
@@ -392,8 +431,13 @@ Platform_WriteFile(file_handle FileHandle, vptr Src, u64 Length, u64 Offset)
 	while (Length) {
 		u32 BytesWritten;
 		u32 BytesToWrite = Length % (U32_MAX + 1ULL);
-		b08 Success =
-			Win32_WriteFile(FileHandle.Handle, Src, BytesToWrite, &BytesWritten, &Overlapped);
+		b08 Success		 = Win32_WriteFile(
+			 FileHandle.Handle,
+			 Src,
+			 BytesToWrite,
+			 &BytesWritten,
+			 &Overlapped
+		 );
 
 		if (!Success) {
 			u32 DEBUG_Err = Win32_GetLastError();
@@ -484,8 +528,10 @@ Platform_GetTime(void)
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
 {
-	u16 AVals[] = { A.Year, A.Month, A.Day, A.Hour, A.Minute, A.Second, A.Millisecond };
-	u16 BVals[] = { B.Year, B.Month, B.Day, B.Hour, B.Minute, B.Second, B.Millisecond };
+	u16 AVals[] = { A.Year,	  A.Month,	A.Day,		  A.Hour,
+					A.Minute, A.Second, A.Millisecond };
+	u16 BVals[] = { B.Year,	  B.Month,	B.Day,		  B.Hour,
+					B.Minute, B.Second, B.Millisecond };
 	u32 Count	= sizeof(AVals) / sizeof(AVals[0]);
 	for (u32 I = 0; I < Count; I++) {
 		if (AVals[I] < BVals[I]) return LESS;
@@ -554,7 +600,12 @@ Platform_ShowCursor(win32_window Window)
 }
 
 internal s64
-Platform_WindowCallback(win32_window Window, u32 Message, s64 WParam, s64 LParam)
+Platform_WindowCallback(
+	win32_window Window,
+	u32			 Message,
+	s64			 WParam,
+	s64			 LParam
+)
 {
 	switch (Message) {
 		case WM_DESTROY:
@@ -564,9 +615,9 @@ Platform_WindowCallback(win32_window Window, u32 Message, s64 WParam, s64 LParam
 			return 0;
 
 		case WM_SIZE: {
-			_G.WindowSize.X	= (s16) LParam;
-			_G.WindowSize.Y	= (s16) (LParam >> 16);
-			_G.Updates	   |= WINDOW_RESIZED;
+			_G.WindowSize.X	 = (s16) LParam;
+			_G.WindowSize.Y	 = (s16) (LParam >> 16);
+			_G.Updates		|= WINDOW_RESIZED;
 		}
 			return 0;
 
@@ -624,14 +675,16 @@ Platform_WindowCallback(win32_window Window, u32 Message, s64 WParam, s64 LParam
 				Assert(FALSE, "Absolute mouse movement not supported.");
 			} else {
 				_G.CursorPos = (v2s32) { _G.CursorPos.X + Data->Mouse.LastX,
-												_G.CursorPos.Y - Data->Mouse.LastY };
+										 _G.CursorPos.Y - Data->Mouse.LastY };
 			}
 
 			// Automatically goes through RI_MOUSE_BUTTON_1_DOWN/UP,
 			// RI_MOUSE_BUTTON_2_DOWN/UP, etc.
 			for (u32 I = 0; I < 6; I++)
-				if (Data->Mouse.ButtonFlags & (1 << (2 * I))) _G.Buttons[I] = PRESSED;
-				else if (Data->Mouse.ButtonFlags & (2 << (2 * I))) _G.Buttons[I] = RELEASED;
+				if (Data->Mouse.ButtonFlags & (1 << (2 * I)))
+					_G.Buttons[I] = PRESSED;
+				else if (Data->Mouse.ButtonFlags & (2 << (2 * I)))
+					_G.Buttons[I] = RELEASED;
 				else if (_G.Buttons[I] == PRESSED) _G.Buttons[I] = HELD;
 
 			Stack_Pop();
@@ -685,24 +738,33 @@ Platform_ParseCommandLine(void)
 	// Find and allocate the total size after converting to utf-8
 	u32 Size = _G.ArgCount * sizeof(string);
 	for (u32 I = 0; I < _G.ArgCount; I++) {
-		Sizes[I]  = Win32_WideCharToMultiByte(CP_UTF8, 0, Args[I], -1, NULL, 0, NULL, NULL);
-		Size	 += Sizes[I];
+		Sizes[I] = Win32_WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			Args[I],
+			-1,
+			NULL,
+			0,
+			NULL,
+			NULL
+		);
+		Size += Sizes[I];
 	}
 	_G.Args = Platform_AllocateMemory(Size);
 
 	c08 *Cursor = (c08 *) (_G.Args + _G.ArgCount);
 	for (u32 I = 0; I < _G.ArgCount; I++) {
-		_G.Args[I] = CLStringL(Cursor, Sizes[I]);
-		u32 S			  = Win32_WideCharToMultiByte(
-			CP_UTF8,
-			0,
-			Args[I],
-			-1,
-			_G.Args[I].Text,
-			Sizes[I],
-			NULL,
-			NULL
-		);
+		_G.Args[I] = CLEString(Cursor, Sizes[I], STRING_ENCODING_ASCII);
+		u32 S	   = Win32_WideCharToMultiByte(
+			 CP_UTF8,
+			 0,
+			 Args[I],
+			 -1,
+			 _G.Args[I].Text,
+			 Sizes[I],
+			 NULL,
+			 NULL
+		 );
 		Assert(S == Sizes[I]);
 		Cursor += Sizes[I];
 	}
@@ -738,7 +800,16 @@ Platform_Entry(void)
 
 	Platform_LoadModule(CStringL("base"));
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
+	HASHMAP_FOREACH (
+		I,
+		Hash,
+		string,
+		Key,
+		platform_module *,
+		Module,
+		&_G.ModuleTable
+	)
+	{
 		stack Stack;
 		if (_G.UtilIsLoaded) Stack = Stack_Get();
 		Module->Init(&_G);
@@ -753,7 +824,16 @@ Platform_Entry(void)
 
 	while (_G.ExecutionState == EXECUTION_RUNNING) {
 		// Will reload the modules if necessary
-		HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
+		HASHMAP_FOREACH (
+			I,
+			Hash,
+			string,
+			Key,
+			platform_module *,
+			Module,
+			&_G.ModuleTable
+		)
+		{
 			stack Stack;
 			if (_G.UtilIsLoaded) Stack = Stack_Get();
 			Platform_ReloadModule(Module);
@@ -783,8 +863,8 @@ Platform_Entry(void)
 				&& _G.Buttons[Button_Left] == PRESSED)
 			{
 				Platform_HideCursor(PrimaryWindow);
-				_G.Updates		   |= CURSOR_DISABLED;
-				_G.CursorIsDisabled	= TRUE;
+				_G.Updates			|= CURSOR_DISABLED;
+				_G.CursorIsDisabled	 = TRUE;
 			}
 			if (_G.CursorIsDisabled && _G.Keys[ScanCode_Escape] == PRESSED) {
 				Platform_ShowCursor(PrimaryWindow);
@@ -792,7 +872,16 @@ Platform_Entry(void)
 			}
 		}
 
-		HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
+		HASHMAP_FOREACH (
+			I,
+			Hash,
+			string,
+			Key,
+			platform_module *,
+			Module,
+			&_G.ModuleTable
+		)
+		{
 			stack Stack;
 			if (_G.UtilIsLoaded) Stack = Stack_Get();
 			Module->Update(&_G);
@@ -810,7 +899,16 @@ Platform_Entry(void)
 		_G.FPS = CountsPerSecond / (r64) ElapsedTime;
 	}
 
-	HASHMAP_FOREACH (I, Hash, string, Key, platform_module *, Module, &_G.ModuleTable) {
+	HASHMAP_FOREACH (
+		I,
+		Hash,
+		string,
+		Key,
+		platform_module *,
+		Module,
+		&_G.ModuleTable
+	)
+	{
 		if (Module->IsUtil) continue;
 
 		stack Stack;

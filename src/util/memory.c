@@ -1,15 +1,15 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
-//TODO Make an actual document explaining how this mess works
+// TODO Make an actual document explaining how this mess works
 
 #define HEAP(Type) heap_handle *
 
@@ -128,7 +128,7 @@ Heap_GetHeap(heap_handle *Handle)
 	return (heap *) (Handle - Handle->Index);
 }
 
-//TODO Resizeable heap
+// TODO Resizeable heap
 
 internal heap_handle *
 Heap_GetHandleA(vptr Data)
@@ -195,19 +195,24 @@ Heap_AllocateBlock(heap *Heap, heap_handle *Handle, u32 Size)
 {
 	heap_handle *Handles   = (vptr) Heap;
 	heap_handle *PrevBlock = Handles + Handles[0].PrevBlock;
-	while (PrevBlock->Index && PrevBlock->Offset < Size) PrevBlock = Handles + PrevBlock->PrevBlock;
+	while (PrevBlock->Index && PrevBlock->Offset < Size)
+		PrevBlock = Handles + PrevBlock->PrevBlock;
 	if (PrevBlock->Offset < Size) {
 		Heap_Defragment(Heap);
-		Assert(PrevBlock->Offset >= Size, "Not enough memory for new heap block");
+		Assert(
+			PrevBlock->Offset >= Size,
+			"Not enough memory for new heap block"
+		);
 	}
-	Handle->Data	   = (u08 *) PrevBlock->Data + PrevBlock->Size + PrevBlock->Offset - Size;
-	PrevBlock->Offset -= Size;
-	Handle->PrevBlock  = PrevBlock->Index;
-	Handle->NextBlock  = PrevBlock->NextBlock;
-	Handles[Handle->NextBlock].PrevBlock = Handle->Index;
-	Handles[Handle->PrevBlock].NextBlock = Handle->Index;
-	Handle->Offset						 = 0;
-	Handle->Size						 = Size;
+	Handle->Data =
+		(u08 *) PrevBlock->Data + PrevBlock->Size + PrevBlock->Offset - Size;
+	PrevBlock->Offset					 -= Size;
+	Handle->PrevBlock					  = PrevBlock->Index;
+	Handle->NextBlock					  = PrevBlock->NextBlock;
+	Handles[Handle->NextBlock].PrevBlock  = Handle->Index;
+	Handles[Handle->PrevBlock].NextBlock  = Handle->Index;
+	Handle->Offset						  = 0;
+	Handle->Size						  = Size;
 }
 
 internal void
@@ -233,7 +238,10 @@ _Heap_Allocate(heap *Heap, u32 Size, b08 Anchored)
 		if (Handles[0].Offset < sizeof(heap_handle)) {
 			Heap_Defragment(Heap);
 			Defragmented = TRUE;
-			Assert(Handles[0].Offset >= sizeof(heap_handle), "Not enough memory for new heap handle");
+			Assert(
+				Handles[0].Offset >= sizeof(heap_handle),
+				"Not enough memory for new heap handle"
+			);
 		}
 
 		u16 HandleCount = (u16) (Handles[0].Size / sizeof(heap_handle));
@@ -275,7 +283,8 @@ Heap_Allocate(heap *Heap, u64 Size)
 internal vptr
 Heap_AllocateA(heap *Heap, u64 Size)
 {
-	heap_handle *Handle				 = _Heap_Allocate(Heap, Size + sizeof(heap_handle *), TRUE);
+	heap_handle *Handle =
+		_Heap_Allocate(Heap, Size + sizeof(heap_handle *), TRUE);
 	*((heap_handle **) Handle->Data) = Handle;
 	return (u08 *) Handle->Data + sizeof(heap_handle *);
 }
@@ -386,29 +395,47 @@ Heap_Dump(heap *Heap)
 			b08 IsValid		= Intrin_BitScanReverse64(&Index, Handle->Offset);
 			u32 OffsetWidth = IsValid * ((Index < 3) ? 1 : Index - 1);
 
-			string Size	  = CFString("%'d", Handle->Size);
-			string Offset = CFString("%'Ld", Handle->Offset);
+			string Size	  = FStringL("%'d", Handle->Size);
+			string Offset = FStringL("%'Ld", Handle->Offset);
 
 			c08 BorderChar = (Handle->Anchored) ? '=' : '-';
 
-			string PlusStr = IsValid ? CString("+") : NoneStr;
-			string PipeStr = IsValid ? CString("|") : NoneStr;
-			string Seg1	   = CFString(".%*s%s%2$-*s.", SizeWidth, NoneStr, PlusStr, OffsetWidth);
-			string Seg2	   = CFString(":%*s%s%2$-*s:", SizeWidth, NoneStr, PipeStr, OffsetWidth);
-			string Seg3	   = CFString(
-				   ":%*s%-*s%s%*.*s%-*s:",
-				   (SizeWidth + Size.Length) / 2,
-				   Size,
-				   (SizeWidth - Size.Length + 1) / 2,
+			string PlusStr = IsValid ? CStringL("+") : NoneStr;
+			string PipeStr = IsValid ? CStringL("|") : NoneStr;
+			string Seg1	   = FStringL(
+				   ".%*s%s%2$-*s.",
+				   SizeWidth,
 				   NoneStr,
-				   PipeStr,
-				   (OffsetWidth + Offset.Length) / 2,
-				   OffsetWidth,
-				   Offset,
-				   (OffsetWidth - Offset.Length + 1) / 2,
-				   NoneStr
+				   PlusStr,
+				   OffsetWidth
 			   );
-			string Seg4 = CFString("'%*s%s%2$-*s'", SizeWidth, NoneStr, PlusStr, OffsetWidth);
+			string Seg2 = FStringL(
+				":%*s%s%2$-*s:",
+				SizeWidth,
+				NoneStr,
+				PipeStr,
+				OffsetWidth
+			);
+			string Seg3 = FStringL(
+				":%*s%-*s%s%*.*s%-*s:",
+				(SizeWidth + Size.Length) / 2,
+				Size,
+				(SizeWidth - Size.Length + 1) / 2,
+				NoneStr,
+				PipeStr,
+				(OffsetWidth + Offset.Length) / 2,
+				OffsetWidth,
+				Offset,
+				(OffsetWidth - Offset.Length + 1) / 2,
+				NoneStr
+			);
+			string Seg4 = FStringL(
+				"'%*s%s%2$-*s'",
+				SizeWidth,
+				NoneStr,
+				PlusStr,
+				OffsetWidth
+			);
 
 			Mem_Set(Seg1.Text + 1, BorderChar, SizeWidth);
 			Mem_Set(Seg1.Text + 1 + SizeWidth + 1, BorderChar, OffsetWidth);
@@ -416,16 +443,23 @@ Heap_Dump(heap *Heap)
 			Mem_Set(Seg4.Text + 1, BorderChar, SizeWidth);
 			Mem_Set(Seg4.Text + 1 + SizeWidth + 1, BorderChar, OffsetWidth);
 
-			Line1 = CFString("%s%s", Line1, Seg1);
-			Line2 = CFString("%s%s", Line2, Seg2);
-			Line3 = CFString("%s%s", Line3, Seg3);
-			Line4 = CFString("%s%s", Line4, Seg4);
+			Line1 = FStringL("%s%s", Line1, Seg1);
+			Line2 = FStringL("%s%s", Line2, Seg2);
+			Line3 = FStringL("%s%s", Line3, Seg3);
+			Line4 = FStringL("%s%s", Line4, Seg4);
 
 		next:
 			Handle = Handles + Handle->NextBlock;
 		} while (Handle->Index);
 
-		string String = CFString("\n%s\n%s\n%s\n%s\n%s\n", Line1, Line2, Line3, Line2, Line4);
+		string String = FStringL(
+			"\n%s\n%s\n%s\n%s\n%s\n",
+			Line1,
+			Line2,
+			Line3,
+			Line2,
+			Line4
+		);
 		Platform_WriteFile(FileHandle, String.Text, String.Length, 0);
 		FileOffset += String.Length;
 	}
@@ -433,22 +467,22 @@ Heap_Dump(heap *Heap)
 
 	Stack_Push();
 	{
-		string NoneStr = CString("");
+		string NoneStr = CStringL("");
 
-		string DataStr	   = CString("Data:");
-		string FlagsStr	   = CString("Status:");
-		string HandlesStr  = CString("Handles:");
-		string SizeStr	   = CString("Size:");
-		string OffsetStr   = CString("Offset:");
+		string DataStr	   = CStringL("Data:");
+		string FlagsStr	   = CStringL("Status:");
+		string HandlesStr  = CStringL("Handles:");
+		string SizeStr	   = CStringL("Size:");
+		string OffsetStr   = CStringL("Offset:");
 		u32	   LabelWidthU = MAX(DataStr.Length, FlagsStr.Length);
 		LabelWidthU		   = MAX(HandlesStr.Length, LabelWidthU);
 		LabelWidthU		   = MAX(SizeStr.Length, LabelWidthU);
 		LabelWidthU		   = MAX(OffsetStr.Length, LabelWidthU);
 		s32 LabelWidth	   = -(s32) LabelWidthU;
 
-		string FreeStr		 = CString("Free");
-		string UsedStr		 = CString("Used");
-		string IsAnchoredStr = CString(", Anchored");
+		string FreeStr		 = CStringL("Free");
+		string UsedStr		 = CStringL("Used");
+		string IsAnchoredStr = CStringL(", Anchored");
 
 		s32 Width = 0;
 		s32 CurrWidth;
@@ -458,20 +492,34 @@ Heap_Dump(heap *Heap)
 		for (u32 I = 0; I < HandleCount; I++) {
 			string Name, Data, Size, Offset, Flags;
 
-			if (I == 0) Name = CFString("HEAP (Handle 0)%n", &CurrWidth);
-			else Name = CFString("Handle %'d%n", Handles[I].Index, &CurrWidth);
+			if (I == 0) Name = FStringL("HEAP (Handle 0)%n", &CurrWidth);
+			else Name = FStringL("Handle %'d%n", Handles[I].Index, &CurrWidth);
 			if (Width < CurrWidth) Width = CurrWidth;
 
-			Data = CFString("%*s %p%n", LabelWidth, DataStr, Handles[I].Data, &CurrWidth);
+			Data = FStringL(
+				"%*s %p%n",
+				LabelWidth,
+				DataStr,
+				Handles[I].Data,
+				&CurrWidth
+			);
 			if (Width < CurrWidth) Width = CurrWidth;
 
-			string UsageStr	   = (Handles[I].Free) ? FreeStr : UsedStr;
-			string AnchoredStr = (Handles[I].Anchored) ? IsAnchoredStr : NoneStr;
-			Flags = CFString("%*s %s%s%n", LabelWidth, FlagsStr, UsageStr, AnchoredStr, &CurrWidth);
+			string UsageStr = (Handles[I].Free) ? FreeStr : UsedStr;
+			string AnchoredStr =
+				(Handles[I].Anchored) ? IsAnchoredStr : NoneStr;
+			Flags = FStringL(
+				"%*s %s%s%n",
+				LabelWidth,
+				FlagsStr,
+				UsageStr,
+				AnchoredStr,
+				&CurrWidth
+			);
 			if (Width < CurrWidth) Width = CurrWidth;
 
 			if (I == 0)
-				Size = CFString(
+				Size = FStringL(
 					"%*s %'u (%'u bytes)%n",
 					LabelWidth,
 					HandlesStr,
@@ -479,33 +527,48 @@ Heap_Dump(heap *Heap)
 					Handles[I].Size,
 					&CurrWidth
 				);
-			else Size = CFString("%*s %'u bytes%n", LabelWidth, SizeStr, Handles[I].Size, &CurrWidth);
+			else
+				Size = FStringL(
+					"%*s %'u bytes%n",
+					LabelWidth,
+					SizeStr,
+					Handles[I].Size,
+					&CurrWidth
+				);
 			if (Width < CurrWidth) Width = CurrWidth;
 
-			Offset = CFString("%*s %'u bytes%n", LabelWidth, OffsetStr, Handles[I].Offset, &CurrWidth);
+			Offset = FStringL(
+				"%*s %'u bytes%n",
+				LabelWidth,
+				OffsetStr,
+				Handles[I].Offset,
+				&CurrWidth
+			);
 			if (Width < CurrWidth) Width = CurrWidth;
 
-			string NextHandleStr = CFString(
+			string NextHandleStr = FStringL(
 				"---Next %s---> %'d",
 				UsageStr,
 				(Handles[I].Free) ? Handles[I].NextFree : Handles[I].NextUsed
 			);
-			string PrevHandleStr = CFString(
+			string PrevHandleStr = FStringL(
 				"---Prev %s---> %'d",
 				UsageStr,
 				(Handles[I].Free) ? Handles[I].PrevFree : Handles[I].PrevUsed
 			);
-			string NextBlockStr = CFString("---Next Block--> %'d", Handles[I].NextBlock);
-			string PrevBlockStr = CFString("---Prev Block--> %'d", Handles[I].PrevBlock);
+			string NextBlockStr =
+				FStringL("---Next Block--> %'d", Handles[I].NextBlock);
+			string PrevBlockStr =
+				FStringL("---Prev Block--> %'d", Handles[I].PrevBlock);
 
-			string BorderTop	= CFString(".-%*s-.", Width, NoneStr);
-			string BorderBottom = CFString("'-%*s-'", Width, NoneStr);
+			string BorderTop	= FStringL(".-%*s-.", Width, NoneStr);
+			string BorderBottom = FStringL("'-%*s-'", Width, NoneStr);
 			Mem_Set(BorderTop.Text + 2, '-', Width);
 			Mem_Set(BorderBottom.Text + 2, '-', Width);
 
-			String = CFString(
-				"%s\n%s\n| %*4$s%*s | %12$s\n| %8$*3$s | %13$s\n| %9$*3$s | %14$s\n| %10$*3$s | %15$s\n| "
-				"%11$*3$s |\n%16$s\n",
+			String = FStringL(
+				"%s\n%s\n| %*4$s%*s | %12$s\n| %8$*3$s | %13$s\n| %9$*3$s | "
+				"%14$s\n| %10$*3$s | %15$s\n| %11$*3$s |\n%16$s\n",
 				String,
 				BorderTop,
 				-Width,
