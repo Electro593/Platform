@@ -1,37 +1,205 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+/// @brief This file contains string constructors and operations, including
+/// string building, transcoding, parsing, and formatting. All strings are
+/// represented via the `string` datastructure, which contains information about
+/// its length and encoding.
+///
+/// All string operations currently allocate on the stack, so be sure to copy it
+/// to a heap buffer for longer-term storage.
+///
+/// TODO:
+///  - Full formatting pattern documentation (don't want to pull up GCC every
+///    time)
+///  - Rework printing to write to UTF32 and transcode afterward? It would
+///    reduce a lot of the nastier float performance issues...
+///  - Only FString & co. is tested currently. Test everything else.
+///  - Finish documenting the operation functions
+///  - Finish documenting some printf fields
+///  - Finish documenting the printf specifier format
 
 #ifdef INCLUDE_HEADER
 
-#define EString() CStringL("")
-#define CStringL(Literal) CLStringL(Literal, sizeof(Literal)-1)
-#define CStringL_UTF8(Literal) CLEString(MAC_CONCAT(u8, Literal), sizeof(MAC_CONCAT(u8, Literal)) - 1, STRING_ENCODING_UTF8)
-#define CStringL_UTF16(Literal) CLEString(MAC_CONCAT(u, Literal), sizeof(MAC_CONCAT(u, Literal)) - 2, STRING_ENCODING_UTF16)
-#define CStringL_UTF32(Literal) CLEString(MAC_CONCAT(U, Literal), sizeof(MAC_CONCAT(U, Literal)) - 4, STRING_ENCODING_UTF32)
-#define CNStringL(Literal) CLStringL(Literal, sizeof(Literal))
-#define CLStringL(LITERAL, LENGTH) (string){ .Text = LITERAL, .Length = LENGTH, .Count = LENGTH, .Encoding = STRING_ENCODING_ASCII }
-#define CLEStringL(LITERAL, LENGTH, ENCODING) CLEString(LITERAL, LENGTH, ENCODING)
-#define CFStringL(LITERAL, ...) FString(CStringL(LITERAL), __VA_ARGS__)
-#define CFNStringL(LITERAL, ...) FString(CNStringL(LITERAL), __VA_ARGS__)
-#define CFString(Format, ...) FString(CString(Format), __VA_ARGS__)
+/***************************************************************************\
+|  SECTION: Data Types                                                      |
+|---------------------------------------------------------------------------|
+|  All data types required to store and represent strings.                  |
+\***************************************************************************/
 
-typedef enum string_encoding : u08 {
+#ifndef SECTION_STRING_TYPES
+
+/// @brief Represents the currently supported encoding formats for a string to
+/// take on.
+typedef enum string_encoding {
+	/// @brief 7-bit ASCII
 	STRING_ENCODING_ASCII = 0,
-	STRING_ENCODING_UTF8  = 1,
+
+	/// @brief Unicode UTF-8
+	STRING_ENCODING_UTF8 = 1,
+
+	/// @brief Unicode UTF-16
 	STRING_ENCODING_UTF16 = 2,
+
+	/// @brief Unicode UTF-32
 	STRING_ENCODING_UTF32 = 3,
+
+	/// @brief Number of valid string encodings. An encoding is invalid if it's
+	/// greater than or
+	/// equal to this number.
+	STRING_ENCODING_COUNT
 } string_encoding;
 
+/// @brief Status code for FString operations, such as parsing and indexing
+/// errors.
+typedef enum fstring_format_status {
+	/// @brief The format was valid and parsed successfully.
+	FSTRING_FORMAT_VALID,
+
+	/// @brief A number wasn't found and thus couldn't be parsed. This will most
+	/// likely be caused by
+	/// a period without an asterisk or precision number following it.
+	FSTRING_FORMAT_INT_NOT_PRESENT,
+
+	/// @brief A number in the format, such as width, precision, or an index,
+	/// was too large to fit
+	/// within a U32. This will most likely be caused by the format extending
+	/// past where it was
+	/// intended to end.
+	FSTRING_FORMAT_INT_OVERFLOW,
+
+	/// @brief A param index wasn't found when it was expected to be. This
+	/// occurs if the index
+	/// number was present but it wasn't followed by '$'. Additionally, it can
+	/// occur if not all
+	/// index specifiers are used, such as if you reference 1$ and 3$ but never
+	/// 2$.
+	FSTRING_FORMAT_INDEX_NOT_PRESENT,
+
+	/// @brief The usage of param indexes was inconsistent within the format
+	/// string. Indexes are
+	/// all-or-nothing, so either all values, variable widths, and variable
+	/// precisions use
+	/// them, or none do.
+	FSTRING_FORMAT_INDEX_INCONSISTENT,
+
+	/// @brief A format type didn't match a valid pattern, such as 'hhx' or
+	/// 'Lc'. See
+	/// `FString_ParseFormatType` for the regex of accepted types
+	FSTRING_FORMAT_TYPE_INVALID,
+
+	/// @brief An index was referenced with different types. This can occur, for
+	/// example, if you use a param as both a width and a non-S32 value.
+	FSTRING_FORMAT_PARAM_REDEFINED,
+
+	/// @brief The provided output buffer was too small to contain the fully
+	/// formatted output.
+	FSTRING_FORMAT_BUFFER_TOO_SMALL,
+
+	/// @brief A provided string param's encoding didn't match its specifier.
+	FSTRING_FORMAT_ENCODING_INVALID,
+
+	/// @brief The requested feature isn't yet implemented. Sorry!
+	FSTRING_FORMAT_NOT_IMPLEMENTED,
+} fstring_format_status;
+
+/// @brief Data type and flags of a format specifier. Values
+/// `FSTRING_FORMAT_SIZE_*` are used internally for the type parser state
+/// machine; only `TYPE_*` and `FLAG_*` values are relevant beyond that case.
+typedef enum fstring_format_type {
+	FSTRING_FORMAT_SIZE_INITIAL	  = 1,
+	FSTRING_FORMAT_SIZE_HALFHALF  = 2,
+	FSTRING_FORMAT_SIZE_HALF	  = 3,
+	FSTRING_FORMAT_SIZE_LONG	  = 4,
+	FSTRING_FORMAT_SIZE_LONGLONG  = 5,
+	FSTRING_FORMAT_SIZE_EXTRALONG = 6,
+	FSTRING_FORMAT_SIZE_SIZE	  = 7,
+	FSTRING_FORMAT_SIZE_SPEC	  = 8,
+	FSTRING_FORMAT_SIZE_FASTSPEC  = 9,
+	FSTRING_FORMAT_SIZE_SPEC1	  = 10,
+	FSTRING_FORMAT_SIZE_SPEC3	  = 11,
+	FSTRING_FORMAT_SIZE_SPEC6	  = 12,
+	FSTRING_FORMAT_SIZE_SPEC8	  = 13,
+	FSTRING_FORMAT_SIZE_SPEC16	  = 14,
+	FSTRING_FORMAT_SIZE_SPEC32	  = 15,
+	FSTRING_FORMAT_SIZE_SPEC64	  = 16,
+
+	/// @brief An easy barrier to check whether parsing is complete. All valid
+	/// types are numbered above this, and all intermediate types are below.
+	FSTRING_FORMAT_SIZE_DONE = 17,
+
+	FSTRING_FORMAT_TYPE_S08		= 32,
+	FSTRING_FORMAT_TYPE_U08		= 33,
+	FSTRING_FORMAT_TYPE_S16		= 34,
+	FSTRING_FORMAT_TYPE_U16		= 35,
+	FSTRING_FORMAT_TYPE_S32		= 36,
+	FSTRING_FORMAT_TYPE_U32		= 37,
+	FSTRING_FORMAT_TYPE_S64		= 38,
+	FSTRING_FORMAT_TYPE_U64		= 39,
+	FSTRING_FORMAT_TYPE_SSIZE	= 40,
+	FSTRING_FORMAT_TYPE_USIZE	= 41,
+	FSTRING_FORMAT_TYPE_R64		= 42,
+	FSTRING_FORMAT_TYPE_CHR		= 43,
+	FSTRING_FORMAT_TYPE_STR		= 44,
+	FSTRING_FORMAT_TYPE_PTR		= 45,
+	FSTRING_FORMAT_TYPE_B08		= 46,
+	FSTRING_FORMAT_TYPE_QUERY16 = 47,
+	FSTRING_FORMAT_TYPE_QUERY32 = 48,
+	FSTRING_FORMAT_TYPE_QUERY64 = 49,
+
+	FSTRING_FORMAT_TYPE_MASK = 0x3F,
+
+	FSTRING_FORMAT_FLAG_PARAM_WIDTH		= 0x40,
+	FSTRING_FORMAT_FLAG_PARAM_PRECISION = 0x80,
+
+	FSTRING_FORMAT_FLAG_INT_DEC = 0x0,
+	FSTRING_FORMAT_FLAG_INT_BIN = 0x100,
+	FSTRING_FORMAT_FLAG_INT_OCT = 0x200,
+	FSTRING_FORMAT_FLAG_INT_HEX = 0x400,
+
+	FSTRING_FORMAT_FLAG_FLOAT_STD = 0x0,
+	FSTRING_FORMAT_FLAG_FLOAT_EXP = 0x100,
+	FSTRING_FORMAT_FLAG_FLOAT_FIT = 0x200,
+	FSTRING_FORMAT_FLAG_FLOAT_HEX = 0x400,
+
+	FSTRING_FORMAT_FLAG_STR_BYTE = 0x0,
+	FSTRING_FORMAT_FLAG_STR_WIDE = 0x100,
+
+	FSTRING_FORMAT_FLAG_CHR_BYTE = 0x0,
+	FSTRING_FORMAT_FLAG_CHR_WIDE = 0x100,
+
+	FSTRING_FORMAT_FLAG_UPPERCASE		= 0x000800,
+	FSTRING_FORMAT_FLAG_LEFT_JUSTIFY	= 0x001000,
+	FSTRING_FORMAT_FLAG_PAD_WITH_ZERO	= 0x002000,
+	FSTRING_FORMAT_FLAG_SEPARATE_GROUPS = 0x004000,
+	FSTRING_FORMAT_FLAG_SPECIFY_RADIX	= 0x008000,
+	FSTRING_FORMAT_FLAG_PREFIX_SIGN		= 0x010000,
+	FSTRING_FORMAT_FLAG_PREFIX_SPACE	= 0x020000,
+	FSTRING_FORMAT_FLAG_NO_WRITE		= 0x040000,
+} fstring_format_type;
+
+/// @brief Stores all relevant information about a string, including its size
+/// and encoding. Null terminators are not required, and null bytes can be
+/// stored within the string without issue.
 typedef struct string {
-	usize			Length;
-	usize			Count;
+	/// @brief Stores the string's total number of bytes.
+	usize Length;
+
+	/// @brief The string's total number of codepoints. May be zero, in which
+	/// case either the string is empty or the count needs to be recomputed.
+	usize Count;
+
+	/// @brief The string's encoding. Must be a valid value.
 	string_encoding Encoding;
+
+	/// @brief The string's data pointer. A null pointer is treated as an empty
+	/// string.
 	union {
 		c08 *Text;
 		c16 *Text16;
@@ -39,96 +207,262 @@ typedef struct string {
 	};
 } string;
 
+/// @brief Union representing a parameter passed into `FString`. Before the
+/// variadic args are interpreted, this contains the expected type of the param.
+/// Afterward, it contains the param's value.
+typedef union fstring_param {
+	fstring_format_type Type;
+
+	b08		Bool;
+	c32		Char;
+	ssize	Signed;
+	usize	Unsigned;
+	r64		Float;
+	vptr	Pointer;
+	string *String;
+} fstring_param;
+
+/// @brief Structure containing the complete definition of a format specifier:
+/// type, flags, width, precision, and optionally indexes.
+typedef struct fstring_format {
+	fstring_format_type Type;
+
+	union {
+		fstring_param Value;
+		s32			  ValueIndex;
+	};
+
+	union {
+		s32 Width;
+		s32 WidthIndex;
+	};
+
+	union {
+		s32 Precision;
+		s32 PrecisionIndex;
+	};
+
+	string SpecifierString;
+	usize  ContentLength;
+	usize  ActualWidth;
+} fstring_format;
+
+/// @brief Structure containing all formats found within a format string, as
+/// well as an ordered list of parameters and, if necessary, their backing data.
+/// Most fields are internal and should be ignored, but `FormatString` and
+/// `TotalTextSize` can be read for error handling and buffer allocation
+/// respectively.
+typedef struct fstring_format_list {
+	string FormatString;
+
+	usize			FormatCount;
+	usize			ParamCount;
+	fstring_format *Formats;
+
+	usize ExtraDataSize;
+	vptr  ExtraData;
+
+	/// @brief This field contains the total size of the formatted string being
+	/// written.
+	usize TotalTextSize;
+} fstring_format_list;
+
+#endif	// SECTION_STRING_TYPES
+
+/***************************************************************************\
+|  SECTION: Macros                                                          |
+|---------------------------------------------------------------------------|
+|  Helper macros for conveniently converting literal C strings.             |
+\***************************************************************************/
+
+#ifndef SECTION_STRING_MACROS
+
+/// @brief Constructs an empty ASCII string.
+/// @return The newly constructed string.
+#define EString() CStringL("")
+
+/// @brief Constructs an ASCII string from a literal C string. Preferable over
+/// `CString` since it can determine the string's size via `sizeof`. Note that
+/// this does not include the null terminator.
+/// @param[in] LITERAL The string literal to use. It must be a literal without
+/// any width or encoding modifiers.
+/// @return The newly constructed string.
+#define CStringL(LITERAL)                 \
+	((string){                            \
+		.Text     = LITERAL,              \
+		.Length   = sizeof(LITERAL)-1,    \
+		.Count    = sizeof(LITERAL)-1,    \
+		.Encoding = STRING_ENCODING_ASCII \
+	})
+
+/// @brief Constructs a Unicode UTF-8 string from a literal C string. Note that
+/// this does not include the null terminator.
+/// @param[in] LITERAL The string literal to use. It must be a literal without
+/// any width or encoding modifiers.
+/// @return The newly constructed string.
+#define CStringL_UTF8(LITERAL) CLEString(MAC_CONCAT(u8, LITERAL), sizeof(MAC_CONCAT(u8, LITERAL)) - 1, STRING_ENCODING_UTF8)
+
+/// @brief Constructs a Unicode UTF-16 string from a literal C string. Note that
+/// this does not include the null terminator.
+/// @param[in] LITERAL The string literal to use. It must be a literal without
+/// any width or encoding modifiers.
+/// @return The newly constructed string.
+#define CStringL_UTF16(LITERAL) CLEString(MAC_CONCAT(u, LITERAL), sizeof(MAC_CONCAT(u, LITERAL)) - 2, STRING_ENCODING_UTF16)
+
+/// @brief Constructs a Unicode UTF-32 string from a literal C string. Note that
+/// this does not include the null terminator.
+/// @param[in] LITERAL The string literal to use. It must be a literal without
+/// any width or encoding modifiers.
+/// @return The newly constructed string.
+#define CStringL_UTF32(LITERAL) CLEString(MAC_CONCAT(U, LITERAL), sizeof(MAC_CONCAT(U, LITERAL)) - 4, STRING_ENCODING_UTF32)
+
+/// @brief Constructs an ASCII string from a literal C string. Preferable over
+/// `CString` since it can determine the string's size via `sizeof`. Includes
+/// the null terminator.
+/// @param[in] LITERAL The string literal to use. It must be a literal without
+/// any width or encoding modifiers.
+/// @return The newly constructed string.
+#define CNStringL(LITERAL) CLEString(LITERAL, sizeof(LITERAL), STRING_ENCODING_ASCII)
+
+/// @brief Calls FString with a literal format string, without its null
+/// terminator.
+/// @param[in] LITERAL The literal format string to use.
+/// @param[in] ... The arguments to pass into FString.
+/// @return The resulting formatted string.
+#define FStringL(LITERAL, ...) FString(CStringL(LITERAL), __VA_ARGS__)
+
+/// @brief Calls FString with a literal format string, including its null
+/// terminator.
+/// @param[in] LITERAL The literal format string to use.
+/// @param[in] ... The arguments to pass into FString.
+/// @return The resulting formatted string.
+#define FNStringL(LITERAL, ...) FString(CNStringL(LITERAL), __VA_ARGS__)
+
+#endif	// SECTION_STRING_MACROS
+
+/***************************************************************************\
+|  SECTION: Function Prototypes                                             |
+|---------------------------------------------------------------------------|
+|  A listing of this file's function prototypes.                            |
+\***************************************************************************/
+
+#ifndef SECTION_STRING_PROTOTYPES
+
 #define STRING_FUNCS \
-	EXPORT(string, CLEString,        vptr Chars, u64 Length, string_encoding Encoding) \
-	EXPORT(string, CLString,         c08 *Chars, u64 Length) \
-	EXPORT(string, CString,          c08 *Chars) \
-	EXPORT(string, CNString,         c08 *Chars) \
-	EXPORT(string, LString,          u64 Length) \
-	EXPORT(string, FString,          string Format, ...) \
-	EXPORT(string, SString,          string String) \
+	EXPORT(string, CLEString, vptr Text, usize Length, string_encoding Encoding) \
+	EXPORT(string, CString,   c08 *Text) \
+	EXPORT(string, LString,   usize Length) \
 	\
-	EXPORT(string, String_Cat,       string A, string B) \
-	EXPORT(s08,    String_Cmp,       string A, string B) \
-	EXPORT(s08,    String_CmpPtr,    string *A, string *B, vptr _) \
-	EXPORT(usize,  String_Hash,      string S) \
-	EXPORT(usize,  String_HashPtr,   string *S, vptr _) \
+	EXPORT(usize,  String_Cpy,  string Dest, string Src) \
+	EXPORT(usize,  String_Fill, string Dest, u32 Codepoint, usize Count) \
 	\
+	EXPORT(s08,    String_Cmp,     string A, string B) \
+	EXPORT(s08,    String_CmpPtr,  string *A, string *B, vptr _) \
+	EXPORT(usize,  String_Hash,    string S) \
+	EXPORT(usize,  String_HashPtr, string *S, vptr _) \
 	EXPORT(b08,    String_TryParseS32, string S, s32 *NumOut) \
 	\
 	EXPORT(usize,  String_BumpBytes,           string *String, usize Count) \
 	EXPORT(usize,  String_BumpCodepoints,      string *String, usize Count) \
 	EXPORT(u32,    String_NextCodepoint,       string *String) \
+	EXPORT(u32,    String_PeekCodepoint,       string *String) \
 	EXPORT(usize,  String_WriteCodepoint,      string String, u32 Codepoint) \
 	EXPORT(void,   String_Recount,             string *String) \
 	EXPORT(usize,  String_GetCount,            string *String) \
 	EXPORT(usize,  String_GetCodepointLength,  u32 Codepoint, string_encoding Encoding) \
 	EXPORT(usize,  String_GetTranscodedLength, string String, string_encoding Encoding) \
+	\
+	INTERN(fstring_format_status, FString_ParseFormatInt,         string *FormatCursor, s32 *IntOut) \
+	INTERN(fstring_format_status, FString_ParseFormatIndex,       string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b08 SetIndexUsage) \
+	INTERN(fstring_format_status, FString_ParseFormatFlags,       string *FormatCursor, fstring_format_type *FlagsOut) \
+	INTERN(fstring_format_status, FString_ParseFormatType,        string *FormatCursor, fstring_format_type *TypeOut) \
+	INTERN(fstring_format_status, FString_ParseFormat,            string *FormatCursor, fstring_format *FormatOut, b08 *UseIndexes, b08 SetIndexUsage) \
+	INTERN(fstring_format_status, FString_ParseFormatString,      string *FormatCursor, fstring_format_list *FormatListOut) \
+	INTERN(fstring_format_status, FVString_UpdateParamReferences, fstring_format_list *FormatList, va_list Args) \
+	INTERN(fstring_format_status, FString_UpdateParamReferences,  fstring_format_list *FormatList, ...) \
+	INTERN(fstring_format_status, FString_WriteString,            fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteChar,              fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteBool,              fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteUnsigned,          fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WritePointer,           fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteSigned,            fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteHexFloat,          fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteFloat,             fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteFormat,            fstring_format *Format, string Buffer) \
+	INTERN(fstring_format_status, FString_WriteFormats,           fstring_format_list *FormatList, string Buffer) \
+	EXPORT(string,                FVString,                       string Format, va_list Args) \
+	EXPORT(string,                FString,                        string Format, ...) \
 	//
 
-#endif
+#endif	// SECTION_STRING_PROTOTYPES
+
+#endif	// INCLUDE_HEADER
 
 #ifdef INCLUDE_SOURCE
 
-persist c08 *BaseChars = "0123456789abcdef0123456789ABCDEF";
+/***************************************************************************\
+|  SECTION: String Construction                                             |
+|---------------------------------------------------------------------------|
+|  Handles creating and allocating strings.                                 |
+\***************************************************************************/
 
+#ifndef SECTION_STRING_CONSTRUCTION
+
+/// @brief Constructs a new string given a text pointer, length, and encoding.
+/// Count is computed based on the encoding. Make sure `Length` is no larger
+/// than `Text`'s allocated size.
+/// @param Text A pointer to the string's text. If null, the string will be
+/// considered empty.
+/// @param Length The string's length. Make sure this is correct to avoid
+/// segfaults.
+/// @param Encoding The string's encoding. Must be valid.
+/// @return The newly constructed string.
 internal string
-CLEString(vptr Text, u64 Length, string_encoding Encoding)
+CLEString(vptr Text, usize Length, string_encoding Encoding)
 {
+	Assert(Encoding < STRING_ENCODING_COUNT);
+
 	string String;
 	String.Text		= Text;
 	String.Encoding = Encoding;
 	String.Length	= Length;
+
 	String_Recount(&String);
 	return String;
 }
 
-/*
- * Construct an immutable string view with C-string backing
- */
+/// @brief Constructs a new string given a null-terminated ASCII C string. The
+/// string's length is the number of bytes up to, but not including, the first
+/// null byte encountered. This may segfault if there isn't a null terminator.
+/// @param Text A pointer to the C string to use. Will be interpreted as ASCII.
+/// @return The newly constructed string.
 internal string
-CLString(c08 *Chars, u64 Length)
+CString(c08 *Text)
 {
-	return CLEString(Chars, Length, STRING_ENCODING_ASCII);
+	usize Length = Mem_BytesUntil((u08 *) Text, 0);
+	return CLEString(Text, Length, STRING_ENCODING_ASCII);
 }
 
-/*
- * Construct an immutable string with C-string backing
- */
+/// @brief Constructs a new ASCII string with a stack-allocated buffer. The
+/// buffer will not be initialized.
+/// @param Length The number of bytes the new string should contain.
+/// @return The newly constructed string.
 internal string
-CString(c08 *Chars)
+LString(usize Length)
 {
-	return CLString(Chars, Mem_BytesUntil((u08 *) Chars, 0));
+	c08 *Text = Stack_Allocate(Length);
+	return CLEString(Text, Length, STRING_ENCODING_ASCII);
 }
 
-/*
- * Construct an immutable string with C-string backing, including the null terminator
- */
-internal string
-CNString(c08 *Chars)
-{
-	return CLString(Chars, Mem_BytesUntil((u08 *) Chars, 0) + 1);
-}
+#endif	// SECTION_STRING_CONSTRUCTION
 
-/*
- * Construct an uninitialized string with stack backing with a given length
- */
-internal string
-LString(u64 Length)
-{
-	return CLString(Stack_Allocate(Length), Length);
-}
+/***************************************************************************\
+|  SECTION: String Operations                                               |
+|---------------------------------------------------------------------------|
+|  Handles parsing, combining, and modifying strings.                       |
+\***************************************************************************/
 
-/*
- * Construct a string with stack backing and copy the given string's contents
- */
-internal string
-SString(string String)
-{
-	string Result = LString(String.Length);
-	Mem_Cpy(Result.Text, String.Text, String.Length);
-	return Result;
-}
+#ifndef SECTION_STRING_OPERATIONS
 
 /// @brief Copy a string's entire contents into another, respecting encoding.
 /// @param Dest The string to copy into.
@@ -160,17 +494,6 @@ String_Fill(string Dest, u32 Codepoint, usize Count)
 		Written		+= String_BumpBytes(&Dest, Delta);
 	}
 	return Written;
-}
-
-internal string
-String_Cat(string A, string B)
-{
-	string Result = LString(A.Length + B.Length);
-
-	Mem_Cpy(Result.Text, A.Text, A.Length);
-	Mem_Cpy(Result.Text + A.Length, B.Text, B.Length);
-
-	return Result;
 }
 
 internal usize
@@ -233,14 +556,26 @@ String_TryParseS32(string String, s32 *NumOut)
 	return TRUE;
 }
 
-/// @brief Bumps the string by the provided amount of bytes, up to the end of the string. This
-/// includes increasing the text pointer based on the encoding and reducing the length accordingly.
-/// Note that this does not consider encoding, and bumping a string by an invalid amount for its
-/// encoding (such as bumping a UTF-32 string by 2 bytes) may result in an invalid string. You will
-/// also need to recompute the string's count afterward.
+#endif	// SECTION_STRING_OPERATIONS
+
+/***************************************************************************\
+|  SECTION: Encoding Operations                                             |
+|---------------------------------------------------------------------------|
+|  Handles interpreting codepoints and transcoding.                         |
+\***************************************************************************/
+
+#ifndef SECTION_STRING_ENCODING
+
+/// @brief Bumps the string by the provided amount of bytes, up to the end of
+/// the string. This includes increasing the text pointer based on the encoding
+/// and reducing the length accordingly. Note that this does not consider
+/// encoding, and bumping a string by an invalid amount for its encoding (such
+/// as bumping a UTF-32 string by 2 bytes) may result in an invalid string. You
+/// will also need to recompute the string's count afterward.
 /// @param String The string to be bumped.
 /// @param Amount The amount of bytes to bump the string by.
-/// @return The amount the string was actually bumped by. Zero if the string is invalid.
+/// @return The amount the string was actually bumped by. Zero if the string is
+/// invalid.
 internal usize
 String_BumpBytes(string *String, usize Amount)
 {
@@ -252,12 +587,13 @@ String_BumpBytes(string *String, usize Amount)
 	return Amount;
 }
 
-/// @brief Bumps the string by the provided amount of codepoints, based on its encoding, up to the
-/// end of the string. This includes increasing the text pointer based on the encoding and reducing
-/// the length and count accordingly.
+/// @brief Bumps the string by the provided amount of codepoints, based on its
+/// encoding, up to the end of the string. This includes increasing the text
+/// pointer based on the encoding and reducing the length and count accordingly.
 /// @param String The string to be bumped.
 /// @param Amount The amount of codepoints to bump the string by.
-/// @return The amount the string was actually bumped by. Zero if the string is invalid.
+/// @return The amount the string was actually bumped by. Zero if the string is
+/// invalid.
 internal usize
 String_BumpCodepoints(string *String, usize Amount)
 {
@@ -267,12 +603,13 @@ String_BumpCodepoints(string *String, usize Amount)
 	return I;
 }
 
-/// @brief Reads the next codepoint from a string, based on its encoding, and returns it. Then bumps
-/// the string.
-/// @param[in,out] String A pointer to the string being read. Will be bumped past the character
-/// being read.
-/// @return A unicode codepoint equivalent to the character that was read. If the codepoint was
-/// invalid, such as being a surrogate half or malformed UTF-8, 0xFFFD is returned instead.
+/// @brief Reads the next codepoint from a string, based on its encoding, and
+/// returns it. Then bumps the string.
+/// @param[in,out] String A pointer to the string being read. Will be bumped
+/// past the character being read.
+/// @return A unicode codepoint equivalent to the character that was read. If
+/// the codepoint was invalid, such as being a surrogate half or malformed
+/// UTF-8, 0xFFFD is returned instead.
 internal u32
 String_NextCodepoint(string *String)
 {
@@ -311,9 +648,10 @@ String_NextCodepoint(string *String)
 						if (B3 < 0x80 || B3 > 0xBF) {
 							Delta = 2;
 						} else {
-							Delta = 3;
-							Codepoint =
-								((B1 & 0x0F) << 12) | ((B2 & 0x3F) << 6) | ((B3 & 0x3F) << 0);
+							Delta	  = 3;
+							Codepoint = ((B1 & 0x0F) << 12)
+									  | ((B2 & 0x3F) << 6)
+									  | ((B3 & 0x3F) << 0);
 						}
 					}
 					break;
@@ -358,7 +696,8 @@ String_NextCodepoint(string *String)
 			B1	  = String->Length < 4 ? 0 : (u32) String->Text32[0];
 			Delta = 4;
 			if (String->Length < 4) Delta = String->Length;
-			else if (B1 <= 0x10FFFF && (B1 < 0xD800 || B1 > 0xDFFF)) Codepoint = B1;
+			else if (B1 <= 0x10FFFF && (B1 < 0xD800 || B1 > 0xDFFF))
+				Codepoint = B1;
 			break;
 
 		default: Assert(FALSE, "Unknown encoding format"); return 0;
@@ -369,20 +708,36 @@ String_NextCodepoint(string *String)
 	return Codepoint;
 }
 
-/// @brief Attempts to convert the provided codepoint into a character sequence based on the target
-/// encoding and write it into the string.
-/// @param[in] String The string to be written into. If it's not large enough to contain the encoded
-/// character sequence, it remains unchanged and the necessary size is returned.
-/// @param[in] Codepoint The codepoint to encode into the string. If this is invalid, such as being
-/// a surrogate half or greater than `0x10FFFF`, it will be converted into `0xFFFD` before being
-/// encoded.
-/// @return The number of characters that were written. If `String` is too small, this is the number
-/// of characters that would have been written.
+/// @brief Reads the next codepoint from a string, based on its encoding, and
+/// returns it.
+/// @param[in] String A pointer to the string being read.
+/// @return A unicode codepoint equivalent to the character that was read. If
+/// the codepoint was invalid, such as being a surrogate half or malformed
+/// UTF-8, 0xFFFD is returned instead.
+internal u32
+String_PeekCodepoint(string *String)
+{
+	if (!String) return 0;
+	string Dummy = *String;
+	return String_NextCodepoint(&Dummy);
+}
+
+/// @brief Attempts to convert the provided codepoint into a character sequence
+/// based on the target encoding and write it into the string.
+/// @param[in] String The string to be written into. If it's not large enough to
+/// contain the encoded character sequence, it remains unchanged and the
+/// necessary size is returned.
+/// @param[in] Codepoint The codepoint to encode into the string. If this is
+/// invalid, such as being a surrogate half or greater than `0x10FFFF`, it will
+/// be converted into `0xFFFD` before being encoded.
+/// @return The number of characters that were written. If `String` is too
+/// small, this is the number of characters that would have been written.
 internal usize
 String_WriteCodepoint(string String, u32 Codepoint)
 {
 	usize Length = String.Text ? String.Length : 0;
-	if (Codepoint > 0x10FFFF || (Codepoint >= 0xD800 && Codepoint <= 0xDFFF)) Codepoint = 0xFFFD;
+	if (Codepoint > 0x10FFFF || (Codepoint >= 0xD800 && Codepoint <= 0xDFFF))
+		Codepoint = 0xFFFD;
 
 	switch (String.Encoding) {
 		case STRING_ENCODING_ASCII:
@@ -440,9 +795,9 @@ String_WriteCodepoint(string String, u32 Codepoint)
 	}
 }
 
-/// @brief Recomputes a string's count based on its encoding, text, and length. Only count is
-/// overwritten. Invalid code sequences are counted as if they were encoded as error replacement
-/// codepoints.
+/// @brief Recomputes a string's count based on its encoding, text, and length.
+/// Only count is overwritten. Invalid code sequences are counted as if they
+/// were encoded as error replacement codepoints.
 /// @param String The string to recount.
 internal void
 String_Recount(string *String)
@@ -450,6 +805,10 @@ String_Recount(string *String)
 	if (!String) return;
 	if (!String->Text || !String->Length) {
 		String->Count = 0;
+		return;
+	}
+	if (String->Encoding == STRING_ENCODING_ASCII) {
+		String->Count = String->Length;
 		return;
 	}
 
@@ -472,17 +831,20 @@ String_GetCount(string *String)
 	return String->Count;
 }
 
-/// @brief Queries the number of bytes a given codepoint will take up in an encoding.
+/// @brief Queries the number of bytes a given codepoint will take up in an
+/// encoding.
 /// @param Codepoint The codepoint to query the length of.
 /// @param Encoding The encoding to convert the codepoint into.
-/// @return The number of bytes necessary to represent the codepoint in the provided encoding.
+/// @return The number of bytes necessary to represent the codepoint in the
+/// provided encoding.
 internal usize
 String_GetCodepointLength(u32 Codepoint, string_encoding Encoding)
 {
 	return String_WriteCodepoint((string) { .Encoding = Encoding }, Codepoint);
 }
 
-/// @brief Query what the length of a string would be if it was transcoded into another format.
+/// @brief Query what the length of a string would be if it was transcoded into
+/// another format.
 /// @param String The string to query.
 /// @param Encoding The encoding to check the length of.
 /// @return The number of bytes the transcoded string would require.
@@ -501,154 +863,47 @@ String_GetTranscodedLength(string String, string_encoding Encoding)
 	return Length;
 }
 
-/**************************************************************************************************
- *   String Formatting
- *-------------------------------------------------------------------------------------------------
- * Handles parsing, writing, and printing formatted strings.
- * Additionally, includes functions for converting various data types to strings.
- *-------------------------------------------------------------------------------------------------
- */
+#endif	// SECTION_STRING_ENCODING
 
-/// @brief Status code for FString operations, such as parsing and indexing errors.
-typedef enum fstring_format_status {
-	/// @brief The format was valid and parsed successfully.
-	FSTRING_FORMAT_VALID,
+/***************************************************************************\
+|  SECTION: Formatting Operations                                           |
+|---------------------------------------------------------------------------|
+|  Handles interpreting primitives as strings and string formatting.        |
+\***************************************************************************/
 
-	/// @brief A number wasn't found and thus couldn't be parsed. This will most likely be caused by
-	/// a period without an asterisk or precision number following it.
-	FSTRING_FORMAT_INT_NOT_PRESENT,
-
-	/// @brief A number in the format, such as width, precision, or an index, was too large to fit
-	/// within a U32. This will most likely be caused by the format extending past where it was
-	/// intended to end.
-	FSTRING_FORMAT_INT_OVERFLOW,
-
-	/// @brief A param index wasn't found when it was expected to be. This occurs if the index
-	/// number was present but it wasn't followed by '$'. Additionally, it can occur if not all
-	/// index specifiers are used, such as if you reference 1$ and 3$ but never 2$.
-	FSTRING_FORMAT_INDEX_NOT_PRESENT,
-
-	/// @brief The usage of param indexes was inconsistent within the format string. Indexes are
-	/// all-or-nothing, so either all values, variable widths, and variable precisions use
-	/// them, or none do.
-	FSTRING_FORMAT_INDEX_INCONSISTENT,
-
-	/// @brief A format type didn't match a valid pattern, such as 'hhx' or 'Lc'. See
-	/// `FString_ParseFormatType` for the regex of accepted types
-	FSTRING_FORMAT_TYPE_INVALID,
-
-	/// @brief An index was referenced with different types. This can occur, for
-	/// example, if you use a param as both a width and a non-S32 value.
-	FSTRING_FORMAT_PARAM_REDEFINED,
-
-	/// @brief The provided output buffer was too small to contain the fully formatted output.
-	FSTRING_FORMAT_BUFFER_TOO_SMALL,
-
-	/// @brief A provided string param's encoding didn't match its specifier.
-	FSTRING_FORMAT_ENCODING_INVALID,
-
-	/// @brief The requested feature isn't yet implemented. Sorry!
-	FSTRING_FORMAT_NOT_IMPLEMENTED,
-} fstring_format_status;
+#ifndef SECTION_STRING_FORMATTING
 
 /// @brief String descriptions for each format status, used for logging errors.
 global string FStringFormatStatusDescriptions[] = {
-	[FSTRING_FORMAT_VALID]			   = CStringL("The format specifier was valid"),
-	[FSTRING_FORMAT_INT_NOT_PRESENT]   = CStringL("Expected a number"),
-	[FSTRING_FORMAT_INT_OVERFLOW]	   = CStringL("Number was too large"),
-	[FSTRING_FORMAT_INDEX_NOT_PRESENT] = CStringL("Not all parameters were referenced"),
-	[FSTRING_FORMAT_INDEX_INCONSISTENT] =
-		CStringL("Format strings cannot contain both indexed and non-indexed parameters"),
-	[FSTRING_FORMAT_TYPE_INVALID] = CStringL("Invalid format type"),
-	[FSTRING_FORMAT_PARAM_REDEFINED] =
-		CStringL("Format strings cannot specify an indexed parameter to be multiple types"),
-	[FSTRING_FORMAT_BUFFER_TOO_SMALL] = CStringL("The provided output buffer was too small"),
-	[FSTRING_FORMAT_ENCODING_INVALID] = CStringL(
-		"A string was provided with an encoding that didn't match what the specifier expected"
+	[FSTRING_FORMAT_VALID] = CStringL("The format specifier was valid"),
+	[FSTRING_FORMAT_INT_NOT_PRESENT] = CStringL("Expected a number"),
+	[FSTRING_FORMAT_INT_OVERFLOW]	 = CStringL("Number was too large"),
+	[FSTRING_FORMAT_INDEX_NOT_PRESENT] =
+		CStringL("Not all parameters were referenced"),
+	[FSTRING_FORMAT_INDEX_INCONSISTENT] = CStringL(
+		"Format strings cannot contain both indexed and non-indexed parameters"
 	),
-	[FSTRING_FORMAT_NOT_IMPLEMENTED] = CStringL("The requested format isn't implemented yet"),
+	[FSTRING_FORMAT_TYPE_INVALID]	 = CStringL("Invalid format type"),
+	[FSTRING_FORMAT_PARAM_REDEFINED] = CStringL(
+		"Format strings cannot specify an indexed parameter to be multiple "
+		"types"
+	),
+	[FSTRING_FORMAT_BUFFER_TOO_SMALL] =
+		CStringL("The provided output buffer was too small"),
+	[FSTRING_FORMAT_ENCODING_INVALID] = CStringL(
+		"A string was provided with an encoding that didn't match what the "
+		"specifier expected"
+	),
+	[FSTRING_FORMAT_NOT_IMPLEMENTED] =
+		CStringL("The requested format isn't implemented yet"),
 };
 
-/// @brief Data type and flags of a format specifier. Values `FSTRING_FORMAT_SIZE_*` are used
-/// internally for the type parser state machine; only `TYPE_*` and `FLAG_*` values are relevant
-/// beyond that case.
-typedef enum fstring_format_type {
-	FSTRING_FORMAT_SIZE_INITIAL	  = 1,
-	FSTRING_FORMAT_SIZE_HALFHALF  = 2,
-	FSTRING_FORMAT_SIZE_HALF	  = 3,
-	FSTRING_FORMAT_SIZE_LONG	  = 4,
-	FSTRING_FORMAT_SIZE_LONGLONG  = 5,
-	FSTRING_FORMAT_SIZE_EXTRALONG = 6,
-	FSTRING_FORMAT_SIZE_SIZE	  = 7,
-	FSTRING_FORMAT_SIZE_SPEC	  = 8,
-	FSTRING_FORMAT_SIZE_FASTSPEC  = 9,
-	FSTRING_FORMAT_SIZE_SPEC1	  = 10,
-	FSTRING_FORMAT_SIZE_SPEC3	  = 11,
-	FSTRING_FORMAT_SIZE_SPEC6	  = 12,
-	FSTRING_FORMAT_SIZE_SPEC8	  = 13,
-	FSTRING_FORMAT_SIZE_SPEC16	  = 14,
-	FSTRING_FORMAT_SIZE_SPEC32	  = 15,
-	FSTRING_FORMAT_SIZE_SPEC64	  = 16,
-
-	/// @brief An easy barrier to check whether parsing is complete. All valid types are numbered
-	/// above this, and all intermediate types are below.
-	FSTRING_FORMAT_SIZE_DONE = 17,
-
-	FSTRING_FORMAT_TYPE_S08		= 32,
-	FSTRING_FORMAT_TYPE_U08		= 33,
-	FSTRING_FORMAT_TYPE_S16		= 34,
-	FSTRING_FORMAT_TYPE_U16		= 35,
-	FSTRING_FORMAT_TYPE_S32		= 36,
-	FSTRING_FORMAT_TYPE_U32		= 37,
-	FSTRING_FORMAT_TYPE_S64		= 38,
-	FSTRING_FORMAT_TYPE_U64		= 39,
-	FSTRING_FORMAT_TYPE_SSIZE	= 40,
-	FSTRING_FORMAT_TYPE_USIZE	= 41,
-	FSTRING_FORMAT_TYPE_R64		= 42,
-	FSTRING_FORMAT_TYPE_CHR		= 43,
-	FSTRING_FORMAT_TYPE_STR		= 44,
-	FSTRING_FORMAT_TYPE_PTR		= 45,
-	FSTRING_FORMAT_TYPE_B08		= 46,
-	FSTRING_FORMAT_TYPE_QUERY16 = 47,
-	FSTRING_FORMAT_TYPE_QUERY32 = 48,
-	FSTRING_FORMAT_TYPE_QUERY64 = 49,
-
-	FSTRING_FORMAT_TYPE_MASK = 0x3F,
-
-	FSTRING_FORMAT_FLAG_PARAM_WIDTH		= 0x40,
-	FSTRING_FORMAT_FLAG_PARAM_PRECISION = 0x80,
-
-	FSTRING_FORMAT_FLAG_INT_DEC = 0x0,
-	FSTRING_FORMAT_FLAG_INT_BIN = 0x100,
-	FSTRING_FORMAT_FLAG_INT_OCT = 0x200,
-	FSTRING_FORMAT_FLAG_INT_HEX = 0x400,
-
-	FSTRING_FORMAT_FLAG_FLOAT_STD = 0x0,
-	FSTRING_FORMAT_FLAG_FLOAT_EXP = 0x100,
-	FSTRING_FORMAT_FLAG_FLOAT_FIT = 0x200,
-	FSTRING_FORMAT_FLAG_FLOAT_HEX = 0x400,
-
-	FSTRING_FORMAT_FLAG_STR_BYTE = 0x0,
-	FSTRING_FORMAT_FLAG_STR_WIDE = 0x100,
-
-	FSTRING_FORMAT_FLAG_CHR_BYTE = 0x0,
-	FSTRING_FORMAT_FLAG_CHR_WIDE = 0x100,
-
-	FSTRING_FORMAT_FLAG_UPPERCASE		= 0x000800,
-	FSTRING_FORMAT_FLAG_LEFT_JUSTIFY	= 0x001000,
-	FSTRING_FORMAT_FLAG_PAD_WITH_ZERO	= 0x002000,
-	FSTRING_FORMAT_FLAG_SEPARATE_GROUPS = 0x004000,
-	FSTRING_FORMAT_FLAG_SPECIFY_RADIX	= 0x008000,
-	FSTRING_FORMAT_FLAG_PREFIX_SIGN		= 0x010000,
-	FSTRING_FORMAT_FLAG_PREFIX_SPACE	= 0x020000,
-	FSTRING_FORMAT_FLAG_NO_WRITE		= 0x040000,
-} fstring_format_type;
-
 #define S(C, TYPE) [C - '1'] = FSTRING_FORMAT_##TYPE
-/// @brief State machine for format type parsing. Each character is mapped into a lookup table in
-/// the range '1'..'z'. Since this is a static table, it's initialized to zero, so any invalid
-/// transition results in the invalid type 0. At most 5 iterations are required to completely parse
-/// a type, such as `wf64`, but in practice most will only require 1-3.
+/// @brief State machine for format type parsing. Each character is mapped into
+/// a lookup table in the range '1'..'z'. Since this is a static table, it's
+/// initialized to zero, so any invalid transition results in the invalid type
+/// 0. At most 5 iterations are required to completely parse a type, such as
+/// `wf64`, but in practice most will only require 1-3.
 global fstring_format_type FStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 	// clang-format off
 	[FSTRING_FORMAT_SIZE_INITIAL] = {
@@ -826,145 +1081,78 @@ global fstring_format_type FStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 };
 #undef S
 
-/// @brief Union representing a parameter passed into `FString`. Before the variadic args are
-/// interpreted, this contains the expected type of the param. Afterward, it contains the param's
-/// value.
-typedef union fstring_param {
-	fstring_format_type Type;
-
-	b08		Bool;
-	c32		Char;
-	ssize	Signed;
-	usize	Unsigned;
-	r64		Float;
-	vptr	Pointer;
-	string *String;
-} fstring_param;
-
-/// @brief Structure containing the complete definition of a format specifier: type, flags, width,
-/// precision, and optionally indexes.
-typedef struct fstring_format {
-	fstring_format_type Type;
-
-	union {
-		fstring_param Value;
-		s32			  ValueIndex;
-	};
-
-	union {
-		s32 Width;
-		s32 WidthIndex;
-	};
-
-	union {
-		s32 Precision;
-		s32 PrecisionIndex;
-	};
-
-	string SpecifierString;
-	usize  ContentLength;
-	usize  ActualWidth;
-} fstring_format;
-
-/// @brief Structure containing all formats found within a format string, as well as an ordered list
-/// of parameters and, if necessary, their backing data. Most fields are internal and should be
-/// ignored, but `FormatString` and `TotalTextSize` can be read for error handling and buffer
-/// allocation respectively.
-typedef struct fstring_format_list {
-	string FormatString;
-
-	usize			FormatCount;
-	usize			ParamCount;
-	fstring_format *Formats;
-
-	usize ExtraDataSize;
-	vptr  ExtraData;
-
-	/// @brief This field contains the total size of the formatted string being written.
-	usize TotalTextSize;
-} fstring_format_list;
-
-/// @brief Get the next character from a string cursor or return 0.
-/// @param FormatCursor The string cursor to peek from.
-/// @return The character the cursor is pointing at, or 0 if FormatCursor has no next character.
-internal c08
-FString_PeekCursor(string *FormatCursor)
-{
-	if (!FormatCursor || !FormatCursor->Text || !FormatCursor->Length) return 0;
-	return FormatCursor->Text[0];
-}
-
-/// @brief Bump the cursor to the next character if it has one.
-/// @param FormatCursor The cursor to be bumped.
-internal void
-FString_BumpCursor(string *FormatCursor)
-{
-	if (!FormatCursor || !FormatCursor->Text || !FormatCursor->Length) return;
-	FormatCursor->Text++;
-	FormatCursor->Length--;
-}
-
-/// @brief Parse an unsigned decimal int from a format specifier, such as a width, precision, or
-/// param index, and report whether it was valid, invalid, or overflowed.
+/// @brief Parse an unsigned decimal int from a format specifier, such as a
+/// width, precision, or param index, and report whether it was valid, invalid,
+/// or overflowed.
 ///
 /// Regex: `[1-9][0-9]*`
-/// @param[in,out] FormatCursor A cursor potentially pointing to the beginning of a number in the
-/// format specifier. After return, this will point to the first character after the number or the
-/// first invalid character encountered.
-/// @param[out] IntOut A pointer to the resulting parsed int. Will only be modified on success. May
-/// be null.
+/// @param[in,out] FormatCursor A cursor potentially pointing to the beginning
+/// of a number in the format specifier. After return, this will point to the
+/// first character after the number or the first invalid character encountered.
+/// @param[out] IntOut A pointer to the resulting parsed int. Will only be
+/// modified on success. May be null.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The number was parsed successfully.
 ///
 /// - `FSTRING_FORMAT_INT_OVERFLOW`: The parsed number exceeds an s32.
 ///
-/// - `FSTRING_FORMAT_INT_NOT_PRESENT`: No number was found, or the number started with 0.
+/// - `FSTRING_FORMAT_INT_NOT_PRESENT`: No number was found, or the number
+/// started with 0.
 internal fstring_format_status
 FString_ParseFormatInt(string *FormatCursor, s32 *IntOut)
 {
 	// If the first character isn't a nonzero digit, fail.
-	u08 Digit = FString_PeekCursor(FormatCursor) - '1';
+	u32 Digit = String_PeekCodepoint(FormatCursor) - '1';
 	if (Digit >= 9) return FSTRING_FORMAT_INT_NOT_PRESENT;
 
 	// Otherwise, iterate until we hit a non-digit.
 	s32 Int = 0;
-	while ((Digit = FString_PeekCursor(FormatCursor) - '0') < 10) {
+	while ((Digit = String_PeekCodepoint(FormatCursor) - '0') < 10) {
 		if (Int > (0x7FFFFFFF - Digit) / 10) return FSTRING_FORMAT_INT_OVERFLOW;
 		Int = Int * 10 + Digit;
-		FString_BumpCursor(FormatCursor);
+		String_BumpCodepoints(FormatCursor, 1);
 	}
 
 	if (IntOut) *IntOut = Int;
 	return FSTRING_FORMAT_VALID;
 }
 
-/// @brief Extract a param index from a format specifier, and handle index usage consistency
-/// accordingly. Note that param indexes cannot be 0.
+/// @brief Extract a param index from a format specifier, and handle index usage
+/// consistency accordingly. Note that param indexes cannot be 0.
 ///
 /// Regex: `[1-9][0-9]*\\$`
-/// @param[in,out] FormatCursor A cursor potentially pointing to the beginning of a parameter index
-/// in the format specifier. After return, this will point to the first character after the index on
-/// success, the first character after the number on `FSTRING_FORMAT_INDEX_INVALID`, or the first
-/// invalid character encountered otherwise.
-/// @param[out] IndexOut A pointer to the resulting parsed index. Will be modified as long as a
-/// valid number is parsed, regardless of whether the index is valid. May be null.
-/// @param[in,out] UseIndexes A pointer to a boolean dictating whether or not to use indexes. If
-/// `SetIndexUsage` is true, this will be updated with whether or not the index is valid, and
-/// parsing will succeed regardless of whether a valid index was parsed. Otherwise, success is
-/// determined by whether index usage matches the presence of an index. Cannot be null.
-/// @param[in] SetIndexUsage A boolean indicating whether to modify or respect the value in
-/// `UseIndexes`.
+/// @param[in,out] FormatCursor A cursor potentially pointing to the beginning
+/// of a parameter index in the format specifier. After return, this will point
+/// to the first character after the index on success, the first character after
+/// the number on `FSTRING_FORMAT_INDEX_INVALID`, or the first invalid character
+/// encountered otherwise.
+/// @param[out] IndexOut A pointer to the resulting parsed index. Will be
+/// modified as long as a valid number is parsed, regardless of whether the
+/// index is valid. May be null.
+/// @param[in,out] UseIndexes A pointer to a boolean dictating whether or not to
+/// use indexes. If `SetIndexUsage` is true, this will be updated with whether
+/// or not the index is valid, and parsing will succeed regardless of whether a
+/// valid index was parsed. Otherwise, success is determined by whether index
+/// usage matches the presence of an index. Cannot be null.
+/// @param[in] SetIndexUsage A boolean indicating whether to modify or respect
+/// the value in `UseIndexes`.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The index was successfully parsed.
 ///
-/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: The index's presence doesn't match the value in
-/// `UseIndexes` and `SetIndexUsage` is true.
+/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: The index's presence doesn't match
+/// the value in `UseIndexes` and `SetIndexUsage` is true.
 ///
-/// - `FSTRING_FORMAT_INDEX_NOT_PRESENT`: A number was found, but it wasn't an index.
+/// - `FSTRING_FORMAT_INDEX_NOT_PRESENT`: A number was found, but it wasn't an
+/// index.
 ///
 /// - `FSTRING_FORMAT_INT_OVERFLOW`: A number was found, but it was too large.
 internal fstring_format_status
-FString_ParseFormatIndex(string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b08 SetIndexUsage)
+FString_ParseFormatIndex(
+	string *FormatCursor,
+	s32	   *IndexOut,
+	b08	   *UseIndexes,
+	b08		SetIndexUsage
+)
 {
 	Assert(UseIndexes);
 
@@ -975,7 +1163,8 @@ FString_ParseFormatIndex(string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b
 	// Propagate the overflow error
 	if (Status == FSTRING_FORMAT_INT_OVERFLOW) return Status;
 
-	// There's no int, so we'll either report that we're not using indexes, or fail.
+	// There's no int, so we'll either report that we're not using indexes, or
+	// fail.
 	if (Status == FSTRING_FORMAT_INT_NOT_PRESENT) {
 		if (SetIndexUsage) *UseIndexes = FALSE;
 		else if (*UseIndexes) return FSTRING_FORMAT_INDEX_INCONSISTENT;
@@ -985,11 +1174,12 @@ FString_ParseFormatIndex(string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b
 	// Update IndexOut since the number is valid
 	if (IndexOut) *IndexOut = Index;
 
-	// This is an index, so we'll either report that we're using indexes or fail.
-	if (FString_PeekCursor(FormatCursor) == '$') {
+	// This is an index, so we'll either report that we're using indexes or
+	// fail.
+	if (String_PeekCodepoint(FormatCursor) == '$') {
 		if (SetIndexUsage) *UseIndexes = TRUE;
 		else if (!*UseIndexes) return FSTRING_FORMAT_INDEX_INCONSISTENT;
-		FString_BumpCursor(FormatCursor);
+		String_BumpCodepoints(FormatCursor, 1);
 		return FSTRING_FORMAT_VALID;
 	}
 
@@ -997,23 +1187,26 @@ FString_ParseFormatIndex(string *FormatCursor, s32 *IndexOut, b08 *UseIndexes, b
 	return FSTRING_FORMAT_INDEX_NOT_PRESENT;
 }
 
-/// @brief Extract flags from a format specifier, such as alignment, signage, and notation. Flags
-/// may be repeated, though you should try not to, and duplicates will be ignored.
+/// @brief Extract flags from a format specifier, such as alignment, signage,
+/// and notation. Flags may be repeated, though you should try not to, and
+/// duplicates will be ignored.
 ///
 /// Regex: `[\\-+ #'0_]*`
-/// @param[in,out] FormatCursor A cursor potentially pointing to the beginning of the list of flags
-/// in a format specifier. After return, this will point to the first character after the flags or
-/// the first invalid character encountered.
-/// @param[out] FlagsOut A pointer to an enum representing the specifier's flags. Only the flag bits
-/// will be modified, so it can point to an existing specifier type for efficient storage. Cannot be
-/// null.
+/// @param[in,out] FormatCursor A cursor potentially pointing to the beginning
+/// of the list of flags in a format specifier. After return, this will point to
+/// the first character after the flags or the first invalid character
+/// encountered.
+/// @param[out] FlagsOut A pointer to an enum representing the specifier's
+/// flags. Only the flag bits will be modified, so it can point to an existing
+/// specifier type for efficient storage. Cannot be null.
 /// @return `FSTRING_FORMAT_VALID`.
 internal fstring_format_status
 FString_ParseFormatFlags(string *FormatCursor, fstring_format_type *FlagsOut)
 {
-	// Run through and see if we find any flags. We'll accept duplicates to be nice.
+	// Run through and see if we find any flags. We'll accept duplicates to be
+	// nice.
 	while (1) {
-		switch (FString_PeekCursor(FormatCursor)) {
+		switch (String_PeekCodepoint(FormatCursor)) {
 			case '-' : *FlagsOut |= FSTRING_FORMAT_FLAG_LEFT_JUSTIFY; break;
 			case '+' : *FlagsOut |= FSTRING_FORMAT_FLAG_PREFIX_SIGN; break;
 			case ' ' : *FlagsOut |= FSTRING_FORMAT_FLAG_PREFIX_SPACE; break;
@@ -1026,62 +1219,74 @@ FString_ParseFormatFlags(string *FormatCursor, fstring_format_type *FlagsOut)
 			default	 : return FSTRING_FORMAT_VALID;
 		}
 
-		FString_BumpCursor(FormatCursor);
+		String_BumpCodepoints(FormatCursor, 1);
 	}
 }
 
-/// @brief Traverse the state machine to extract the format specifier's type and size.
+/// @brief Traverse the state machine to extract the format specifier's type and
+/// size.
 ///
 /// Regex:
 /// `(?:hh|ll|[hlLqtjzZ]|wf?(?:8|16|32|64))?[dibBouxX]|L?[fFeEgGaA]|l?[cs]|[hl]?n|[CSpTm]`
-/// @param [in,out] FormatCursor A cursor potentially pointing to the beginning of the type portion
-/// of the format specifier, such as "lld" or "hX". After return, this will point to the first
-/// character after the specifier or the first invalid character encountered.
-/// @param [out] TypeOut A pointer to the resulting format type. Will only be modified on success,
-/// and only the bits within `FSTRING_FORMAT_TYPE_MASK` will be modified. May be null.
+/// @param [in,out] FormatCursor A cursor potentially pointing to the beginning
+/// of the type portion of the format specifier, such as "lld" or "hX". After
+/// return, this will point to the first character after the specifier or the
+/// first invalid character encountered.
+/// @param [out] TypeOut A pointer to the resulting format type. Will only be
+/// modified on success, and only the bits within `FSTRING_FORMAT_TYPE_MASK`
+/// will be modified. May be null.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format type was parsed successfully.
 ///
-/// - `FSTRING_FORMAT_TYPE_INVALID`: The string doesn't match any type specifier.
+/// - `FSTRING_FORMAT_TYPE_INVALID`: The string doesn't match any type
+/// specifier.
 internal fstring_format_status
 FString_ParseFormatType(string *FormatCursor, fstring_format_type *TypeOut)
 {
 	fstring_format_type State = FSTRING_FORMAT_SIZE_INITIAL;
 	while (State < FSTRING_FORMAT_SIZE_DONE) {
-		u08 Transition = FString_PeekCursor(FormatCursor) - '1';
+		u32 Transition = String_PeekCodepoint(FormatCursor) - '1';
 
-		// Get the next state from the transition table. All invalid transitions return 0.
-		State = Transition < 74 ? FStringFormatTypeStateMachine[State][Transition] : 0;
+		// Get the next state from the transition table. All invalid transitions
+		// return 0.
+		State = Transition < 74
+				  ? FStringFormatTypeStateMachine[State][Transition]
+				  : 0;
 		if (!State) return FSTRING_FORMAT_TYPE_INVALID;
 
-		FString_BumpCursor(FormatCursor);
+		String_BumpCodepoints(FormatCursor, 1);
 	}
 
 	if (TypeOut) *TypeOut = (*TypeOut & ~FSTRING_FORMAT_TYPE_MASK) | State;
 	return FSTRING_FORMAT_VALID;
 }
 
-/// @brief Parse a format specifier into a data structure, and report whether it is valid or not.
-/// @param[in,out] FormatCursor A cursor pointing to the beginning of a format specifier. After
-/// return, this will point to the first character after the specifier or the first invalid
-/// character encountered.
-/// @param[out] FormatOut A pointer to a format structure representing the specifier's type, flags,
-/// width, precision, and potentially param indexes. May be null.
-/// @param[in,out] UseIndexes A pointer to a boolean dictating whether or not to use indexes. If
-/// `SetIndexUsage` is true, this will be updated with whether or not indexes are used in this
-/// specifier. Otherwise, parsing will fail if index usage does not match the value in `UseIndexes`.
-/// Cannot be null.
-/// @param[in] SetIndexUsage A boolean indicating whether to modify or respect the value in
-/// `UseIndexes`.
+/// @brief Parse a format specifier into a data structure, and report whether it
+/// is valid or not.
+/// @param[in,out] FormatCursor A cursor pointing to the beginning of a format
+/// specifier. After return, this will point to the first character after the
+/// specifier or the first invalid character encountered.
+/// @param[out] FormatOut A pointer to a format structure representing the
+/// specifier's type, flags, width, precision, and potentially param indexes.
+/// May be null.
+/// @param[in,out] UseIndexes A pointer to a boolean dictating whether or not to
+/// use indexes. If `SetIndexUsage` is true, this will be updated with whether
+/// or not indexes are used in this specifier. Otherwise, parsing will fail if
+/// index usage does not match the value in `UseIndexes`. Cannot be null.
+/// @param[in] SetIndexUsage A boolean indicating whether to modify or respect
+/// the value in `UseIndexes`.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was successfully parsed.
 ///
-/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width, precision, or param index was too large.
+/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width, precision, or param index was too
+/// large.
 ///
-/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: Only if `SetIndexUsage` is false: `UseIndexes` was true
-/// and a param's index was missing, or `UseIndexes` was false and a param index was found.
+/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: Only if `SetIndexUsage` is false:
+/// `UseIndexes` was true and a param's index was missing, or `UseIndexes` was
+/// false and a param index was found.
 ///
-/// - `FSTRING_FORMAT_TYPE_INVALID`: The format's size and type had an invalid pattern.
+/// - `FSTRING_FORMAT_TYPE_INVALID`: The format's size and type had an invalid
+/// pattern.
 internal fstring_format_status
 FString_ParseFormat(
 	string		   *FormatCursor,
@@ -1096,10 +1301,18 @@ FString_ParseFormat(
 	Format.Precision	  = -1;	 // Default
 
 	// The specifier starts at the '%' right before.
-	Format.SpecifierString.Text = FormatCursor->Text - 1;
+	Format.SpecifierString.Text		= FormatCursor->Text;
+	Format.SpecifierString.Count	= 0;
+	Format.SpecifierString.Encoding = FormatCursor->Encoding;
+	String_BumpCodepoints(FormatCursor, 1);
 
 	// First try to parse the first index
-	Status = FString_ParseFormatIndex(FormatCursor, &Format.ValueIndex, UseIndexes, SetIndexUsage);
+	Status = FString_ParseFormatIndex(
+		FormatCursor,
+		&Format.ValueIndex,
+		UseIndexes,
+		SetIndexUsage
+	);
 	if (Status == FSTRING_FORMAT_INDEX_NOT_PRESENT) {
 		// This can still be valid if the number is actually a width.
 		Format.Width = Format.ValueIndex;
@@ -1112,10 +1325,15 @@ FString_ParseFormat(
 	if (Status != FSTRING_FORMAT_VALID) return Status;
 
 	// Now for width. First, we check if it's provided by a param.
-	if (FString_PeekCursor(FormatCursor) == '*') {
-		FString_BumpCursor(FormatCursor);
+	if (String_PeekCodepoint(FormatCursor) == '*') {
+		String_BumpCodepoints(FormatCursor, 1);
 
-		Status = FString_ParseFormatIndex(FormatCursor, &Format.WidthIndex, UseIndexes, FALSE);
+		Status = FString_ParseFormatIndex(
+			FormatCursor,
+			&Format.WidthIndex,
+			UseIndexes,
+			FALSE
+		);
 		if (Status != FSTRING_FORMAT_VALID) return Status;
 
 		Format.Type |= FSTRING_FORMAT_FLAG_PARAM_WIDTH;
@@ -1128,15 +1346,19 @@ FString_ParseFormat(
 
 precision:
 	// Now for precision. We know it's present if there's a period.
-	if (FString_PeekCursor(FormatCursor) == '.') {
-		FString_BumpCursor(FormatCursor);
+	if (String_PeekCodepoint(FormatCursor) == '.') {
+		String_BumpCodepoints(FormatCursor, 1);
 
 		// Check if it's provided by a param
-		if (FString_PeekCursor(FormatCursor) == '*') {
-			FString_BumpCursor(FormatCursor);
+		if (String_PeekCodepoint(FormatCursor) == '*') {
+			String_BumpCodepoints(FormatCursor, 1);
 
-			Status =
-				FString_ParseFormatIndex(FormatCursor, &Format.PrecisionIndex, UseIndexes, FALSE);
+			Status = FString_ParseFormatIndex(
+				FormatCursor,
+				&Format.PrecisionIndex,
+				UseIndexes,
+				FALSE
+			);
 			if (Status != FSTRING_FORMAT_VALID) return Status;
 
 			Format.Type |= FSTRING_FORMAT_FLAG_PARAM_PRECISION;
@@ -1158,44 +1380,61 @@ precision:
 	return FSTRING_FORMAT_VALID;
 }
 
-/// @brief Parse a format string into a data structure containing a list of formats. The arrays are
-/// allocated via `Stack_Allocate`.
-/// @param[in,out] FormatString A cursor pointing to the beginning of a format string. After return,
-/// this will point to the original string or the first invalid character encountered.
-/// @param[out] FormatListOut A pointer to the resulting data structure with the format list.
+/// @brief Parse a format string into a data structure containing a list of
+/// formats. The arrays are allocated via `Stack_Allocate`.
+/// @param[in,out] FormatString A cursor pointing to the beginning of a format
+/// string. After return, this will point to the original string or the first
+/// invalid character encountered.
+/// @param[out] FormatListOut A pointer to the resulting data structure with the
+/// format list.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: All formats were successfully parsed.
 ///
-/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width, precision, or param index was too large.
+/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width, precision, or param index was too
+/// large.
 ///
-/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: At least one, but not all params specified an index.
+/// - `FSTRING_FORMAT_INDEX_INCONSISTENT`: At least one, but not all params
+/// specified an index.
 ///
-/// - `FSTRING_FORMAT_TYPE_INVALID`: A format's size and type had an invalid pattern.
+/// - `FSTRING_FORMAT_TYPE_INVALID`: A format's size and type had an invalid
+/// pattern.
 internal fstring_format_status
-FString_ParseFormatString(string *FormatCursor, fstring_format_list *FormatListOut)
+FString_ParseFormatString(
+	string				*FormatCursor,
+	fstring_format_list *FormatListOut
+)
 {
 	if (FormatListOut) Mem_Set(FormatListOut, 0, sizeof(fstring_format_list));
-	if (!FormatCursor || !FormatCursor->Text || !FormatCursor->Length) return FSTRING_FORMAT_VALID;
+	if (!FormatCursor || !FormatCursor->Text || !FormatCursor->Length)
+		return FSTRING_FORMAT_VALID;
 
 	fstring_format_status Status	 = FSTRING_FORMAT_VALID;
 	fstring_format_list	  FormatList = { 0 };
 	Mem_Set(&FormatList, 0, sizeof(fstring_format_list));
 	FormatList.FormatString = *FormatCursor;
 
-	// First we have to iterate through to determine the number of formats and params.
-	c08 C;
+	// First we have to iterate through to determine the number of formats and
+	// params.
+	u32 C;
 	b08 UseIndexes = FALSE;
-	while ((C = FString_PeekCursor(FormatCursor))) {
+	while ((C = String_PeekCodepoint(FormatCursor))) {
 		if (C == '%') {
-			FString_BumpCursor(FormatCursor);
+			string Peeker = *FormatCursor;
+			String_BumpCodepoints(&Peeker, 1);
 
-			if (FString_PeekCursor(FormatCursor) != '%') {
+			if (String_PeekCodepoint(&Peeker) != '%') {
 				fstring_format Format;
 
-				// As an optimization, we only need to parse the formats if indexes or used, or to
-				// determine whether params are used in the first place.
+				// As an optimization, we only need to parse the formats if
+				// indexes or used, or to determine whether params are used in
+				// the first place.
 				b08 First = FormatList.FormatCount == 0;
-				Status	  = FString_ParseFormat(FormatCursor, &Format, &UseIndexes, First);
+				Status	  = FString_ParseFormat(
+					   FormatCursor,
+					   &Format,
+					   &UseIndexes,
+					   First
+				   );
 				if (Status != FSTRING_FORMAT_VALID) goto end;
 
 				FormatList.FormatCount++;
@@ -1214,40 +1453,54 @@ FString_ParseFormatString(string *FormatCursor, fstring_format_list *FormatListO
 						FormatList.ParamCount = Format.PrecisionIndex;
 				} else {
 					FormatList.ParamCount++;
-					if (Format.Type & FSTRING_FORMAT_FLAG_PARAM_WIDTH) FormatList.ParamCount++;
-					if (Format.Type & FSTRING_FORMAT_FLAG_PARAM_PRECISION) FormatList.ParamCount++;
+					if (Format.Type & FSTRING_FORMAT_FLAG_PARAM_WIDTH)
+						FormatList.ParamCount++;
+					if (Format.Type & FSTRING_FORMAT_FLAG_PARAM_PRECISION)
+						FormatList.ParamCount++;
 				}
 
 				// We also need to update if we'll be using any extra data
-				if ((Format.Type & FSTRING_FORMAT_TYPE_MASK) == FSTRING_FORMAT_TYPE_STR)
+				if ((Format.Type & FSTRING_FORMAT_TYPE_MASK)
+					== FSTRING_FORMAT_TYPE_STR)
 					FormatList.ExtraDataSize += sizeof(string);
 
 				continue;
+			} else {
+				*FormatCursor = Peeker;
 			}
 		}
 
-		FString_BumpCursor(FormatCursor);
+		String_BumpCodepoints(FormatCursor, 1);
 	}
 
 	// We can go ahead and early-out if there weren't any formats
 	if (!FormatList.FormatCount) goto end;
 
-	FormatList.Formats	 = Stack_Allocate(FormatList.FormatCount * sizeof(fstring_format));
+	FormatList.Formats =
+		Stack_Allocate(FormatList.FormatCount * sizeof(fstring_format));
 	FormatList.ExtraData = Stack_Allocate(FormatList.ExtraDataSize);
 
-	// Next, we have to run through again and this time, we'll actually save the formats.
+	// Next, we have to run through again and this time, we'll actually save the
+	// formats.
 	usize			ParamIndex = 1;
 	fstring_format *Format	   = FormatList.Formats;
 	*FormatCursor			   = FormatList.FormatString;
-	while ((C = FString_PeekCursor(FormatCursor))) {
+	while ((C = String_PeekCodepoint(FormatCursor))) {
 		if (C == '%') {
-			FString_BumpCursor(FormatCursor);
+			string Peeker = *FormatCursor;
+			String_BumpCodepoints(&Peeker, 1);
 
-			if (FString_PeekCursor(FormatCursor) != '%') {
-				Status = FString_ParseFormat(FormatCursor, Format, &UseIndexes, FALSE);
+			if (String_PeekCodepoint(&Peeker) != '%') {
+				Status = FString_ParseFormat(
+					FormatCursor,
+					Format,
+					&UseIndexes,
+					FALSE
+				);
 				if (Status != FSTRING_FORMAT_VALID) goto end;
 
-				// Specify the sequential indexes explicitly to make later steps easier
+				// Specify the sequential indexes explicitly to make later steps
+				// easier
 				if (!UseIndexes) {
 					Format->ValueIndex = ParamIndex++;
 
@@ -1260,10 +1513,12 @@ FString_ParseFormatString(string *FormatCursor, fstring_format_list *FormatListO
 
 				Format++;
 				continue;
+			} else {
+				*FormatCursor = Peeker;
 			}
 		}
 
-		FString_BumpCursor(FormatCursor);
+		String_BumpCodepoints(FormatCursor, 1);
 	}
 
 end:
@@ -1272,27 +1527,32 @@ end:
 	return Status;
 }
 
-/// @brief Uses the formats within a format list, alongside a va_list, to read the params from the
-/// va_list and write them into the FormatList's params. This includes updating the extra data for
-/// strings.
-/// @param[in,out] FormatList A pointer to the format list to be used to interpret the params.
-/// Cannot be null. On error, FormatCount will report the format index where the error occurred.
-/// @param[in] Args The va_list to source the params from. Note that you must call `VA_End` before
-/// using this again.
+/// @brief Uses the formats within a format list, alongside a va_list, to read
+/// the params from the va_list and write them into the FormatList's params.
+/// This includes updating the extra data for strings.
+/// @param[in,out] FormatList A pointer to the format list to be used to
+/// interpret the params. Cannot be null. On error, FormatCount will report the
+/// format index where the error occurred.
+/// @param[in] Args The va_list to source the params from. Note that you must
+/// call `VA_End` before using this again.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The params were read and updated successfully.
 ///
-/// - `FSTRING_FORMAT_PARAM_REDEFINED`: An index was defined as multiple types, which is disallowed.
-/// `FormatList.FormatString` will span the specifier where this occurred.
+/// - `FSTRING_FORMAT_PARAM_REDEFINED`: An index was defined as multiple types,
+/// which is disallowed. `FormatList.FormatString` will span the specifier where
+/// this occurred.
 ///
-/// - `FSTRING_FORMAT_INDEX_NOT_PRESENT`: At least one param was not referenced by any specifier.
-/// `FormatList.FormatString` will span the entire format string.
+/// - `FSTRING_FORMAT_INDEX_NOT_PRESENT`: At least one param was not referenced
+/// by any specifier. `FormatList.FormatString` will span the entire format
+/// string.
 ///
-/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width param was -2^31, which overflows on absolute value.
-/// `FormatList.FormatString` will span the specifier where this occurred.
+/// - `FSTRING_FORMAT_INT_OVERFLOW`: A width param was -2^31, which overflows on
+/// absolute value. `FormatList.FormatString` will span the specifier where this
+/// occurred.
 ///
-/// - `FSTRING_FORMAT_ENCODING_INVALID`: A provided string param had an encoding mismatch.
-/// `FormatList.FormatString` will span the specifier where this occurred.
+/// - `FSTRING_FORMAT_ENCODING_INVALID`: A provided string param had an encoding
+/// mismatch. `FormatList.FormatString` will span the specifier where this
+/// occurred.
 internal fstring_format_status
 FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 {
@@ -1304,17 +1564,20 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 	fstring_format_type IndexType = FSTRING_FORMAT_TYPE_S32;
 	fstring_format_type Mask	  = FSTRING_FORMAT_TYPE_MASK;
 
-	// First, we need to order the params by collecting them into a temporary list
+	// First, we need to order the params by collecting them into a temporary
+	// list
 	Stack_Push();
-	fstring_param *Params = Stack_Allocate(FormatList->ParamCount * sizeof(fstring_param));
+	fstring_param *Params =
+		Stack_Allocate(FormatList->ParamCount * sizeof(fstring_param));
 	Mem_Set(Params, 0, FormatList->ParamCount * sizeof(fstring_param));
 
 	for (usize I = 0; I < FormatList->FormatCount; I++) {
 		Format = &FormatList->Formats[I];
 
-		// It's an error to re-reference a param under a different type. Architectures can
-		// depend on the size of args you provide to determine the next ones, so redefining
-		// a type can make later param types ambiguous.
+		// It's an error to re-reference a param under a different type.
+		// Architectures can depend on the size of args you provide to determine
+		// the next ones, so redefining a type can make later param types
+		// ambiguous.
 		if (Params[Format->ValueIndex - 1].Type
 			&& (Params[Format->ValueIndex - 1].Type & Mask) != Format->Type)
 			goto redefined;
@@ -1329,7 +1592,8 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 
 		if (Format->Type & FSTRING_FORMAT_FLAG_PARAM_PRECISION) {
 			if (Params[Format->PrecisionIndex - 1].Type
-				&& (Params[Format->PrecisionIndex - 1].Type & Mask) != IndexType)
+				&& (Params[Format->PrecisionIndex - 1].Type & Mask)
+					   != IndexType)
 				goto redefined;
 			Params[Format->PrecisionIndex - 1].Type = IndexType;
 		}
@@ -1346,46 +1610,86 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 	// Then we run through each param and update its value
 	for (usize I = 0; I < FormatList->ParamCount; I++) {
 		switch (Params[I].Type & FSTRING_FORMAT_TYPE_MASK) {
-			case FSTRING_FORMAT_TYPE_B08	: Params[I].Bool = (b08) VA_Next(Args, s32); break;
-			case FSTRING_FORMAT_TYPE_CHR	: Params[I].Char = (c32) VA_Next(Args, c32); break;
-			case FSTRING_FORMAT_TYPE_S08	: Params[I].Signed = (s08) VA_Next(Args, s32); break;
-			case FSTRING_FORMAT_TYPE_S16	: Params[I].Signed = (s16) VA_Next(Args, s32); break;
-			case FSTRING_FORMAT_TYPE_S32	: Params[I].Signed = VA_Next(Args, s32); break;
-			case FSTRING_FORMAT_TYPE_S64	: Params[I].Signed = VA_Next(Args, s64); break;
-			case FSTRING_FORMAT_TYPE_SSIZE	: Params[I].Signed = VA_Next(Args, ssize); break;
-			case FSTRING_FORMAT_TYPE_U08	: Params[I].Unsigned = (u08) VA_Next(Args, u32); break;
-			case FSTRING_FORMAT_TYPE_U16	: Params[I].Unsigned = (u16) VA_Next(Args, u32); break;
-			case FSTRING_FORMAT_TYPE_U32	: Params[I].Unsigned = VA_Next(Args, u32); break;
-			case FSTRING_FORMAT_TYPE_U64	: Params[I].Unsigned = VA_Next(Args, u64); break;
-			case FSTRING_FORMAT_TYPE_USIZE	: Params[I].Unsigned = VA_Next(Args, usize); break;
-			case FSTRING_FORMAT_TYPE_R64	: Params[I].Float = VA_Next(Args, r64); break;
-			case FSTRING_FORMAT_TYPE_PTR	: Params[I].Pointer = VA_Next(Args, vptr); break;
-			case FSTRING_FORMAT_TYPE_QUERY16: Params[I].Pointer = VA_Next(Args, s16 *); break;
-			case FSTRING_FORMAT_TYPE_QUERY32: Params[I].Pointer = VA_Next(Args, s32 *); break;
-			case FSTRING_FORMAT_TYPE_QUERY64: Params[I].Pointer = VA_Next(Args, s64 *); break;
+			case FSTRING_FORMAT_TYPE_B08:
+				Params[I].Bool = (b08) VA_Next(Args, s32);
+				break;
+			case FSTRING_FORMAT_TYPE_CHR:
+				Params[I].Char = (c32) VA_Next(Args, c32);
+				break;
+			case FSTRING_FORMAT_TYPE_S08:
+				Params[I].Signed = (s08) VA_Next(Args, s32);
+				break;
+			case FSTRING_FORMAT_TYPE_S16:
+				Params[I].Signed = (s16) VA_Next(Args, s32);
+				break;
+			case FSTRING_FORMAT_TYPE_S32:
+				Params[I].Signed = VA_Next(Args, s32);
+				break;
+			case FSTRING_FORMAT_TYPE_S64:
+				Params[I].Signed = VA_Next(Args, s64);
+				break;
+			case FSTRING_FORMAT_TYPE_SSIZE:
+				Params[I].Signed = VA_Next(Args, ssize);
+				break;
+			case FSTRING_FORMAT_TYPE_U08:
+				Params[I].Unsigned = (u08) VA_Next(Args, u32);
+				break;
+			case FSTRING_FORMAT_TYPE_U16:
+				Params[I].Unsigned = (u16) VA_Next(Args, u32);
+				break;
+			case FSTRING_FORMAT_TYPE_U32:
+				Params[I].Unsigned = VA_Next(Args, u32);
+				break;
+			case FSTRING_FORMAT_TYPE_U64:
+				Params[I].Unsigned = VA_Next(Args, u64);
+				break;
+			case FSTRING_FORMAT_TYPE_USIZE:
+				Params[I].Unsigned = VA_Next(Args, usize);
+				break;
+			case FSTRING_FORMAT_TYPE_R64:
+				Params[I].Float = VA_Next(Args, r64);
+				break;
+			case FSTRING_FORMAT_TYPE_PTR:
+				Params[I].Pointer = VA_Next(Args, vptr);
+				break;
+			case FSTRING_FORMAT_TYPE_QUERY16:
+				Params[I].Pointer = VA_Next(Args, s16 *);
+				break;
+			case FSTRING_FORMAT_TYPE_QUERY32:
+				Params[I].Pointer = VA_Next(Args, s32 *);
+				break;
+			case FSTRING_FORMAT_TYPE_QUERY64:
+				Params[I].Pointer = VA_Next(Args, s64 *);
+				break;
 
-			// Because C varargs suck, we have to copy the string into buffer data
+			// Because C varargs suck, we have to copy the string into buffer
+			// data
 			case FSTRING_FORMAT_TYPE_STR:
 				Params[I].String  = ExtraData;
 				ExtraData		  = Params[I].String + 1;
 				*Params[I].String = VA_Next(Args, string);
 				break;
 
-			// We can't allow skipping any, sadly, similarly because C varargs suck
+			// We can't allow skipping any, sadly, similarly because C varargs
+			// suck
 			default: Stack_Pop(); return FSTRING_FORMAT_INDEX_NOT_PRESENT;
 		}
 	}
 
-	// Finally, we can run through the formats again, update their values, and pop the params
+	// Finally, we can run through the formats again, update their values, and
+	// pop the params
 	for (usize I = 0; I < FormatList->FormatCount; I++) {
 		Format = &FormatList->Formats[I];
 
 		Format->Value = Params[Format->ValueIndex - 1];
-		if ((Format->Type & FSTRING_FORMAT_TYPE_MASK) == FSTRING_FORMAT_TYPE_STR) {
+		if ((Format->Type & FSTRING_FORMAT_TYPE_MASK)
+			== FSTRING_FORMAT_TYPE_STR)
+		{
 			if (Format->Type & FSTRING_FORMAT_FLAG_STR_WIDE
 					? Format->Value.String->Encoding != STRING_ENCODING_UTF32
 					: Format->Value.String->Encoding != STRING_ENCODING_ASCII
-						  && Format->Value.String->Encoding != STRING_ENCODING_UTF8)
+						  && Format->Value.String->Encoding
+								 != STRING_ENCODING_UTF8)
 			{
 				Stack_Pop();
 				FormatList->FormatString = Format->SpecifierString;
@@ -1416,10 +1720,10 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 	return FSTRING_FORMAT_VALID;
 }
 
-/// @brief Utility function to call `FVString_UpdateParamReferences` via varargs. Mainly used for
-/// testing.
-/// @param[in,out] FormatList A pointer to the format list to be used to interpret the params.
-/// Cannot be null.
+/// @brief Utility function to call `FVString_UpdateParamReferences` via
+/// varargs. Mainly used for testing.
+/// @param[in,out] FormatList A pointer to the format list to be used to
+/// interpret the params. Cannot be null.
 /// @param[in] ... The params to update FormatList's references with.
 /// @return See `FVString_UpdateParamReferences` for possible return values.
 internal fstring_format_status
@@ -1428,24 +1732,27 @@ FString_UpdateParamReferences(fstring_format_list *FormatList, ...)
 	va_list Args;
 	VA_Start(Args, FormatList);
 
-	fstring_format_status Result = FVString_UpdateParamReferences(FormatList, Args);
+	fstring_format_status Result =
+		FVString_UpdateParamReferences(FormatList, Args);
 
 	VA_End(Args);
 	return Result;
 }
 
-/// @brief Write a string into the buffer, based on the format. Only alignment and width are
-/// considered. The param's encoding is used instead of any flags on read, and the written encoding
-/// matches the one passed in.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @brief Write a string into the buffer, based on the format. Only alignment
+/// and width are considered. The param's encoding is used instead of any flags
+/// on read, and the written encoding matches the one passed in.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WriteString(fstring_format *Format, string Buffer)
 {
@@ -1454,34 +1761,40 @@ FString_WriteString(fstring_format *Format, string Buffer)
 	b08 IsLeft = !!(Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY);
 
 	u32	  PadCodepoint = ' ';
-	usize PadCharLen   = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
+	usize PadCharLen = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
-	usize ContentCount	= String_GetCount(Format->Value.String);
-	usize ContentLength = String_GetTranscodedLength(*Format->Value.String, Buffer.Encoding);
+	usize ContentCount = String_GetCount(Format->Value.String);
+	usize ContentLength =
+		String_GetTranscodedLength(*Format->Value.String, Buffer.Encoding);
 
 	usize PadCount		= MAX(Format->Width, ContentCount) - ContentCount;
 	Format->ActualWidth = PadCount * PadCharLen + ContentLength;
 
-	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth)
+		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	if (!IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (!IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 	String_BumpBytes(&Buffer, String_Cpy(Buffer, *Format->Value.String));
-	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	return FSTRING_FORMAT_VALID;
 }
 
-/// @brief Write a character into the buffer, based on the format. Accepts ASCII and UTF32.
-/// Only alignment, width, and `FLAG_CHR_WIDE` are considered.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @brief Write a character into the buffer, based on the format. Accepts ASCII
+/// and UTF32. Only alignment, width, and `FLAG_CHR_WIDE` are considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WriteChar(fstring_format *Format, string Buffer)
 {
@@ -1510,41 +1823,49 @@ FString_WriteChar(fstring_format *Format, string Buffer)
 	return Status;
 }
 
-/// @brief Write a boolean 'true' or 'false' into the buffer, based on the format. Only alignment
-/// and width are considered.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @brief Write a boolean 'true' or 'false' into the buffer, based on the
+/// format. Only alignment and width are considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WriteBool(fstring_format *Format, string Buffer)
 {
 	Assert(Format);
 
+	static string TrueString  = CStringL("true");
+	static string FalseString = CStringL("false");
+
 	fstring_format NewFormat = *Format;
-	NewFormat.Value.String	 = Format->Value.Bool ? &CStringL("true") : &CStringL("false");
+	NewFormat.Value.String	 = Format->Value.Bool ? &TrueString : &FalseString;
 
 	fstring_format_status Status = FString_WriteString(&NewFormat, Buffer);
 	Format->ActualWidth			 = NewFormat.ActualWidth;
 	return Status;
 }
 
-/// @brief Write an unsigned int into the buffer, based on the format. Alignment, width, precision,
-/// prefixing, grouping, and 0-padding are considered.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @brief Write an unsigned int into the buffer, based on the format.
+/// Alignment, width, precision, prefixing, grouping, and 0-padding are
+/// considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WriteUnsigned(fstring_format *Format, string Buffer)
 {
@@ -1556,8 +1877,9 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 	b08 IsUpper		 = !!(Format->Type & FSTRING_FORMAT_FLAG_UPPERCASE);
 	b08 PadZero		 = !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
 
-	u32	  PadCodepoint = (Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
-	usize PadCharLen   = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
+	u32 PadCodepoint =
+		(Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
+	usize PadCharLen = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
 	string RadixPrefix = EString();
 	string GroupString = CStringL(",");
@@ -1581,14 +1903,16 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 	if (!SpecifyRadix) RadixPrefix = EString();
 	if (!IsGrouped) GroupString = EString();
 
-	usize ContentCount	= RadixPrefix.Count;
-	usize ContentLength = RadixPrefix.Length;
+	usize ContentLength =
+		String_GetTranscodedLength(RadixPrefix, Buffer.Encoding);
+	usize ContentCount = RadixPrefix.Count;
 
 	usize MinDigits = Format->Precision < 0 ? 1 : Format->Precision;
 	if (PadCodepoint == '0' && Format->Width > ContentCount) {
 		usize PadDigits	 = Format->Width - ContentCount;
-		PadDigits		-= ((PadDigits - 1) / (GroupSize + GroupString.Count)) * GroupString.Count;
-		MinDigits		 = MAX(MinDigits, PadDigits);
+		PadDigits		-= ((PadDigits - 1) / (GroupSize + GroupString.Count))
+				   * GroupString.Count;
+		MinDigits = MAX(MinDigits, PadDigits);
 	}
 
 	usize ValueDivisor = 1;
@@ -1602,16 +1926,20 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 	usize TotalDigits = ExtraZeroes + ValueDigits;
 	usize GroupCount  = TotalDigits ? ((TotalDigits - 1) / GroupSize) : 0;
 
-	usize DigitLen	= String_GetCodepointLength('0', Buffer.Encoding);
-	ContentCount   += TotalDigits + GroupString.Count * GroupCount;
-	ContentLength  += TotalDigits * DigitLen + GroupString.Length * GroupCount;
+	usize DigitLen = String_GetCodepointLength('0', Buffer.Encoding);
+	ContentLength +=
+		TotalDigits * DigitLen
+		+ GroupCount * String_GetTranscodedLength(GroupString, Buffer.Encoding);
+	ContentCount += TotalDigits + GroupString.Count * GroupCount;
 
 	usize PadCount		= MAX(Format->Width, ContentCount) - ContentCount;
 	Format->ActualWidth = PadCount * PadCharLen + ContentLength;
 
-	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth)
+		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	if (!IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (!IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 	String_BumpBytes(&Buffer, String_Cpy(Buffer, RadixPrefix));
 
 	usize DigitsSinceGroup = GroupSize - (TotalDigits % GroupSize);
@@ -1638,22 +1966,25 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 		DigitsSinceGroup++;
 	}
 
-	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 	return FSTRING_FORMAT_VALID;
 }
 
-/// @brief Write a pointer into the buffer, based on the format. Effectively the same as `%#x` unles
-/// the pointer is null, in which case `(nil)` will be printed.` Only alignment and width are
-/// considered.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @brief Write a pointer into the buffer, based on the format. Effectively the
+/// same as `%#x` unles the pointer is null, in which case `(nil)` will be
+/// printed.` Only alignment and width are considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WritePointer(fstring_format *Format, string Buffer)
 {
@@ -1664,29 +1995,33 @@ FString_WritePointer(fstring_format *Format, string Buffer)
 	NewFormat.Type			 |= Format->Type & FSTRING_FORMAT_FLAG_LEFT_JUSTIFY;
 
 	if (Format->Value.Pointer) {
-		NewFormat.Type			 |= FSTRING_FORMAT_FLAG_INT_HEX | FSTRING_FORMAT_FLAG_SPECIFY_RADIX;
-		NewFormat.Value.Unsigned  = (usize) Format->Value.Pointer;
-		Status					  = FString_WriteUnsigned(&NewFormat, Buffer);
+		NewFormat.Type |=
+			FSTRING_FORMAT_FLAG_INT_HEX | FSTRING_FORMAT_FLAG_SPECIFY_RADIX;
+		NewFormat.Value.Unsigned = (usize) Format->Value.Pointer;
+		Status					 = FString_WriteUnsigned(&NewFormat, Buffer);
 	} else {
-		NewFormat.Value.String = &CStringL("(nil)");
-		Status				   = FString_WriteString(&NewFormat, Buffer);
+		static string NilString = CStringL("(nil)");
+		NewFormat.Value.String	= &NilString;
+		Status					= FString_WriteString(&NewFormat, Buffer);
 	}
 
 	Format->ActualWidth = NewFormat.ActualWidth;
 	return Status;
 }
 
-/// @brief Write a signed int into the buffer, based on the format. Alignment, width, precision,
-/// signage, grouping, and 0-padding are considered.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @brief Write a signed int into the buffer, based on the format. Alignment,
+/// width, precision, signage, grouping, and 0-padding are considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WriteSigned(fstring_format *Format, string Buffer)
 {
@@ -1698,8 +2033,9 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 	b08 IsGrouped	= !!(Format->Type & FSTRING_FORMAT_FLAG_SEPARATE_GROUPS);
 	b08 PadZero		= !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
 
-	u32	  PadCodepoint = (Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
-	usize PadCharLen   = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
+	u32 PadCodepoint =
+		(Format->Precision < 0 && PadZero && !IsLeft) ? '0' : ' ';
+	usize PadCharLen = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
 	string Prefix	   = Format->Value.Signed < 0 ? CStringL("-")
 					   : PrefixSign				  ? CStringL("+")
@@ -1708,14 +2044,15 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 	string GroupString = IsGrouped ? CStringL(",") : EString();
 
 	usize ContentCount	= Prefix.Count;
-	usize ContentLength = Prefix.Length;
+	usize ContentLength = String_GetTranscodedLength(Prefix, Buffer.Encoding);
 
 	usize DigitLen	= String_GetCodepointLength('0', Buffer.Encoding);
 	usize MinDigits = Format->Precision < 0 ? 1 : Format->Precision;
 	if (PadCodepoint == '0' && Format->Width > ContentCount) {
-		usize PadDigits	 = Format->Width - ContentCount;
-		PadDigits		-= ((PadDigits - 1) / (3 + GroupString.Count)) * GroupString.Count;
-		MinDigits		 = MAX(MinDigits, PadDigits);
+		usize PadDigits = Format->Width - ContentCount;
+		PadDigits -=
+			((PadDigits - 1) / (3 + GroupString.Count)) * GroupString.Count;
+		MinDigits = MAX(MinDigits, PadDigits);
 	}
 
 	ssize ValueDivisor = 1;
@@ -1736,15 +2073,19 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 	usize TotalDigits = ExtraZeroes + ValueDigits;
 	usize GroupCount  = TotalDigits ? ((TotalDigits - 1) / 3) : 0;
 
-	ContentLength += TotalDigits * DigitLen + GroupCount * GroupString.Length;
-	ContentCount  += TotalDigits + GroupCount * GroupString.Count;
+	ContentLength +=
+		TotalDigits * DigitLen
+		+ GroupCount * String_GetTranscodedLength(GroupString, Buffer.Encoding);
+	ContentCount += TotalDigits + GroupCount * GroupString.Count;
 
 	usize PadCount		= MAX(Format->Width, ContentCount) - ContentCount;
 	Format->ActualWidth = PadCount * PadCharLen + ContentLength;
 
-	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth)
+		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	if (!IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (!IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 	String_BumpBytes(&Buffer, String_Cpy(Buffer, Prefix));
 
 	usize DigitsSinceGroup = 3 - (TotalDigits % 3);
@@ -1765,10 +2106,25 @@ FString_WriteSigned(fstring_format *Format, string Buffer)
 		DigitsSinceGroup++;
 	}
 
-	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 	return FSTRING_FORMAT_VALID;
 }
 
+/// @brief Write a floating point value into the buffer, based on the format,
+/// with hexadecimal formatting. Alignment, width, precision, signage, radixing,
+/// grouping, and 0-padding are considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
+/// @return
+/// - `FSTRING_FORMAT_VALID`: The format was written successfully.
+///
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WriteHexFloat(fstring_format *Format, string Buffer)
 {
@@ -1783,7 +2139,7 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 	b08 PadZero		 = !!(Format->Type & FSTRING_FORMAT_FLAG_PAD_WITH_ZERO);
 
 	u32	  PadCodepoint = PadZero && !IsLeft ? '0' : ' ';
-	usize PadCharLen   = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
+	usize PadCharLen = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
 	r64 Value	 = Format->Value.Float;
 	u64 Binary	 = FORCE_CAST(r64, Value, u64);
@@ -1826,24 +2182,26 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 	}
 	if (ExpDigits < 1) ExpDigits = 1;
 
-	string SignString	 = Negative	   ? CStringL("-")
-						 : PrefixSign  ? CStringL("+")
-						 : PrefixSpace ? CStringL(" ")
-									   : EString();
-	string HexString	 = IsUpper ? CStringL("0X") : CStringL("0x");
-	string GroupString	 = IsGrouped ? CStringL("_") : EString();
-	string RadixString	 = !SpecifyRadix && !FracDigits ? EString() : CStringL(".");
+	string SignString  = Negative	 ? CStringL("-")
+					   : PrefixSign	 ? CStringL("+")
+					   : PrefixSpace ? CStringL(" ")
+									 : EString();
+	string HexString   = IsUpper ? CStringL("0X") : CStringL("0x");
+	string GroupString = IsGrouped ? CStringL("_") : EString();
+	string RadixString =
+		!SpecifyRadix && !FracDigits ? EString() : CStringL(".");
 	string ExpSignString = NegativeExp ? CStringL("-") : CStringL("+");
 	string ExpString	 = IsUpper ? CStringL("P") : CStringL("p");
 
-	usize DigitLen		= String_GetCodepointLength('0', Buffer.Encoding);
-	usize ContentLength = SignString.Length
-						+ HexString.Length
-						+ RadixString.Length
-						+ FracDigits * DigitLen
-						+ ExpSignString.Length
-						+ ExpString.Length
-						+ ExpDigits * DigitLen;
+	usize DigitLen = String_GetCodepointLength('0', Buffer.Encoding);
+	usize ContentLength =
+		String_GetTranscodedLength(SignString, Buffer.Encoding)
+		+ String_GetTranscodedLength(HexString, Buffer.Encoding)
+		+ String_GetTranscodedLength(RadixString, Buffer.Encoding)
+		+ FracDigits * DigitLen
+		+ String_GetTranscodedLength(ExpSignString, Buffer.Encoding)
+		+ String_GetTranscodedLength(ExpString, Buffer.Encoding)
+		+ ExpDigits * DigitLen;
 	usize ContentCount = SignString.Count
 					   + HexString.Count
 					   + RadixString.Count
@@ -1854,21 +2212,26 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 
 	usize WholeDigits = 1;
 	if (PadCodepoint == '0' && Format->Width > ContentCount) {
-		usize PadDigits	 = Format->Width - ContentCount;
-		PadDigits		-= ((PadDigits - 1) / (4 + GroupString.Count)) * GroupString.Count;
-		WholeDigits		 = MAX(WholeDigits, PadDigits);
+		usize PadDigits = Format->Width - ContentCount;
+		PadDigits -=
+			((PadDigits - 1) / (4 + GroupString.Count)) * GroupString.Count;
+		WholeDigits = MAX(WholeDigits, PadDigits);
 	}
 	usize GroupCount = (WholeDigits - 1) / 4;
 
-	ContentLength += WholeDigits * DigitLen + GroupCount * GroupString.Length;
-	ContentCount  += WholeDigits + GroupCount * GroupString.Count;
+	ContentLength +=
+		WholeDigits * DigitLen
+		+ GroupCount * String_GetTranscodedLength(GroupString, Buffer.Encoding);
+	ContentCount += WholeDigits + GroupCount * GroupString.Count;
 
 	usize PadCount		= MAX(Format->Width, ContentCount) - ContentCount;
 	Format->ActualWidth = PadCount * PadCharLen + ContentLength;
 
-	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) return FSTRING_FORMAT_BUFFER_TOO_SMALL;
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth)
+		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 
-	if (!IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (!IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 	String_BumpBytes(&Buffer, String_Cpy(Buffer, SignString));
 	String_BumpBytes(&Buffer, String_Cpy(Buffer, HexString));
 
@@ -1908,22 +2271,26 @@ FString_WriteHexFloat(fstring_format *Format, string Buffer)
 		ExpDigits--;
 	}
 
-	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	return FSTRING_FORMAT_VALID;
 }
 
-/// @brief Write a floating point value into the buffer, based on the format. Alignment, width,
-/// precision, signage, radixing, grouping, and 0-padding are considered.
-/// @param[in,out] Format A pointer to the format being written. On return, if actual width was 0,
-/// it will contain the updated actual width. Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @brief Write a floating point value into the buffer, based on the format.
+/// Alignment, width, precision, signage, radixing, grouping, and 0-padding are
+/// considered.
+/// @param[in,out] Format A pointer to the format being written. On return, if
+/// actual width was 0, it will contain the updated actual width. Cannot be
+/// null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because it was too small.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: Could not write into the buffer because
+/// it was too small.
 internal fstring_format_status
 FString_WriteFloat(fstring_format *Format, string Buffer)
 {
@@ -1945,12 +2312,13 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 
 	b08	  Negative = (Binary & R64_SIGN_MASK) >> R64_SIGN_SHIFT;
 	ssize Exponent =
-		(ssize) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT) - R64_EXPONENT_BIAS;
+		(ssize) ((Binary & R64_EXPONENT_MASK) >> R64_EXPONENT_SHIFT)
+		- R64_EXPONENT_BIAS;
 	u64 Mantissa = Binary & R64_MANTISSA_MASK;
 
 	if (Exponent == R64_EXPONENT_MAX) {
 		c08	   SpecialChars[4];
-		string SpecialStr = CLString(SpecialChars, 4);
+		string SpecialStr = CLEString(SpecialChars, 4, STRING_ENCODING_ASCII);
 		if (Mantissa) Mem_Cpy(SpecialChars + 1, IsUpper ? "NAN" : "nan", 3);
 		else Mem_Cpy(SpecialChars + 1, IsUpper ? "INF" : "inf", 3);
 		if (Negative) SpecialChars[0] = '-';
@@ -1971,7 +2339,7 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 
 	ssize Precision	   = Format->Precision;
 	u32	  PadCodepoint = PadZero && !IsLeft ? '0' : ' ';
-	usize PadCharLen   = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
+	usize PadCharLen = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
 	if (Exponent == -1023) Exponent = -1022;
 	else Mantissa |= 1ull << 52;
@@ -1980,8 +2348,9 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 	usize WholeBits			= Exponent < 0 ? 0 : Exponent;
 	usize FracBits			= Exponent > 52 ? 0 : 52 - Exponent;
 	usize MantissaWholePart = FracBits > 52 ? 0 : Mantissa >> FracBits;
-	usize MantissaFracPart	= FracBits > 52 ? Mantissa : Mantissa & ((1ull << FracBits) - 1);
-	u32	  FracPartLSB;
+	usize MantissaFracPart =
+		FracBits > 52 ? Mantissa : Mantissa & ((1ull << FracBits) - 1);
+	u32 FracPartLSB;
 	if (Intrin_BitScanForward(&FracPartLSB, MantissaFracPart)) {
 		MantissaFracPart >>= FracPartLSB;
 		FracBits		  -= MIN(FracBits, FracPartLSB);
@@ -1989,15 +2358,17 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 		FracBits = 0;
 	}
 
-	// Compute the whole portion of the result. Thankfully, this just involves left shifting the
-	// mantissa's whole part and computing the nubmer of digits it'll be represented by.
+	// Compute the whole portion of the result. Thankfully, this just involves
+	// left shifting the mantissa's whole part and computing the nubmer of
+	// digits it'll be represented by.
 	bigint Five			= BigInt(5);
 	bigint Ten			= BigInt(10);
 	usize  WholeDigits	= 0;
 	bigint WholeDivisor = BigInt(1);
 	usize  WholeShift	= WholeBits < 52 ? 0 : WholeBits - 52;
-	bigint WholePart	= BigInt_SShift(BigInt_SScalar(MantissaWholePart), WholeShift);
-	usize  FitDigits	= IsFit ? (Precision <= 0 ? 1 : Precision) : 0;
+	bigint WholePart =
+		BigInt_SShift(BigInt_SScalar(MantissaWholePart), WholeShift);
+	usize FitDigits = IsFit ? (Precision <= 0 ? 1 : Precision) : 0;
 	do {
 		WholeDivisor = BigInt_SMul(WholeDivisor, Ten);
 		WholeDigits++;
@@ -2015,9 +2386,10 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 		}
 	}
 
-	// Compute the fractional portion of the result, but as an integer. For example, 0.5625 would be
-	// 5625. This is done by adding a 5 at each digit place where its respective bit is set, and
-	// repeatedly multiplying the result by five. Using the 5625 example, this would be 5 + 0 (1e1)
+	// Compute the fractional portion of the result, but as an integer. For
+	// example, 0.5625 would be 5625. This is done by adding a 5 at each digit
+	// place where its respective bit is set, and repeatedly multiplying the
+	// result by five. Using the 5625 example, this would be 5 + 0 (1e1)
 	// -> 25 (1e2) -> 125 (1e3) -> 5000 + 625 (1e4)
 	bigint FracDivisor = BigInt(1);
 	usize  FracDigits  = Precision < 0 ? 6 : Precision;
@@ -2029,8 +2401,9 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 		FracDivisor = BigInt_SMul(FracDivisor, Ten);
 	}
 
-	// If we're displaying in scientific notation, roll WholePart into FracPart (or vice versa)
-	// until WholePart is between 1 and 9, or 0 if the number is 0.
+	// If we're displaying in scientific notation, roll WholePart into FracPart
+	// (or vice versa) until WholePart is between 1 and 9, or 0 if the number is
+	// 0.
 	ssize PowTen = 0;
 	if (IsExp) {
 		if (!BigInt_IsZero(WholePart)) {
@@ -2038,7 +2411,8 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 				bigint Addend;
 				WholeDivisor = BigInt_SDiv(WholeDivisor, Ten);
 				BigInt_SDivRem(WholePart, WholeDivisor, &WholePart, &Addend);
-				FracPart	 = BigInt_SAdd(FracPart, BigInt_SMul(Addend, FracDivisor));
+				FracPart =
+					BigInt_SAdd(FracPart, BigInt_SMul(Addend, FracDivisor));
 				FracDivisor	 = BigInt_SMul(FracDivisor, WholeDivisor);
 				WholeDivisor = BigInt(10);
 				PowTen		 = WholeDigits - 1;
@@ -2048,7 +2422,8 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 		} else if (!BigInt_IsZero(FracPart)) {
 			while (BigInt_IsZero(WholePart)) {
 				FracDivisor = BigInt_SDiv(FracDivisor, Ten);
-				WholePart	= BigInt_SRem(BigInt_SDiv(FracPart, FracDivisor), Ten);
+				WholePart =
+					BigInt_SRem(BigInt_SDiv(FracPart, FracDivisor), Ten);
 				FracBits--;
 				PowTen--;
 			}
@@ -2059,8 +2434,8 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 
 	if (TrimZeroes) FracDigits = MIN(FracDigits, FracBits);
 
-	// FracBits is the actual number of digits in FracPart. If the precision is less, we'll be
-	// truncating, so we have to round the next smallest digit.
+	// FracBits is the actual number of digits in FracPart. If the precision is
+	// less, we'll be truncating, so we have to round the next smallest digit.
 	bigint MinDigitDivisor = BigInt(1);
 	if (FracDigits < FracBits) {
 		if (FracDigits < FracBits / 2) {
@@ -2073,8 +2448,9 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 				MinDigitDivisor = BigInt_SMul(MinDigitDivisor, Ten);
 		}
 
-		bigint RoundingDigit = BigInt_SRem(BigInt_SDiv(FracPart, MinDigitDivisor), Ten);
-		MinDigitDivisor		 = BigInt_SMul(MinDigitDivisor, Ten);
+		bigint RoundingDigit =
+			BigInt_SRem(BigInt_SDiv(FracPart, MinDigitDivisor), Ten);
+		MinDigitDivisor = BigInt_SMul(MinDigitDivisor, Ten);
 		if (BigInt_Compare(RoundingDigit, Five) >= 0) {
 			FracPart = BigInt_SAdd(FracPart, MinDigitDivisor);
 
@@ -2082,13 +2458,17 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 			if (!BigInt_IsZero(BigInt_SDiv(FracPart, FracDivisor))) {
 				WholePart = BigInt_SAdd(WholePart, BigInt(1));
 
-				// Rounding may have added a new whole digit. If so, either roll the ones place back
-				// into FracPart for scientific notation, or update WholeDigits & co.
+				// Rounding may have added a new whole digit. If so, either roll
+				// the ones place back into FracPart for scientific notation, or
+				// update WholeDigits & co.
 				if (!BigInt_IsZero(BigInt_SDiv(WholePart, WholeDivisor))) {
 					if (IsExp) {
 						bigint Digit;
 						BigInt_SDivRem(WholePart, Ten, &WholePart, &Digit);
-						FracPart	= BigInt_SAdd(FracPart, BigInt_SMul(Digit, FracDivisor));
+						FracPart = BigInt_SAdd(
+							FracPart,
+							BigInt_SMul(Digit, FracDivisor)
+						);
 						FracDivisor = BigInt_SMul(FracDivisor, Ten);
 						FracBits++;
 						PowTen++;
@@ -2103,7 +2483,8 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 
 	if (TrimZeroes) {
 		while (FracDigits) {
-			bigint Digit = BigInt_SRem(BigInt_SDiv(FracPart, MinDigitDivisor), Ten);
+			bigint Digit =
+				BigInt_SRem(BigInt_SDiv(FracPart, MinDigitDivisor), Ten);
 			if (!BigInt_IsZero(Digit)) break;
 			MinDigitDivisor = BigInt_SMul(MinDigitDivisor, Ten);
 			FracDigits--;
@@ -2119,22 +2500,26 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 		ExpDigits++;
 	}
 
-	string SignString	 = Negative	   ? CStringL("-")
-						 : PrefixSign  ? CStringL("+")
-						 : PrefixSpace ? CStringL(" ")
-									   : EString();
-	string GroupString	 = IsGrouped ? CStringL(",") : EString();
-	string DecimalString = FracDigits || SpecifyRadix ? CStringL(".") : EString();
-	string ExpString	 = IsExp ? (IsUpper ? CStringL("E") : CStringL("e")) : EString();
-	string ExpSignString = IsExp ? (NegativePowTen ? CStringL("-") : CStringL("+")) : EString();
-	usize  DigitLen		 = String_GetCodepointLength('0', Buffer.Encoding);
+	string SignString  = Negative	 ? CStringL("-")
+					   : PrefixSign	 ? CStringL("+")
+					   : PrefixSpace ? CStringL(" ")
+									 : EString();
+	string GroupString = IsGrouped ? CStringL(",") : EString();
+	string DecimalString =
+		FracDigits || SpecifyRadix ? CStringL(".") : EString();
+	string ExpString =
+		IsExp ? (IsUpper ? CStringL("E") : CStringL("e")) : EString();
+	string ExpSignString =
+		IsExp ? (NegativePowTen ? CStringL("-") : CStringL("+")) : EString();
+	usize DigitLen = String_GetCodepointLength('0', Buffer.Encoding);
 
-	usize ContentLength = SignString.Length
-						+ DecimalString.Length
-						+ FracDigits * DigitLen
-						+ ExpString.Length
-						+ ExpSignString.Length
-						+ ExpDigits * DigitLen;
+	usize ContentLength =
+		String_GetTranscodedLength(SignString, Buffer.Encoding)
+		+ String_GetTranscodedLength(DecimalString, Buffer.Encoding)
+		+ FracDigits * DigitLen
+		+ String_GetTranscodedLength(ExpString, Buffer.Encoding)
+		+ String_GetTranscodedLength(ExpSignString, Buffer.Encoding)
+		+ ExpDigits * DigitLen;
 	usize ContentCount = SignString.Count
 					   + DecimalString.Count
 					   + FracDigits
@@ -2144,15 +2529,18 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 
 	usize TotalWholeDigits = WholeDigits;
 	if (PadCodepoint == '0' && Format->Width > ContentCount) {
-		usize PadDigits	  = Format->Width - ContentCount;
-		PadDigits		 -= ((PadDigits - 1) / (3 + GroupString.Count)) * GroupString.Count;
-		TotalWholeDigits  = MAX(TotalWholeDigits, PadDigits);
+		usize PadDigits = Format->Width - ContentCount;
+		PadDigits -=
+			((PadDigits - 1) / (3 + GroupString.Count)) * GroupString.Count;
+		TotalWholeDigits = MAX(TotalWholeDigits, PadDigits);
 	}
 	usize ExtraWholeDigits = TotalWholeDigits - WholeDigits;
 	usize GroupCount	   = (TotalWholeDigits - 1) / 3;
 
-	ContentLength += TotalWholeDigits * DigitLen + GroupCount * GroupString.Length;
-	ContentCount  += TotalWholeDigits + GroupCount * GroupString.Count;
+	ContentLength +=
+		TotalWholeDigits * DigitLen
+		+ GroupCount * String_GetTranscodedLength(GroupString, Buffer.Encoding);
+	ContentCount += TotalWholeDigits + GroupCount * GroupString.Count;
 
 	usize PadCount		= MAX(Format->Width, ContentCount) - ContentCount;
 	Format->ActualWidth = PadCount * PadCharLen + ContentLength;
@@ -2162,7 +2550,8 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 	}
 
-	if (!IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (!IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 	String_BumpBytes(&Buffer, String_Cpy(Buffer, SignString));
 
 	usize DigitsSinceGroup = 3 - (TotalWholeDigits % 3);
@@ -2208,26 +2597,27 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
 	}
 
-	if (IsLeft) String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
+	if (IsLeft)
+		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
 	Stack_Pop();
 	return FSTRING_FORMAT_VALID;
 }
 
 /// @brief Writes a formatted value into the provided buffer.
-/// @param[in,out] Format A pointer to the format specifier containing the type, flags, and value.
-/// Cannot be null.
-/// @param[in] Buffer The buffer being written into. If this is too small, only the
-/// format's actual width and content size will be updated. Otherwise, the buffer will be written
-/// into with its specified encoding.
+/// @param[in,out] Format A pointer to the format specifier containing the type,
+/// flags, and value. Cannot be null.
+/// @param[in] Buffer The buffer being written into. If this is too small, only
+/// the format's actual width and content size will be updated. Otherwise, the
+/// buffer will be written into with its specified encoding.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The format was written successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided output buffer was too small to contain the
-/// full output.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided output buffer was too
+/// small to contain the full output.
 ///
-/// - `FSTRING_FORMAT_TYPE_INVALID`: The provided format's type was unsupported. This can occur, for
-/// example, if you provide a non-writable query type.
+/// - `FSTRING_FORMAT_TYPE_INVALID`: The provided format's type was unsupported.
+/// This can occur, for example, if you provide a non-writable query type.
 internal fstring_format_status
 FString_WriteFormat(fstring_format *Format, string Buffer)
 {
@@ -2239,54 +2629,72 @@ FString_WriteFormat(fstring_format *Format, string Buffer)
 	if (NoWrite) Buffer.Length = 0;
 
 	switch (Format->Type & FSTRING_FORMAT_TYPE_MASK) {
-		case FSTRING_FORMAT_TYPE_B08  : Status = FString_WriteBool(Format, Buffer); break;
+		case FSTRING_FORMAT_TYPE_B08:
+			Status = FString_WriteBool(Format, Buffer);
+			break;
 
-		case FSTRING_FORMAT_TYPE_CHR  : Status = FString_WriteChar(Format, Buffer); break;
+		case FSTRING_FORMAT_TYPE_CHR:
+			Status = FString_WriteChar(Format, Buffer);
+			break;
 
-		case FSTRING_FORMAT_TYPE_S08  :
-		case FSTRING_FORMAT_TYPE_S16  :
-		case FSTRING_FORMAT_TYPE_S32  :
-		case FSTRING_FORMAT_TYPE_S64  :
-		case FSTRING_FORMAT_TYPE_SSIZE: Status = FString_WriteSigned(Format, Buffer); break;
+		case FSTRING_FORMAT_TYPE_S08:
+		case FSTRING_FORMAT_TYPE_S16:
+		case FSTRING_FORMAT_TYPE_S32:
+		case FSTRING_FORMAT_TYPE_S64:
+		case FSTRING_FORMAT_TYPE_SSIZE:
+			Status = FString_WriteSigned(Format, Buffer);
+			break;
 
-		case FSTRING_FORMAT_TYPE_U08  :
-		case FSTRING_FORMAT_TYPE_U16  :
-		case FSTRING_FORMAT_TYPE_U32  :
-		case FSTRING_FORMAT_TYPE_U64  :
-		case FSTRING_FORMAT_TYPE_USIZE: Status = FString_WriteUnsigned(Format, Buffer); break;
+		case FSTRING_FORMAT_TYPE_U08:
+		case FSTRING_FORMAT_TYPE_U16:
+		case FSTRING_FORMAT_TYPE_U32:
+		case FSTRING_FORMAT_TYPE_U64:
+		case FSTRING_FORMAT_TYPE_USIZE:
+			Status = FString_WriteUnsigned(Format, Buffer);
+			break;
 
-		case FSTRING_FORMAT_TYPE_R64  : Status = FString_WriteFloat(Format, Buffer); break;
+		case FSTRING_FORMAT_TYPE_R64:
+			Status = FString_WriteFloat(Format, Buffer);
+			break;
 
-		case FSTRING_FORMAT_TYPE_PTR  : Status = FString_WritePointer(Format, Buffer); break;
+		case FSTRING_FORMAT_TYPE_PTR:
+			Status = FString_WritePointer(Format, Buffer);
+			break;
 
-		case FSTRING_FORMAT_TYPE_STR  : Status = FString_WriteString(Format, Buffer); break;
+		case FSTRING_FORMAT_TYPE_STR:
+			Status = FString_WriteString(Format, Buffer);
+			break;
 
-		default						  : Status = FSTRING_FORMAT_TYPE_INVALID;
+		default: Status = FSTRING_FORMAT_TYPE_INVALID;
 	}
 
 	if (NoWrite) {
 		Format->ActualWidth	  = 0;
 		Format->ContentLength = 0;
-		if (Status == FSTRING_FORMAT_BUFFER_TOO_SMALL) Status = FSTRING_FORMAT_VALID;
+		if (Status == FSTRING_FORMAT_BUFFER_TOO_SMALL)
+			Status = FSTRING_FORMAT_VALID;
 	}
 
 	return Status;
 }
 
-/// @brief Compute the minimum size the output buffer needs to be to contain the fully formatted
-/// string, and if the buffer is large enough, write into it.
-/// @param[in,out] FormatList A pointer to the list of formats and other useful data. Format actual
-/// widths and total text size will be updated after this call. Cannot be null.
+/// @brief Compute the minimum size the output buffer needs to be to contain the
+/// fully formatted string, and if the buffer is large enough, write into it.
+/// @param[in,out] FormatList A pointer to the list of formats and other useful
+/// data. Format actual widths and total text size will be updated after this
+/// call. Cannot be null.
 /// @param[in] Buffer The buffer being written into. If this is too small,
-/// `FormatList->TotalTextSize` will be set to the required size. The buffer will be
-/// written into either way with its specified encoding, up to its max length.
+/// `FormatList->TotalTextSize` will be set to the required size. The buffer
+/// will be written into either way with its specified encoding, up to its max
+/// length.
 /// @return
 /// - `FSTRING_FORMAT_VALID`: The total size was computed successfully.
 ///
-/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided output buffer was too small to contain the
-/// full output.
+/// - `FSTRING_FORMAT_BUFFER_TOO_SMALL`: The provided output buffer was too
+/// small to contain the full output.
 ///
-/// - `FSTRING_FORMAT_TYPE_INVALID`: One of the provided formats had an invalid type.
+/// - `FSTRING_FORMAT_TYPE_INVALID`: One of the provided formats had an invalid
+/// type.
 internal fstring_format_status
 FString_WriteFormats(fstring_format_list *FormatList, string Buffer)
 {
@@ -2324,7 +2732,8 @@ FString_WriteFormats(fstring_format_list *FormatList, string Buffer)
 				break;
 
 			default:
-				fstring_format_status Status = FString_WriteFormat(Format, Buffer);
+				fstring_format_status Status =
+					FString_WriteFormat(Format, Buffer);
 				if (Status == FSTRING_FORMAT_BUFFER_TOO_SMALL) TooSmall = TRUE;
 				else if (Status != FSTRING_FORMAT_VALID) return Status;
 				String_BumpBytes(&Buffer, Format->ActualWidth);
@@ -2333,8 +2742,9 @@ FString_WriteFormats(fstring_format_list *FormatList, string Buffer)
 	}
 
 	// Add the remaining plaintext length
-	Src.Length =
-		(usize) FormatList->FormatString.Text + FormatList->FormatString.Length - (usize) Src.Text;
+	Src.Length = (usize) FormatList->FormatString.Text
+			   + FormatList->FormatString.Length
+			   - (usize) Src.Text;
 	while (Src.Length) {
 		u32 Codepoint = String_NextCodepoint(&Src);
 		if (Codepoint == '%') String_NextCodepoint(&Src);
@@ -2348,12 +2758,14 @@ FString_WriteFormats(fstring_format_list *FormatList, string Buffer)
 }
 
 /// @brief Format the provided template string with the given args.
-/// @param[in] Format A template string to insert the parameters into. See `FString` for more
-/// details.
-/// @param[in] Args A va_list of parameters to insert into the format string. These must align with
-/// the patterns in `Format` or stack corruption may occur.
-/// @return A stack-backed formatted string. If any errors occurred during parsing, this will be a
-/// copy of the format string, and an error will be logged.
+/// @param[in] Format A template string to insert the parameters into. See
+/// `FString` for more details.
+/// @param[in] Args A va_list of parameters to insert into the format string.
+/// These must align with the patterns in `Format` or stack corruption may
+/// occur.
+/// @return A stack-backed formatted string. If any errors occurred during
+/// parsing, this will be a copy of the format string, and an error will be
+/// logged.
 internal string
 FVString(string Format, va_list Args)
 {
@@ -2393,7 +2805,8 @@ FVString(string Format, va_list Args)
 		goto failed;
 	}
 
-	// Allocate the buffer on the stack. We might support other allocators later.
+	// Allocate the buffer on the stack. We might support other allocators
+	// later.
 	Buffer.Length = FormatList.TotalTextSize;
 	Buffer.Text	  = Stack_Allocate(Buffer.Length);
 
@@ -2408,19 +2821,25 @@ FVString(string Format, va_list Args)
 
 	return Buffer;
 
-// The parsing failed, so we'll return a copy of the original format string and log an error
+// The parsing failed, so we'll return a copy of the original format string and
+// log an error
 failed:
 	Stack_Push();
 	string ErrorPointer = LString(OriginalFormat.Length + 1);
 	Mem_Set(ErrorPointer.Text, ' ', ErrorPointer.Length);
 	Mem_Set(
-		ErrorPointer.Text + (usize) ErrorString.Text - (usize) OriginalFormat.Text,
+		ErrorPointer.Text
+			+ (usize) ErrorString.Text
+			- (usize) OriginalFormat.Text,
 		'^',
 		ErrorString.Length
 	);
 	string ErrorFormat =
 		FormatList.FormatCount < TotalFormats
-			? CStringL("Error parsing format string, in specifier %d: %s.\n\n%s\n%s\n\n")
+			? CStringL(
+				  "Error parsing format string, in specifier %d: "
+				  "%s.\n\n%s\n%s\n\n"
+			  )
 			: CStringL("Error parsing format string: %_d%s.\n\n%s\n%s\n\n");
 	Platform_WriteError(
 		FString(
@@ -2433,22 +2852,29 @@ failed:
 		FALSE
 	);
 	Stack_Pop();
-	return SString(OriginalFormat);
+
+	string Result = OriginalFormat;
+	Result.Text	  = Stack_Allocate(Result.Length);
+	Mem_Cpy(Result.Text, OriginalFormat.Text, Result.Length);
+	return Result;
 }
 
 /// @brief Format the provided template string with the given args.
-/// @param[in] Format A template string to insert the parameters into. It follows the standard
-/// `printf` format:
+/// @param[in] Format A template string to insert the parameters into. It
+/// follows the standard `printf` format:
 ///
-/// `'%' [ param-idx '$' ] [ flags ] [ width | '*' [ param-idx '$' ] ] [ '.' precision | '.' '*' [
-/// param-idx '$' ] ] [ size ] type`
+/// `'%' [ param-idx '$' ] [ flags ] [ width | '*' [ param-idx '$' ] ] [ '.'
+/// precision | '.' '*' [ param-idx '$' ] ] [ size ] type`
 ///
-/// See the individual parsing functions for regex. Note that either all params use `param-idx` or
-/// none do, and param indexes must span 1 to N with no skipped values.
-/// @param[in] ... A vaiadic list of parameters to insert into the format string. These must align
-/// with the patterns in `Format` or stack corruption may occur.
-/// @return A stack-backed formatted string. If any errors occurred during parsing, this will be a
-/// copy of the format string, and an error will be logged.
+/// See the individual parsing functions for regex. Note that either all params
+/// use `param-idx` or none do, and param indexes must span 1 to N with no
+/// skipped values.
+/// @param[in] ... A vaiadic list of parameters to insert into the format
+/// string. These must align with the patterns in `Format` or stack corruption
+/// may occur.
+/// @return A stack-backed formatted string. If any errors occurred during
+/// parsing, this will be a copy of the format string, and an error will be
+/// logged.
 internal string
 FString(string Format, ...)
 {
@@ -2461,42 +2887,17 @@ FString(string Format, ...)
 	return Result;
 }
 
-// TODO:
-// - Full formatting pattern documentation (don't want to pull up GCC every time)
-// - Rework printing to write to UTF32 and transcode afterward? It would reduce a lot of the nastier
-// float performance issues...
+#endif	// SECTION_STRING_FORMATTING
 
-#ifndef REGION_STRING_TESTS
+/***************************************************************************\
+|  SECTION: Tests                                                           |
+|---------------------------------------------------------------------------|
+|  Tests all functionality within this file.                                |
+\***************************************************************************/
+
+#ifndef SECTION_STRING_TESTS
 
 #define STRING_TESTS                                                                                        \
-	TEST(FString_PeekCursor, WorksCorrectly, (                                                              \
-	    c08 Result = FString_PeekCursor(NULL);                                                              \
-		Assert(Result == 0);                                                                                \
-		string Cursor = {0};                                                                                \
-	    Result = FString_PeekCursor(&Cursor);                                                               \
-		Assert(Result == 0);                                                                                \
-		Cursor = CStringL("");                                                                              \
-	    Result = FString_PeekCursor(&Cursor);                                                               \
-		Assert(Result == 0);                                                                                \
-		Cursor = CStringL("Test");                                                                          \
-	    Result = FString_PeekCursor(&Cursor);                                                               \
-		Assert(Result == 'T');                                                                              \
-	))                                                                                                      \
-	TEST(FString_BumpCursor, WorksCorrectly, (                                                              \
-	    FString_BumpCursor(NULL);                                                                           \
-		string Cursor = {0};                                                                                \
-	    FString_BumpCursor(&Cursor);                                                                        \
-		Assert(Cursor.Text == NULL);                                                                        \
-		Assert(Cursor.Length == 0);                                                                         \
-		c08 *Empty = "";                                                                                    \
-		Cursor = CString(Empty);                                                                            \
-	    FString_BumpCursor(&Cursor);                                                                        \
-		Assert(Cursor.Text == Empty);                                                                       \
-		Assert(Cursor.Length == 0);                                                                         \
-		Cursor = CStringL("Test");                                                                          \
-	    FString_BumpCursor(&Cursor);                                                                        \
-		Assert(String_Cmp(Cursor, CStringL("est")) == 0);                                                   \
-	))                                                                                                      \
 	TEST(FString_ParseFormatInt, ReportsNotPresentOnNonDigit, (                                             \
 	    fstring_format_status Result = FString_ParseFormatInt(NULL, NULL);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_NOT_PRESENT);                                                   \
@@ -2788,7 +3189,6 @@ FString(string Format, ...)
 		b08 UseIndexes = 2;                                                                                 \
 		string Cursor = CStringL("%d");                                                                     \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
@@ -2801,7 +3201,6 @@ FString(string Format, ...)
 		Assert(Format.ContentLength == 0);                                                                  \
 		Assert(Format.ActualWidth == 0);                                                                    \
 		Cursor = CStringL("%d");                                                                            \
-	    FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, NULL, &UseIndexes, FALSE);                                    \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 	))                                                                                                      \
@@ -2809,7 +3208,6 @@ FString(string Format, ...)
 		b08 UseIndexes = FALSE;                                                                             \
 		string Cursor = CStringL("%1$d");                                                                   \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
 		Assert(String_Cmp(Cursor, CStringL("$d")) == 0);                                                    \
@@ -2819,7 +3217,6 @@ FString(string Format, ...)
 		b08 UseIndexes = TRUE;                                                                              \
 		string Cursor = CStringL("%d");                                                                     \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
 		Assert(Result == FSTRING_FORMAT_INDEX_INCONSISTENT);                                                \
 		Assert(String_Cmp(Cursor, CStringL("d")) == 0);                                                     \
@@ -2830,7 +3227,6 @@ FString(string Format, ...)
 		string FormatStr = CStringL("%--++  ''##002147483647.2147483647wf64d");                             \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
@@ -2851,7 +3247,6 @@ FString(string Format, ...)
 		string FormatStr = CStringL("%--++  ''##00*.*wf64d");                                               \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
@@ -2871,7 +3266,6 @@ FString(string Format, ...)
 		string FormatStr = CStringL("%2147483647$--++  ''##00*2147483647$.*2147483647$wf64d");              \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 		Assert(String_Cmp(Cursor, CStringL("")) == 0);                                                      \
@@ -2891,7 +3285,6 @@ FString(string Format, ...)
 		string FormatStr = CStringL("%.d");                                                                 \
 		string Cursor = FormatStr;                                                                          \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, FALSE);           \
 		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
 		Assert(Format.Precision == 0);                                                                      \
@@ -2900,27 +3293,22 @@ FString(string Format, ...)
 		b08 UseIndexes = TRUE;                                                                              \
 		string Cursor = CStringL("%2147483648$d");                                                          \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
 		Assert(String_Cmp(Cursor, CStringL("8$d")) == 0);                                                   \
 		Cursor = CStringL("%2147483648d");                                                                  \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
 		Assert(String_Cmp(Cursor, CStringL("8d")) == 0);                                                    \
 		Cursor = CStringL("%*2147483648$d");                                                                \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
 		Assert(String_Cmp(Cursor, CStringL("8$d")) == 0);                                                   \
 		Cursor = CStringL("%.2147483648d");                                                                 \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
 		Assert(String_Cmp(Cursor, CStringL("8d")) == 0);                                                    \
 		Cursor = CStringL("%.*2147483648$d");                                                               \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);                                  \
 		Assert(Result == FSTRING_FORMAT_INT_OVERFLOW);                                                      \
 		Assert(String_Cmp(Cursor, CStringL("8$d")) == 0);                                                   \
@@ -2929,7 +3317,6 @@ FString(string Format, ...)
 		b08 UseIndexes = FALSE;                                                                             \
 		string Cursor = CStringL("%hhc");                                                                   \
 		fstring_format Format;                                                                              \
-		FString_BumpCursor(&Cursor);                                                                        \
 	    fstring_format_status Result = FString_ParseFormat(&Cursor, &Format, &UseIndexes, TRUE);            \
 		Assert(Result == FSTRING_FORMAT_TYPE_INVALID);                                                      \
 		Assert(String_Cmp(Cursor, CStringL("c")) == 0);                                                     \
@@ -4075,6 +4462,16 @@ FString(string Format, ...)
 		Assert(String_Cmp(Result, CStringL("Hello, Jimmy! Your lucky number today is -192%!")) == 0);       \
 		Assert(Query == 37);                                                                                \
 	))                                                                                                      \
+	TEST(FString, HandlesEncodedFormatString, (                                                             \
+		s32 Query = -1, Num = -192;                                                                         \
+		string Name = CStringL("Jimmy");                                                                    \
+		string Format = CStringL_UTF32("Hello, %s! Your lucky number today%n is %d%%!");                    \
+		string Expected = CStringL_UTF32("Hello, Jimmy! Your lucky number today is -192%!");               \
+		string Result = FString(Format, Name, &Query, Num);                                                 \
+		Assert(Result.Encoding == STRING_ENCODING_UTF32);                                                   \
+		Assert(String_Cmp(Result, Expected) == 0);                                                          \
+		Assert(Query == 148);                                                                                \
+	))                                                                                                      \
 	TEST(FString, HandlesNoFormats, (                                                                       \
 		string Format = CStringL("Hello! Your have no lucky number today. :(");                             \
 		string Result = FString(Format);                                                                    \
@@ -4110,6 +4507,6 @@ FString(string Format, ...)
 	))*/                                                                                                      \
 	//
 
-#endif
+#endif	// SECTION_STRING_TESTS
 
-#endif
+#endif	// INCLUDE_SOURCE

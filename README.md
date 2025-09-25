@@ -16,9 +16,9 @@ I believe that the best way to learn is to go as low-level as practically possib
 
 The build system treats directories within root `src` and `Platform/src` folders as modules, automatically detecting them and compiling based on the `main.c` present in each. Each module must be a unity build, e.g., all source and header files must be included into `main.c`. Below is a list of the provided modules:
 
-* `platform`: This is the base module which (hot)loads and runs modules. It contains code for each supported platform, such as `linux` and `win32`, each of which interfacing with their respective kernel-provided functions. See [Platform's README](./src/platform/README.md) for more details.
+* `platform`: This is the base module which (hot)loads and runs modules. It contains code for each supported platform, such as `linux` and `win32`, each of which interfacing with their respective kernel-provided functions. See [Platform's README](./docs/platform.md) for more details.
 * `template`: This is not a true module, but rather acts as a convenient way to jumpstart a new one. Simply copy the template and substitute `$module$` with the module's name, keeping casing consistent. Then you should be ready to go!
-* `util`: Contains a variety of utilities, libraries, and libc replacements that are generally useful for any project. See [Util's README](./src/util/README.md) for more details on what it provides.
+* `util`: Contains a variety of utilities, libraries, and libc replacements that are generally useful for any project. See [Util's README](./docs/util.md) for more details on what it provides.
 Some modules are ignored, such as `Platform/src/template`, since it's used to quickstart a new module by copying it and substituting `$MODULE$` with the module's name (respecting casing).
 * `wayland`: Windowing functionality via wayland. Will probably be moved into `platform/linux` eventually, but for now it's its own module.
 
@@ -29,25 +29,28 @@ At startup, `platform` loads and initializes itself and `util`. It additionally 
 Because causing eyes to bleed seems to be a profitable profession, in addition to modules being unity builds, they also contain no headers. Instead, most files separate the declaration and definition blocks into `#ifdef INCLUDE_HEADER` and `#ifdef INCLUDE_SOURCE` blocks. `main.c` then recursively includes itself with those flags set, effectively treating each file as both a header and source while maintaining the correct include order. Why was this decision made? I have no idea, ask me when I added it 5 years ago.
 
 Modules can export five functions which are used for hotloading and interacting with other modules. If any of these functions aren't exported, they're treated as a no-op.
-- `external API_EXPORT void Load(platform_module *Platform, platform_module *Module)`
+
+- `external void Load(platform_module *Platform, platform_module *Module)`
 
   Called when the module is loaded or reloaded. Its job is to initialize resources that must be available throughout the module's lifetime, as well as to load persistent module state into `Module->Data` and exported procedures into `Module->Funcs`. It's also used to load resources from other modules into the global namespace, such as exported `platform` and `util` functions. This is the expected time to load custom modules as well.
 
-- `external API_EXPORT void Init(platform_module *Platform)`
+- `external void Init(platform_module *Platform)`
 
   Called once after the initial load step and never again after that, even during a hotreload. Note that modules are not initialized if they're loaded after the initial load step-- this will be fixed in the future, but is something to be aware of.
 
-- `external API_EXPORT void Update(platform_module *Platform)`
+- `external void Update(platform_module *Platform)`
 
   Called repeatedly throughout the program's lifetime until termination. This is most useful for programs such as games, but can also be used as a simulation step.
 
-- `external API_EXPORT void Deinit(platform_module *Platform)`
+- `external void Deinit(platform_module *Platform)`
 
   Called once during program termination, right before the final unload. Use it to clean up any resources that are persisted across reloads.
 
-- `external API_EXPORT void Unload(platform_module *Platform)`
+- `external void Unload(platform_module *Platform)`
 
   Called when a module is unloaded, which is caused by program termination or a hotreload. The module should clean up any resources tied to the module's existence and reopen them upon `Load`.
+
+You might notice that `platform` doesn't export any of these procedures, and that's because it's the module that calls them. Instead, `platform` solely exports `external void Platform_Entry(void)` which the OS calls to start the process.
 
 ### Using It
 

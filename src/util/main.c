@@ -1,11 +1,28 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-**                                                                         **
-**  Author: Aria Seiler                                                    **
-**                                                                         **
-**  This program is in the public domain. There is no implied warranty,    **
-**  so use it at your own risk.                                            **
-**                                                                         **
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so     *
+*  use it at your own risk.                                                   *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+/// @brief This is a special, preloaded module that all other modules depend on.
+/// It provides core system services and utilities, ranging from memory
+/// allocation to arithmetic and string manipulation. It *must* be present
+/// upon load since the platform module relies on it as well.
+///
+/// The following utilities are provided:
+///  - bigint: Large, multi-word integer arithmetic.
+///  - file: Helpers to read and operate on files.
+///  - font: Load, parse, and query .ttf files.
+///  - intrin: Architecture-specific intrinsics.
+///  - memory: Memory allocators and memset/cpy/cmp.
+///  - msdf: Multi-channel signed distance field glyph generation.
+///  - scalar: Primitive integer and float operations.
+///  - set: Collection data structures, such as hashmaps and lists.
+///  - string: String constructors and operations, including formatting.
+///  - vector: Multi-dimensional primitive array operations.
 
 #if !defined(INCLUDE_SOURCE) && !defined(INCLUDE_HEADER)
 #include <shared.h>
