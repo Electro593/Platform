@@ -43,7 +43,7 @@ CompilerSwitches="$CompilerSwitches -Wno-cast-function-type -Wno-comment -Wno-si
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
 CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_OPENGL -D_WORD_SIZE=64"
 
-LinkerSwitches="$LinkerSwitches -nostdlib" # /subsystem:windows /stack:0x100000,0x100000 /machine:x64
+LinkerSwitches="$LinkerSwitches -nostdlib -lc"
 
 if [[ "$Platform" = "win32" ]]; then
 	echo "Building for win32"

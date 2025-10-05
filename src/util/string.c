@@ -2955,7 +2955,7 @@ failed:
 ///    digits to print, suffixing with zero if necessary. If zero, no decimal
 ///    point will be printed.
 ///
-///  - For %a, it and dictates the number of fractional digits to print,
+///  - For %a, it dictates the number of fractional digits to print,
 ///    suffixing with zero if necessary. If zero, no radix point will be
 ///    printed. If default, the full precision will be printed with trailing
 ///    zeroes trimmed off.

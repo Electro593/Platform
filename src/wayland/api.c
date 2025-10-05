@@ -70,7 +70,11 @@ typedef struct wayland_subcompositor	   wayland_subcompositor;
 typedef struct wayland_subsurface		   wayland_subsurface;
 typedef struct wayland_fixes			   wayland_fixes;
 
+#define WAYLAND_DISPLAY_ID 1
+#define WAYLAND_MAX_OBJECT_VERSION 6
+
 typedef enum wayland_object_type : u16 {
+	WAYLAND_OBJECT_TYPE_UNKNOWN,
 	WAYLAND_OBJECT_TYPE_DISPLAY,
 	WAYLAND_OBJECT_TYPE_REGISTRY,
 	WAYLAND_OBJECT_TYPE_CALLBACK,
@@ -94,6 +98,8 @@ typedef enum wayland_object_type : u16 {
 	WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR,
 	WAYLAND_OBJECT_TYPE_SUBSURFACE,
 	WAYLAND_OBJECT_TYPE_FIXES,
+
+	WAYLAND_OBJECT_TYPE_COUNT
 } wayland_object_type;
 
 enum wayland_display_error {
@@ -399,8 +405,13 @@ struct wayland_message {
 
 struct wayland_interface {
 	wayland_object_type Type;
-	u16					Size;
-	u32					Id;
+
+	u08 VersionMap[8];
+
+	u16 Size;
+	u32 Version;
+	u32 Id;
+	u32 Name;
 
 	void (*HandleEvent)(wayland_interface *This, wayland_message *Message);
 };
@@ -412,10 +423,10 @@ struct wayland_display {
 	wayland_registry *(*GetRegistry)(wayland_display *This);
 
 	void (*HandleError)(
-		wayland_display		 *This,
-		wayland_interface	 *Object,
-		wayland_display_error Code,
-		string				  Message
+		wayland_display	  *This,
+		wayland_interface *Object,
+		u32				   Code,
+		string			   Message
 	);
 	void (*HandleDeleteId)(wayland_display *This, u32 Id);
 };
@@ -423,7 +434,7 @@ struct wayland_display {
 struct wayland_registry {
 	wayland_interface Header;
 
-	u32 (*Bind)(wayland_registry *This, u32 Name);
+	void (*Bind)(wayland_registry *This, u32 Name, vptr Object);
 
 	void (*HandleGlobal)(
 		wayland_registry *This,
@@ -901,12 +912,29 @@ struct wayland_fixes {
 };
 
 #define WAYLAND_API_FUNCS \
-	INTERN(void, Wayland_Display_HandleEvent, wayland_display *This, wayland_message *Message) \
-	INTERN(wayland_callback*, Wayland_Display_Sync, wayland_display *This) \
+	INTERN(b08,  Wayland_IsObjectValid,     vptr Object) \
+	INTERN(vptr, Wayland_CreateObject,      wayland_object_type Type, u32 Version) \
+	INTERN(vptr, Wayland_CreateChildObject, vptr Parent, wayland_object_type Type) \
+	INTERN(void, Wayland_DeleteObject,      vptr Object) \
+	\
+	INTERN(wayland_display*,  Wayland_GetDisplay,          void) \
+	INTERN(void,              Wayland_Display_HandleEvent, wayland_display *This, wayland_message *Message) \
+	INTERN(wayland_callback*, Wayland_Display_Sync,        wayland_display *This) \
 	INTERN(wayland_registry*, Wayland_Display_GetRegistry, wayland_display *This) \
+	\
 	INTERN(void, Wayland_Registry_HandleEvent, wayland_registry *This, wayland_message *Message) \
-	INTERN(u32, Wayland_Registry_Bind, wayland_registry *This, u32 Name) \
-	INTERN(void, Wayland_Callback_HandleEvent, wayland_callback *This, wayland_message *Message)
+	INTERN(void, Wayland_Registry_Bind,        wayland_registry *This, u32 Name, vptr Object) \
+	\
+	INTERN(void, Wayland_Callback_HandleEvent, wayland_callback *This, wayland_message *Message) \
+	\
+	INTERN(void,             Wayland_Compositor_HandleEvent,   wayland_compositor *This, wayland_message *Message) \
+	INTERN(wayland_surface*, Wayland_Compositor_CreateSurface, wayland_compositor *This) \
+	INTERN(wayland_region*,  Wayland_Compositor_CreateRegion,  wayland_compositor *This) \
+	\
+	INTERN(void, Wayland_Fixes_HandleEvent,     wayland_fixes *This, wayland_message *Message) \
+	INTERN(void, Wayland_Fixes_Destroy,         wayland_fixes *This) \
+	INTERN(void, Wayland_Fixes_DestroyRegistry, wayland_fixes *This, wayland_registry *Registry) \
+	//
 
 #endif
 
@@ -914,41 +942,33 @@ struct wayland_fixes {
 #ifdef INCLUDE_SOURCE
 
 static wayland_display WaylandDisplayPrototype = {
-	.Header			= { .Type		 = WAYLAND_OBJECT_TYPE_DISPLAY,
-						.Size		 = sizeof(wayland_display),
-						.Id			 = 0,
-						.HandleEvent = (vptr) Wayland_Display_HandleEvent },
-	.Sync			= Wayland_Display_Sync,
-	.GetRegistry	= Wayland_Display_GetRegistry,
-	.HandleError	= NULL,
-	.HandleDeleteId = NULL,
+	.Header		 = { .Type		  = WAYLAND_OBJECT_TYPE_DISPLAY,
+					 .Size		  = sizeof(wayland_display),
+					 .HandleEvent = (vptr) Wayland_Display_HandleEvent },
+	.Sync		 = Wayland_Display_Sync,
+	.GetRegistry = Wayland_Display_GetRegistry,
 };
 
 static wayland_registry WaylandRegistryPrototype = {
-	.Header				= { .Type		 = WAYLAND_OBJECT_TYPE_REGISTRY,
-							.Size		 = sizeof(wayland_registry),
-							.Id			 = 0,
-							.HandleEvent = (vptr) Wayland_Registry_HandleEvent },
-	.Bind				= Wayland_Registry_Bind,
-	.HandleGlobal		= NULL,
-	.HandleGlobalRemove = NULL,
+	.Header = { .Type		 = WAYLAND_OBJECT_TYPE_REGISTRY,
+				.Size		 = sizeof(wayland_registry),
+				.HandleEvent = (vptr) Wayland_Registry_HandleEvent },
+	.Bind	= Wayland_Registry_Bind,
 };
 
 static wayland_callback WaylandCallbackPrototype = {
-	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_CALLBACK,
-					.Size		 = sizeof(wayland_callback),
-					.Id			 = 0,
-					.HandleEvent = (vptr) Wayland_Callback_HandleEvent },
-	.HandleDone = NULL,
+	.Header = { .Type		 = WAYLAND_OBJECT_TYPE_CALLBACK,
+				.Size		 = sizeof(wayland_callback),
+				.HandleEvent = (vptr) Wayland_Callback_HandleEvent },
 };
 
 static wayland_compositor WaylandCompositorPrototype = {
 	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_COMPOSITOR,
+					   .VersionMap	= { 6 },
 					   .Size		= sizeof(wayland_compositor),
-					   .Id			= 0,
-					   .HandleEvent = NULL },
-	.CreateSurface = NULL,
-	.CreateRegion  = NULL,
+					   .HandleEvent = (vptr) Wayland_Compositor_HandleEvent },
+	.CreateSurface = Wayland_Compositor_CreateSurface,
+	.CreateRegion  = Wayland_Compositor_CreateRegion,
 };
 
 static wayland_shared_memory_pool WaylandSharedMemoryPoolPrototype = {
@@ -962,75 +982,53 @@ static wayland_shared_memory_pool WaylandSharedMemoryPoolPrototype = {
 };
 
 static wayland_shared_memory WaylandSharedMemoryPrototype = {
-	.Header		  = { .Type		   = WAYLAND_OBJECT_TYPE_SHARED_MEMORY,
-					  .Size		   = sizeof(wayland_shared_memory),
-					  .Id		   = 0,
-					  .HandleEvent = NULL },
-	.CreatePool	  = NULL,
-	.Release	  = NULL,
-	.HandleFormat = NULL,
+	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_SHARED_MEMORY,
+					.Size		 = sizeof(wayland_shared_memory),
+					.HandleEvent = NULL },
+	.CreatePool = NULL,
+	.Release	= NULL,
 };
 
 static wayland_buffer WaylandBufferPrototype = {
 	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_BUFFER,
 					   .Size		= sizeof(wayland_buffer),
-					   .Id			= 0,
 					   .HandleEvent = NULL },
 	.Destroy	   = NULL,
 	.HandleRelease = NULL,
 };
 
 static wayland_data_offer WaylandDataOfferPrototype = {
-	.Header				 = { .Type		  = WAYLAND_OBJECT_TYPE_DATA_OFFER,
-							 .Size		  = sizeof(wayland_data_offer),
-							 .Id		  = 0,
-							 .HandleEvent = NULL },
-	.Accept				 = NULL,
-	.Receive			 = NULL,
-	.Destroy			 = NULL,
-	.Finish				 = NULL,
-	.SetActions			 = NULL,
-	.HandleOffer		 = NULL,
-	.HandleSourceActions = NULL,
-	.HandleAction		 = NULL,
+	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_DATA_OFFER,
+					.Size		 = sizeof(wayland_data_offer),
+					.HandleEvent = NULL },
+	.Accept		= NULL,
+	.Receive	= NULL,
+	.Destroy	= NULL,
+	.Finish		= NULL,
+	.SetActions = NULL,
 };
 
 static wayland_data_source WaylandDataSourcePrototype = {
-	.Header						= { .Type		 = WAYLAND_OBJECT_TYPE_DATA_SOURCE,
-									.Size		 = sizeof(wayland_data_source),
-									.Id			 = 0,
-									.HandleEvent = NULL },
-	.Offer						= NULL,
-	.Destroy					= NULL,
-	.SetActions					= NULL,
-	.HandleTarget				= NULL,
-	.HandleSend					= NULL,
-	.HandleCancelled			= NULL,
-	.HandleDragAndDropPerformed = NULL,
-	.HandleDragAndDropFinished	= NULL,
-	.HandleAction				= NULL,
+	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_DATA_SOURCE,
+					.Size		 = sizeof(wayland_data_source),
+					.HandleEvent = NULL },
+	.Offer		= NULL,
+	.Destroy	= NULL,
+	.SetActions = NULL,
 };
 
 static wayland_data_device WaylandDataDevicePrototype = {
-	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_DATA_DEVICE,
-						 .Size		  = sizeof(wayland_data_device),
-						 .Id		  = 0,
-						 .HandleEvent = NULL },
-	.StartDrag		 = NULL,
-	.SetSelection	 = NULL,
-	.Release		 = NULL,
-	.HandleDataOffer = NULL,
-	.HandleEnter	 = NULL,
-	.HandleLeave	 = NULL,
-	.HandleMotion	 = NULL,
-	.HandleDrop		 = NULL,
-	.HandleSelection = NULL,
+	.Header		  = { .Type		   = WAYLAND_OBJECT_TYPE_DATA_DEVICE,
+					  .Size		   = sizeof(wayland_data_device),
+					  .HandleEvent = NULL },
+	.StartDrag	  = NULL,
+	.SetSelection = NULL,
+	.Release	  = NULL,
 };
 
 static wayland_data_device_manager WaylandDataDeviceManagerPrototype = {
 	.Header			  = { .Type		   = WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER,
 						  .Size		   = sizeof(wayland_data_device_manager),
-						  .Id		   = 0,
 						  .HandleEvent = NULL },
 	.CreateDataSource = NULL,
 	.GetDataDevice	  = NULL,
@@ -1039,57 +1037,47 @@ static wayland_data_device_manager WaylandDataDeviceManagerPrototype = {
 static wayland_shell WaylandShellPrototype = {
 	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_SHELL,
 						 .Size		  = sizeof(wayland_shell),
-						 .Id		  = 0,
 						 .HandleEvent = NULL },
 	.GetShellSurface = NULL,
 };
 
 static wayland_shell_surface WaylandShellSurfacePrototype = {
-	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_SHELL_SURFACE,
-						 .Size		  = sizeof(wayland_shell_surface),
-						 .Id		  = 0,
-						 .HandleEvent = NULL },
-	.Pong			 = NULL,
-	.Move			 = NULL,
-	.Resize			 = NULL,
-	.SetToplevel	 = NULL,
-	.SetTransient	 = NULL,
-	.SetFullscreen	 = NULL,
-	.SetPopup		 = NULL,
-	.SetMaximized	 = NULL,
-	.SetTitle		 = NULL,
-	.SetClass		 = NULL,
-	.HandlePing		 = NULL,
-	.HandleConfigure = NULL,
-	.HandlePopupDone = NULL,
+	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_SHELL_SURFACE,
+					   .Size		= sizeof(wayland_shell_surface),
+					   .HandleEvent = NULL },
+	.Pong		   = NULL,
+	.Move		   = NULL,
+	.Resize		   = NULL,
+	.SetToplevel   = NULL,
+	.SetTransient  = NULL,
+	.SetFullscreen = NULL,
+	.SetPopup	   = NULL,
+	.SetMaximized  = NULL,
+	.SetTitle	   = NULL,
+	.SetClass	   = NULL,
 };
 
 static wayland_surface WaylandSurfacePrototype = {
-	.Header							= { .Type		 = WAYLAND_OBJECT_TYPE_SURFACE,
-										.Size		 = sizeof(wayland_surface),
-										.Id			 = 0,
-										.HandleEvent = NULL },
-	.Destroy						= NULL,
-	.Attach							= NULL,
-	.Damage							= NULL,
-	.Frame							= NULL,
-	.SetOpaqueRegion				= NULL,
-	.SetInputRegion					= NULL,
-	.Commit							= NULL,
-	.SetBufferTransform				= NULL,
-	.SetBufferScale					= NULL,
-	.DamageBuffer					= NULL,
-	.Offset							= NULL,
-	.HandleEnter					= NULL,
-	.HandleLeave					= NULL,
-	.HandlePreferredBufferScale		= NULL,
-	.HandlePreferredBufferTransform = NULL,
+	.Header				= { .Type		 = WAYLAND_OBJECT_TYPE_SURFACE,
+							.VersionMap	 = { 1, 2, 3, 4, 5, 6 },
+							.Size		 = sizeof(wayland_surface),
+							.HandleEvent = NULL },
+	.Destroy			= NULL,
+	.Attach				= NULL,
+	.Damage				= NULL,
+	.Frame				= NULL,
+	.SetOpaqueRegion	= NULL,
+	.SetInputRegion		= NULL,
+	.Commit				= NULL,
+	.SetBufferTransform = NULL,
+	.SetBufferScale		= NULL,
+	.DamageBuffer		= NULL,
+	.Offset				= NULL,
 };
 
 static wayland_seat WaylandSeatPrototype = {
 	.Header				= { .Type		 = WAYLAND_OBJECT_TYPE_SEAT,
 							.Size		 = sizeof(wayland_seat),
-							.Id			 = 0,
 							.HandleEvent = NULL },
 	.GetPointer			= NULL,
 	.GetKeyboard		= NULL,
@@ -1100,72 +1088,38 @@ static wayland_seat WaylandSeatPrototype = {
 };
 
 static wayland_pointer WaylandPointerPrototype = {
-	.Header						 = { .Type		  = WAYLAND_OBJECT_TYPE_POINTER,
-									 .Size		  = sizeof(wayland_pointer),
-									 .Id		  = 0,
-									 .HandleEvent = NULL },
-	.SetCursor					 = NULL,
-	.Release					 = NULL,
-	.HandleEnter				 = NULL,
-	.HandleLeave				 = NULL,
-	.HandleMotion				 = NULL,
-	.HandleButton				 = NULL,
-	.HandleAxis					 = NULL,
-	.HandleFrame				 = NULL,
-	.HandleAxisSource			 = NULL,
-	.HandleAxisStop				 = NULL,
-	.HandleAxisDiscrete			 = NULL,
-	.HandleAxisValue120			 = NULL,
-	.HandleAxisRelativeDirection = NULL,
+	.Header	   = { .Type		= WAYLAND_OBJECT_TYPE_POINTER,
+				   .Size		= sizeof(wayland_pointer),
+				   .HandleEvent = NULL },
+	.SetCursor = NULL,
+	.Release   = NULL,
 };
 
 static wayland_keyboard WaylandKeyboardPrototype = {
-	.Header			  = { .Type		   = WAYLAND_OBJECT_TYPE_KEYBOARD,
-						  .Size		   = sizeof(wayland_keyboard),
-						  .Id		   = 0,
-						  .HandleEvent = NULL },
-	.Release		  = NULL,
-	.HandleKeymap	  = NULL,
-	.HandleEnter	  = NULL,
-	.HandleLeave	  = NULL,
-	.HandleKey		  = NULL,
-	.HandleModifiers  = NULL,
-	.HandleRepeatInfo = NULL,
+	.Header	 = { .Type		  = WAYLAND_OBJECT_TYPE_KEYBOARD,
+				 .Size		  = sizeof(wayland_keyboard),
+				 .HandleEvent = NULL },
+	.Release = NULL,
 };
 
 static wayland_touch WaylandTouchPrototype = {
-	.Header			   = { .Type		= WAYLAND_OBJECT_TYPE_TOUCH,
-						   .Size		= sizeof(wayland_touch),
-						   .Id			= 0,
-						   .HandleEvent = NULL },
-	.Release		   = NULL,
-	.HandleDown		   = NULL,
-	.HandleUp		   = NULL,
-	.HandleMotion	   = NULL,
-	.HandleFrame	   = NULL,
-	.HandleCancel	   = NULL,
-	.HandleShape	   = NULL,
-	.HandleOrientation = NULL,
+	.Header	 = { .Type		  = WAYLAND_OBJECT_TYPE_TOUCH,
+				 .Size		  = sizeof(wayland_touch),
+				 .HandleEvent = NULL },
+	.Release = NULL,
 };
 
 static wayland_output WaylandOutputPrototype = {
-	.Header			   = { .Type		= WAYLAND_OBJECT_TYPE_OUTPUT,
-						   .Size		= sizeof(wayland_output),
-						   .Id			= 0,
-						   .HandleEvent = NULL },
-	.Release		   = NULL,
-	.HandleGeometry	   = NULL,
-	.HandleMode		   = NULL,
-	.HandleDone		   = NULL,
-	.HandleScale	   = NULL,
-	.HandleName		   = NULL,
-	.HandleDescription = NULL,
+	.Header	 = { .Type		  = WAYLAND_OBJECT_TYPE_OUTPUT,
+				 .Size		  = sizeof(wayland_output),
+				 .HandleEvent = NULL },
+	.Release = NULL,
 };
 
 static wayland_region WaylandRegionPrototype = {
 	.Header	  = { .Type		   = WAYLAND_OBJECT_TYPE_REGION,
+				  .VersionMap  = {},
 				  .Size		   = sizeof(wayland_region),
-				  .Id		   = 0,
 				  .HandleEvent = NULL },
 	.Destroy  = NULL,
 	.Add	  = NULL,
@@ -1175,7 +1129,6 @@ static wayland_region WaylandRegionPrototype = {
 static wayland_subcompositor WaylandSubcompositorPrototype = {
 	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR,
 					   .Size		= sizeof(wayland_subcompositor),
-					   .Id			= 0,
 					   .HandleEvent = NULL },
 	.Destroy	   = NULL,
 	.GetSubsurface = NULL,
@@ -1184,7 +1137,6 @@ static wayland_subcompositor WaylandSubcompositorPrototype = {
 static wayland_subsurface WaylandSubsurfacePrototype = {
 	.Header		 = { .Type		  = WAYLAND_OBJECT_TYPE_SUBSURFACE,
 					 .Size		  = sizeof(wayland_subsurface),
-					 .Id		  = 0,
 					 .HandleEvent = NULL },
 	.Destroy	 = NULL,
 	.SetPosition = NULL,
@@ -1197,13 +1149,77 @@ static wayland_subsurface WaylandSubsurfacePrototype = {
 static wayland_fixes WaylandFixesPrototype = {
 	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_FIXES,
 						 .Size		  = sizeof(wayland_fixes),
-						 .Id		  = 0,
-						 .HandleEvent = NULL },
-	.Destroy		 = NULL,
-	.DestroyRegistry = NULL,
+						 .HandleEvent = (vptr) Wayland_Fixes_HandleEvent },
+	.Destroy		 = Wayland_Fixes_Destroy,
+	.DestroyRegistry = Wayland_Fixes_DestroyRegistry,
 };
 
-static wayland_interface *WaylandPrototypes[] = {
+static string WaylandNames[WAYLAND_OBJECT_TYPE_COUNT] = {
+	[WAYLAND_OBJECT_TYPE_DISPLAY]	 = CStringL("wl_display"),
+	[WAYLAND_OBJECT_TYPE_REGISTRY]	 = CStringL("wl_registry"),
+	[WAYLAND_OBJECT_TYPE_CALLBACK]	 = CStringL("wl_callback"),
+	[WAYLAND_OBJECT_TYPE_COMPOSITOR] = CStringL("wl_compositor"),
+	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL] =
+		CStringL("wl_shared_memory_pool"),
+	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY] = CStringL("wl_shared_memory"),
+	[WAYLAND_OBJECT_TYPE_BUFFER]		= CStringL("wl_buffer"),
+	[WAYLAND_OBJECT_TYPE_DATA_OFFER]	= CStringL("wl_data_offer"),
+	[WAYLAND_OBJECT_TYPE_DATA_SOURCE]	= CStringL("wl_data_source"),
+	[WAYLAND_OBJECT_TYPE_DATA_DEVICE]	= CStringL("wl_data_device"),
+	[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] =
+		CStringL("wl_data_device_manager"),
+	[WAYLAND_OBJECT_TYPE_SHELL]			= CStringL("wl_shell"),
+	[WAYLAND_OBJECT_TYPE_SHELL_SURFACE] = CStringL("wl_shell_surface"),
+	[WAYLAND_OBJECT_TYPE_SURFACE]		= CStringL("wl_surface"),
+	[WAYLAND_OBJECT_TYPE_SEAT]			= CStringL("wl_seat"),
+	[WAYLAND_OBJECT_TYPE_POINTER]		= CStringL("wl_pointer"),
+	[WAYLAND_OBJECT_TYPE_KEYBOARD]		= CStringL("wl_keyboard"),
+	[WAYLAND_OBJECT_TYPE_TOUCH]			= CStringL("wl_touch"),
+	[WAYLAND_OBJECT_TYPE_OUTPUT]		= CStringL("wl_output"),
+	[WAYLAND_OBJECT_TYPE_REGION]		= CStringL("wl_region"),
+	[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR] = CStringL("wl_subcompositor"),
+	[WAYLAND_OBJECT_TYPE_SUBSURFACE]	= CStringL("wl_subsurface"),
+	[WAYLAND_OBJECT_TYPE_FIXES]			= CStringL("wl_fixes"),
+};
+
+static u08 WaylandVersionMap[WAYLAND_OBJECT_TYPE_COUNT]
+							[WAYLAND_MAX_OBJECT_VERSION + 1] = {
+								[WAYLAND_OBJECT_TYPE_DISPLAY]	 = { [1] = 1 },
+								[WAYLAND_OBJECT_TYPE_REGISTRY]	 = { [1] = 1 },
+								[WAYLAND_OBJECT_TYPE_CALLBACK]	 = { [1] = 1 },
+								[WAYLAND_OBJECT_TYPE_COMPOSITOR] = { [1] = 6 },
+								[WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL]  = {},
+								[WAYLAND_OBJECT_TYPE_SHARED_MEMORY]		  = {},
+								[WAYLAND_OBJECT_TYPE_BUFFER]			  = {},
+								[WAYLAND_OBJECT_TYPE_DATA_OFFER]		  = {},
+								[WAYLAND_OBJECT_TYPE_DATA_SOURCE]		  = {},
+								[WAYLAND_OBJECT_TYPE_DATA_DEVICE]		  = {},
+								[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] = {},
+								[WAYLAND_OBJECT_TYPE_SHELL]				  = {},
+								[WAYLAND_OBJECT_TYPE_SHELL_SURFACE]		  = {},
+								[WAYLAND_OBJECT_TYPE_SURFACE]		= { [1] = 1,
+																	[2] = 2,
+																	[3] = 3,
+																	[4] = 4,
+																	[5] = 5,
+																	[6] = 6 },
+								[WAYLAND_OBJECT_TYPE_SEAT]			= {},
+								[WAYLAND_OBJECT_TYPE_POINTER]		= {},
+								[WAYLAND_OBJECT_TYPE_KEYBOARD]		= {},
+								[WAYLAND_OBJECT_TYPE_TOUCH]			= {},
+								[WAYLAND_OBJECT_TYPE_OUTPUT]		= {},
+								[WAYLAND_OBJECT_TYPE_REGION]		= { [1] = 1,
+																	[2] = 1,
+																	[3] = 1,
+																	[4] = 1,
+																	[5] = 1,
+																	[6] = 1 },
+								[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR] = {},
+								[WAYLAND_OBJECT_TYPE_SUBSURFACE]	= {},
+								[WAYLAND_OBJECT_TYPE_FIXES]			= {},
+};
+
+static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
 	[WAYLAND_OBJECT_TYPE_DISPLAY] =
 		(wayland_interface *) &WaylandDisplayPrototype,
 	[WAYLAND_OBJECT_TYPE_REGISTRY] =
@@ -1254,23 +1270,55 @@ Wayland_AllocateObjectId(void)
 	return _G.NextObjectId++;
 }
 
-internal vptr
-Wayland_CreateObject(wayland_object_type Type)
+internal b08
+Wayland_IsObjectValid(vptr Object)
 {
-	wayland_interface *Proto  = WaylandPrototypes[Type];
+	wayland_interface *Interface = Object;
+	return Interface
+		&& Interface->Type > WAYLAND_OBJECT_TYPE_UNKNOWN
+		&& Interface->Type < WAYLAND_OBJECT_TYPE_COUNT
+		&& Interface->Version > 0
+		&& Interface->Version < WAYLAND_MAX_OBJECT_VERSION;
+}
+
+internal vptr
+Wayland_CreateObject(wayland_object_type Type, u32 Version)
+{
+	if (!_G.NextObjectId
+		|| Type == WAYLAND_OBJECT_TYPE_UNKNOWN
+		|| Type >= WAYLAND_OBJECT_TYPE_COUNT)
+		return NULL;
+
+	wayland_interface *Proto = WaylandPrototypes[Type];
+	if (!Proto) return NULL;
+
 	wayland_interface *Object = Heap_AllocateA(_G.Heap, Proto->Size);
 	Mem_Cpy(Object, Proto, Proto->Size);
 	Object->Id = Wayland_AllocateObjectId();
 	HashMap_Add(&_G.IdTable, &Object->Id, &Object);
+	Object->Version = Version ? Version : 1;
 	return Object;
+}
+
+internal vptr
+Wayland_CreateChildObject(vptr Parent, wayland_object_type Type)
+{
+	if (!Wayland_IsObjectValid(Parent)) return NULL;
+
+	u32 ParentVersion = ((wayland_interface *) Parent)->Version;
+	u32 Version		  = WaylandVersionMap[Type][ParentVersion];
+
+	return Wayland_CreateObject(Type, WaylandVersionMap[Type][Version]);
 }
 
 internal void
 Wayland_DeleteObject(vptr Object)
 {
-	wayland_interface *Obj = Object;
-	HashMap_Remove(&_G.IdTable, &Obj->Id, NULL);
-	Mem_Set(Object, 0, Obj->Size);
+	if (!Wayland_IsObjectValid(Object)) return;
+
+	wayland_interface *Interface = Object;
+	HashMap_Remove(&_G.IdTable, &Interface->Id, NULL);
+	Mem_Set(Object, 0, Interface->Size);
 	Heap_FreeA(Object);
 }
 
@@ -1365,7 +1413,8 @@ Wayland_HandleNextEvent(void)
 
 	wayland_interface *Object;
 	HashMap_Get(&_G.IdTable, &Message->ObjectId, &Object);
-	if (!Object) return NULL;
+
+	if (!Wayland_IsObjectValid(Object)) return NULL;
 	if (Object->HandleEvent) Object->HandleEvent(Object, Message);
 
 	Stack_Pop();
@@ -1447,6 +1496,23 @@ Wayland_ParseObject(wayland_message *Message, usize *I)
 	return Prim;
 }
 
+internal wayland_display *
+Wayland_GetDisplay()
+{
+	if (_G.IdTable.EntryCount) {
+		wayland_display *Display;
+		u32				 Id = WAYLAND_DISPLAY_ID;
+		HashMap_Get(&_G.IdTable, &Id, &Display);
+		if (!Wayland_IsObjectValid(Display)
+			|| Display->Header.Type != WAYLAND_OBJECT_TYPE_DISPLAY)
+			return NULL;
+		return Display;
+	} else {
+		_G.NextObjectId = WAYLAND_DISPLAY_ID;
+		return Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY, 1);
+	}
+}
+
 internal void
 Wayland_Display_HandleEvent(wayland_display *This, wayland_message *Message)
 {
@@ -1462,7 +1528,7 @@ internal wayland_callback *
 Wayland_Display_Sync(wayland_display *This)
 {
 	wayland_callback *Callback =
-		Wayland_CreateObject(WAYLAND_OBJECT_TYPE_CALLBACK);
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_CALLBACK);
 	Wayland_SendMessage(This->Header.Id, 0, 1, Callback->Header.Id);
 	return Callback;
 }
@@ -1471,7 +1537,7 @@ internal wayland_registry *
 Wayland_Display_GetRegistry(wayland_display *This)
 {
 	wayland_registry *Registry =
-		Wayland_CreateObject(WAYLAND_OBJECT_TYPE_REGISTRY);
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_REGISTRY);
 	Wayland_SendMessage(This->Header.Id, 1, 1, Registry->Header.Id);
 	return Registry;
 }
@@ -1485,12 +1551,12 @@ Wayland_Registry_HandleEvent(wayland_registry *This, wayland_message *Message)
 	}
 }
 
-internal u32
-Wayland_Registry_Bind(wayland_registry *This, u32 Name)
+internal void
+Wayland_Registry_Bind(wayland_registry *This, u32 Name, vptr Object)
 {
-	u32 NewId = Wayland_AllocateObjectId();
-	Wayland_SendMessage(This->Header.Id, 0, 2, Name, NewId);
-	return NewId;
+	wayland_interface *Interface = Object;
+	Wayland_SendMessage(This->Header.Id, 0, 2, Name, Interface->Id);
+	Interface->Name = Name;
 }
 
 internal void
@@ -1499,6 +1565,55 @@ Wayland_Callback_HandleEvent(wayland_callback *This, wayland_message *Message)
 	switch (Message->Opcode) {
 		case 0: TRYCALL(This, HandleDone, Message, Uint); break;
 	}
+}
+
+internal void
+Wayland_Compositor_HandleEvent(
+	wayland_compositor *This,
+	wayland_message	   *Message
+)
+{
+	switch (Message->Opcode) {
+	}
+}
+
+internal wayland_surface *
+Wayland_Compositor_CreateSurface(wayland_compositor *This)
+{
+	wayland_surface *Surface =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_SURFACE);
+	Wayland_SendMessage(This->Header.Id, 0, 1, Surface->Header.Id);
+	return Surface;
+}
+
+internal wayland_region *
+Wayland_Compositor_CreateRegion(wayland_compositor *This)
+{
+	wayland_region *Region =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_REGION);
+	Wayland_SendMessage(This->Header.Id, 1, 1, Region->Header.Id);
+	return Region;
+}
+
+internal void
+Wayland_Fixes_HandleEvent(wayland_fixes *This, wayland_message *Message)
+{
+	switch (Message->Opcode) {
+	}
+}
+
+internal void
+Wayland_Fixes_Destroy(wayland_fixes *This)
+{
+	Wayland_SendMessage(This->Header.Id, 0, 0);
+	Wayland_DeleteObject(This);
+}
+
+internal void
+Wayland_Fixes_DestroyRegistry(wayland_fixes *This, wayland_registry *Registry)
+{
+	Wayland_SendMessage(This->Header.Id, 1, 1, Registry->Header.Id);
+	Wayland_DeleteObject(Registry);
 }
 
 #undef TRYCALL

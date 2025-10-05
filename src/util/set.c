@@ -43,7 +43,7 @@ typedef struct hashmap {
    EXPORT(b08,     HashMap_Get,          hashmap *Map, vptr Key, vptr ValueOut) \
    EXPORT(b08,     HashMap_Remove,       hashmap *Map, vptr Key, vptr ValueOut) \
    EXPORT(b08,     HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
-   EXPORT(void,     HashMap_Free,         hashmap *Map)
+   EXPORT(void,    HashMap_Free,         hashmap *Map)
 
 #endif
 

@@ -41,6 +41,8 @@
 
 #define Error(Message) do { Platform_Assert(__FILE__, __LINE__, "", Message); STOP; } while(0)
 
+#define Printf(Format, ...) Platform_WriteConsole(FString(CString(Format), __VA_ARGS__))
+
 #ifdef _DEBUG
 #define Assert(Expression, ...)                                               \
     do {                                                                      \

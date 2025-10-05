@@ -21,13 +21,24 @@
 
 internal void
 Wayland_Display_HandleError(
-	wayland_display		 *This,
-	wayland_interface	 *Object,
-	wayland_display_error Code,
-	string				  Message
+	wayland_display	  *This,
+	wayland_interface *Object,
+	u32				   Code,
+	string			   Message
 )
 {
-	STOP;
+	Platform_WriteError(
+		FStringL(
+			"[WAYLAND] An error occurred in a %s v%d with id %d: Error %d: "
+			"%s\n",
+			WaylandNames[Object->Type],
+			Object->Version,
+			Object->Id,
+			Code,
+			Message
+		),
+		0
+	);
 }
 
 internal void
@@ -44,13 +55,37 @@ Wayland_Registry_HandleGlobal(
 	u32				  Version
 )
 {
-	STOP;
+#define MAYBE_BIND(NAME, FIELD, TYPE, VERSION)                                \
+	if (String_Cmp(Interface, CStringL("wl_" #NAME)) == 0                     \
+		&& Version >= VERSION)                                                \
+	{                                                                         \
+		_G.FIELD =                                                            \
+			Wayland_CreateObject(WAYLAND_OBJECT_TYPE_##TYPE, VERSION);        \
+		CALL(This, Bind, Name, _G.FIELD);                                     \
+	} else
+
+	MAYBE_BIND(compositor, Compositor, COMPOSITOR, 1)
+	MAYBE_BIND(shm, SharedMemory, SHARED_MEMORY, 1)
+	MAYBE_BIND(data_device_manager, DataDeviceManager, DATA_DEVICE_MANAGER, 1)
+	MAYBE_BIND(fixes, Fixes, FIXES, 1) { }
+
+#undef MAYBE_BIND
 }
 
 internal void
 Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)
 {
-	STOP;
+#define MAYBE_DELETE(FIELD)                        \
+	if (_G.FIELD && Name == _G.FIELD->Header.Name) \
+		Wayland_DeleteObject(_G.FIELD);            \
+	else
+
+	MAYBE_DELETE(Compositor)
+	MAYBE_DELETE(SharedMemory)
+	MAYBE_DELETE(DataDeviceManager)
+	MAYBE_DELETE(Fixes) { }
+
+#undef MAYBE_DELETE
 }
 
 internal void
@@ -82,8 +117,7 @@ Wayland_TryInit(void)
 		_G.IdTable =
 			HashMap_Init(_G.Heap, sizeof(u32), sizeof(wayland_interface *));
 
-		_G.NextObjectId = 1;
-		_G.Display		= Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY);
+		_G.Display				   = Wayland_GetDisplay();
 		_G.Display->HandleError	   = Wayland_Display_HandleError;
 		_G.Display->HandleDeleteId = Wayland_Display_HandleDeleteId;
 

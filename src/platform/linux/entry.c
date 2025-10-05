@@ -41,10 +41,30 @@ global sys_timespec ClockResolution;
 
 #ifdef _OPENGL
 
+internal opengl_funcs OpenGLFuncs;
+
+extern vptr dlopen(c08 *Path, s32 Flags);
+extern vptr dlsym(vptr Handle, c08 *Symbol);
+extern c08 *dlerror(void);
+
 internal opengl_funcs *
 Platform_LoadOpenGL(void)
 {
-	return 0;
+	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
+
+	vptr Handle = dlopen("/usr/lib/libGL.so", 2);
+
+	if (!Handle) {
+		c08 *Message = dlerror();
+		Platform_WriteError(FStringL("%s\n", CString(Message)), 1);
+	}
+
+#define IMPORT(R, N, ...) OpenGLFuncs.OpenGL_##N = dlsym(Handle, "gl" #N);
+#define X OPENGL_FUNCS
+#include <x.h>
+
+	OpenGLFuncs.Initialized = TRUE;
+	return &OpenGLFuncs;
 }
 
 #endif
