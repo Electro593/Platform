@@ -98,9 +98,6 @@ typedef enum fstring_format_status {
 	/// formatted output.
 	FSTRING_FORMAT_BUFFER_TOO_SMALL,
 
-	/// @brief A provided string param's encoding didn't match its specifier.
-	FSTRING_FORMAT_ENCODING_INVALID,
-
 	/// @brief The requested feature isn't yet implemented. Sorry!
 	FSTRING_FORMAT_NOT_IMPLEMENTED,
 } fstring_format_status;
@@ -163,9 +160,6 @@ typedef enum fstring_format_type {
 	FSTRING_FORMAT_FLAG_FLOAT_EXP = 0x100,
 	FSTRING_FORMAT_FLAG_FLOAT_FIT = 0x200,
 	FSTRING_FORMAT_FLAG_FLOAT_HEX = 0x400,
-
-	FSTRING_FORMAT_FLAG_STR_BYTE = 0x0,
-	FSTRING_FORMAT_FLAG_STR_WIDE = 0x100,
 
 	FSTRING_FORMAT_FLAG_CHR_BYTE = 0x0,
 	FSTRING_FORMAT_FLAG_CHR_WIDE = 0x100,
@@ -885,10 +879,6 @@ global string FStringFormatStatusDescriptions[] = {
 	),
 	[FSTRING_FORMAT_BUFFER_TOO_SMALL] =
 		CStringL("The provided output buffer was too small"),
-	[FSTRING_FORMAT_ENCODING_INVALID] = CStringL(
-		"A string was provided with an encoding that didn't match what the "
-		"specifier expected"
-	),
 	[FSTRING_FORMAT_NOT_IMPLEMENTED] =
 		CStringL("The requested format isn't implemented yet"),
 };
@@ -929,8 +919,8 @@ global fstring_format_type FStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 		S('A', TYPE_R64 | FSTRING_FORMAT_FLAG_FLOAT_HEX | FSTRING_FORMAT_FLAG_UPPERCASE),
 		S('c', TYPE_CHR | FSTRING_FORMAT_FLAG_CHR_BYTE),
 		S('C', TYPE_CHR | FSTRING_FORMAT_FLAG_CHR_WIDE),
-		S('s', TYPE_STR | FSTRING_FORMAT_FLAG_STR_BYTE),
-		S('S', TYPE_STR | FSTRING_FORMAT_FLAG_STR_WIDE),
+		S('s', TYPE_STR),
+		S('S', TYPE_STR),
 		S('p', TYPE_PTR),
 		S('T', TYPE_B08),
 		S('n', TYPE_QUERY32),
@@ -969,7 +959,7 @@ global fstring_format_type FStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 		S('x', TYPE_U64 | FSTRING_FORMAT_FLAG_INT_HEX),
 		S('X', TYPE_U64 | FSTRING_FORMAT_FLAG_INT_HEX | FSTRING_FORMAT_FLAG_UPPERCASE),
 		S('c', TYPE_CHR | FSTRING_FORMAT_FLAG_CHR_WIDE),
-		S('s', TYPE_STR | FSTRING_FORMAT_FLAG_STR_WIDE),
+		S('s', TYPE_STR),
 		S('n', TYPE_QUERY64),
 	},
 	[FSTRING_FORMAT_SIZE_LONGLONG] = {
@@ -1544,10 +1534,6 @@ end:
 /// - `FSTRING_FORMAT_INT_OVERFLOW`: A width param was -2^31, which overflows on
 /// absolute value. `FormatList.FormatString` will span the specifier where this
 /// occurred.
-///
-/// - `FSTRING_FORMAT_ENCODING_INVALID`: A provided string param had an encoding
-/// mismatch. `FormatList.FormatString` will span the specifier where this
-/// occurred.
 internal fstring_format_status
 FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 {
@@ -1677,21 +1663,6 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 		Format = &FormatList->Formats[I];
 
 		Format->Value = Params[Format->ValueIndex - 1];
-		if ((Format->Type & FSTRING_FORMAT_TYPE_MASK)
-			== FSTRING_FORMAT_TYPE_STR)
-		{
-			if (Format->Type & FSTRING_FORMAT_FLAG_STR_WIDE
-					? Format->Value.String->Encoding != STRING_ENCODING_UTF32
-					: Format->Value.String->Encoding != STRING_ENCODING_ASCII
-						  && Format->Value.String->Encoding
-								 != STRING_ENCODING_UTF8)
-			{
-				Stack_Pop();
-				FormatList->FormatString = Format->SpecifierString;
-				FormatList->FormatCount	 = I;
-				return FSTRING_FORMAT_ENCODING_INVALID;
-			}
-		}
 
 		if (Format->Type & FSTRING_FORMAT_FLAG_PARAM_WIDTH) {
 			Format->Width = Params[Format->WidthIndex - 1].Signed;
@@ -2956,7 +2927,7 @@ failed:
 /// Format specifiers can be in one of two forms. All formats in the string
 /// must use the same form:
 ///  - '%' [ flags ] [ width | '*' ] [ '.' [ precision | '*' ] ] [ size ]
-///  type
+///    type
 ///
 ///  - '%' index '$' [ flags ] [ width | '*' index '$' ]
 ///    [ '.' [ precision | '*' index '$' ] ] [ size ] type
@@ -2972,7 +2943,7 @@ failed:
 ///
 /// Precision generally specifies the minimum number of digits to print. If
 /// a precision would cause the full value to be cut off, the next smallest
-/// digit is rounded away from zero. You can also specidy '*' instead of a
+/// digit is rounded away from zero. You can also specify '*' instead of a
 /// number to read the next param as an s32 and use its value as precision.
 /// Negative values will be treated as default. Precision cannot be larger
 /// than S32_MAX. If you specify '.' but no precision, it will be treated as
@@ -2980,14 +2951,18 @@ failed:
 ///  - For %d, %i, %x, %o, and %b, it defaults to 1 and dictates the minimum
 ///    number of digits to print, prefixing with zero if necessary.
 ///
-///  - For %f, %e, and %a, it defaults to 6 and dictates the number of
-///    fractional digits to print, suffixing with zero if necessary. If
-///    zero, no decimal point will be printed.
+///  - For %f and %e, it defaults to 6 and dictates the number of fractional
+///    digits to print, suffixing with zero if necessary. If zero, no decimal
+///    point will be printed.
+///
+///  - For %a, it and dictates the number of fractional digits to print,
+///    suffixing with zero if necessary. If zero, no radix point will be
+///    printed. If default, the full precision will be printed with trailing
+///    zeroes trimmed off.
 ///
 ///  - For %g, it defaults to 1 and dictates the number of significant
-///  digits to
-///    print. Zero is also treated as 1. If 1, no decimal point will be
-///    printed.
+///    digits to print. Zero is also treated as 1. If 1, no decimal point will
+///    be printed.
 ///
 /// Flags control various formatting styles. They can be repeated as many
 /// times as you'd like. The following flags are supported:
@@ -2996,17 +2971,14 @@ failed:
 ///    the result to the left.
 ///
 ///  - '+': Prefix Sign. For %d, %i, %f, %e, %g, and %a, this forces '+' to
-///  be
-///    prefixed for positive values.
+///    be prefixed for positive values.
 ///
 ///  - ' ': Prefix Space. For %d, %i, %f, %e, %g, and %a, this forces ' ' to
-///  be
-///    prefixed for positive values. This does nothing if Prefix Sign is
+///    be prefixed for positive values. This does nothing if Prefix Sign is
 ///    specified as well.
 ///
 ///  - '#': Specify Radix. This usually prints radix-specific information.
-///  For
-///    %x, prefix with '0x'. For %o, prefix with '0'. For %b, prefix with
+///    For %x, prefix with '0x'. For %o, prefix with '0'. For %b, prefix with
 ///    '0b'. For %a, %f, and %e, force '.' even with no fractional digits.
 ///    For %g, force '.' and don't trim trailing zeroes.
 ///
@@ -3016,19 +2988,76 @@ failed:
 ///    for octal.
 ///
 ///  - '0': Pad With Zero. This extends integer values with leading zeroes
-///  up to
-///    the format's width, rather than padding with spaces. These zeroes are
-///    delimited if Separate Groups is flagged as well. A group delimiter
+///    up to the format's width, rather than padding with spaces. These zeroes
+///    are delimited if Separate Groups is flagged as well. A group delimiter
 ///    may cause the result to exceed the format's width by at most one
 ///    digit. This does nothing if Left Justify or a precision is specified.
 ///
 ///  - '_': No Write. This reads a param as the provided type but does not
-///  print
-///    it, which can be useful to skip params or indexes.
+///    print it, which can be useful to skip params or indexes.
 ///
-/// See the individual parsing functions for regex. Note that either all
-/// params use `param-idx` or none do, and param indexes must span 1 to N
-/// with no skipped values.
+/// Indexes specify which parameter to use for the type, width, or precision.
+/// For example, `%2$*1$.*3$` would specify width via the first parameter, the
+/// value via the second, and precision via the third. Indexes must be at least
+/// 1 and no greater than S32_MAX. You cannot skip any indexes due to
+/// limitations with C varargs, but you can use the '_' flag to achieve the same
+/// effect. You cannot redefine a parameter to be different types-- for example,
+/// `%1$*1$f` is invalid because you're defining parameter 1 as both an r64 (the
+/// value) and an s32 (width). Note that `%1$*1$d` is valid since both specify
+/// s32.
+///
+/// Type specifies what kind of data a parameter should be printed as. Some
+/// types allow uppercase variants-- those will capitalize any relevant
+/// alphabetical characters in their outputs. Note that '%C' and '%S' will not
+/// capitalize their contents. The following parameters are supported:
+///  - %d/%i : Signed decimal integer.
+///  - %u    : Unsigned decimal integer.
+///  - %o    : Unsigned octal integer. Uses the digits [0-7].
+///  - %x/%X : Unsigned hexadecimal integer. Uses the digits [0-9a-f].
+///  - %b/%B : Unsigned binary integer. Uses the digits [01].
+///  - %f/%F : Standard float. Prints as 'nan', 'inf', or `[-]ddd.ddd`.
+///  - %e/%E : Exponential float. Prints as 'nan', 'inf', or `[-]d.ddde[+-]dd`.
+///  - %g/%G : Fit float. Prints as exponential if the exponent would be >=
+///            precision or < -4. Otherwise, prints as standard.
+///  - %a/%A : Hex float. Prints as 'nan', 'inf', or `[-]0xh.hhhp[+-]dd`. The
+///            whole digit will always be 1 unless the number is denormal or
+///            zero, in which case it will be zero.
+///  - %T    : Boolean value. Prints 'true' or 'false'.
+///  - %c/%C : Character. Wide characters (%C and %lc) are unicode codepoints.
+///  - %s/%S : String. It's transcoded into the output encoding.
+///  - %p    : Pointer. Will be treated as %#x regardless of flags or precision.
+///  - %n    : Query. The integer it points to will be updated with the current
+///            number of characters output at that point.
+///
+/// Size refers to a character sequence that denotes, in combination with type,
+/// what kind of data to interpret each parameter as. The following sizes are
+/// supported:
+///
+/// |      | %d/%i | %u    | %f/%F | %T  | %c  | %C  | %s/%S  |  %p  |  %n  |
+/// |      |       | %o    | %e/%E |     |     |     |        |      |      |
+/// |      |       | %x/%X | %g/%G |     |     |     |        |      |      |
+/// |      |       | %b/%B | %a/%A |     |     |     |        |      |      |
+/// |------|-------|-------|-------|-----|-----|-----|--------|------|------|
+/// |      |  s32  |  u32  |  r64  | b08 | c08 | c32 | string | vptr | s32* |
+/// | hh   |  s08  |  u08  |       |     |     |     |        |      |      |
+/// | h    |  s16  |  u16  |       |     |     |     |        |      | s16* |
+/// | l    |  s64  |  u64  |       |     | c32 |     | string |      | s64* |
+/// | ll   |  s64  |  u64  |       |     |     |     |        |      |      |
+/// | q    |  s64  |  u64  |       |     |     |     |        |      |      |
+/// | L    |       |       |  r64  |     |     |     |        |      |      |
+/// | j    | ssize | usize |       |     |     |     |        |      |      |
+/// | t    | ssize | usize |       |     |     |     |        |      |      |
+/// | z    | ssize | usize |       |     |     |     |        |      |      |
+/// | Z    | ssize | usize |       |     |     |     |        |      |      |
+/// | w8   |  s08  |  u08  |       |     |     |     |        |      |      |
+/// | w16  |  s16  |  u16  |       |     |     |     |        |      |      |
+/// | w32  |  s32  |  u32  |       |     |     |     |        |      |      |
+/// | w64  |  s64  |  u64  |       |     |     |     |        |      |      |
+/// | wf8  |  s08  |  u08  |       |     |     |     |        |      |      |
+/// | wf16 |  s16  |  u16  |       |     |     |     |        |      |      |
+/// | wf32 |  s32  |  u32  |       |     |     |     |        |      |      |
+/// | wf64 |  s64  |  u64  |       |     |     |     |        |      |      |
+///
 /// @param[in] ... A vaiadic list of parameters to insert into the format
 /// string. These must align with the patterns in `Format` or stack
 /// corruption may occur.
@@ -3334,7 +3363,7 @@ FString(string Format, ...)
 		Assert(Type == (FSTRING_FORMAT_TYPE_CHR | FSTRING_FORMAT_FLAG_CHR_WIDE));                           \
 		Type = 0;                                                                                           \
 		FString_ParseFormatType(&Cursor, &Type);                                                            \
-		Assert(Type == (FSTRING_FORMAT_TYPE_STR | FSTRING_FORMAT_FLAG_CHR_WIDE));                           \
+		Assert(Type == (FSTRING_FORMAT_TYPE_STR));                                                          \
 		Type = 0;                                                                                           \
 		FString_ParseFormatType(&Cursor, &Type);                                                            \
 		Assert(Type == FSTRING_FORMAT_TYPE_B08);                                                            \
@@ -3634,31 +3663,6 @@ FString(string Format, ...)
 		Assert(FormatList.ExtraData = FormatList.Formats[1].Value.String + 1);                              \
 		Assert(String_Cmp(*FormatList.Formats[1].Value.String, CStringL("Hi!")) == 0);                      \
 		Assert(FormatList.FormatCount == 2);                                                                \
-		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
-	))                                                                                                      \
-	TEST(FString_UpdateParamReferences, ReportsInvalidStringEncoding, (                                     \
-		string FormatStr = CStringL("%*d %ls");                                                             \
-		fstring_format_list FormatList;                                                                     \
-	    fstring_format_status Result = FString_ParseFormatString(&FormatStr, &FormatList);                  \
-		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-	    usize Cursor = (usize) Stack_GetCursor();                                                           \
-	    Result = FString_UpdateParamReferences(&FormatList, 23, 2, CStringL("Hi!"));                        \
-		Assert(Result == FSTRING_FORMAT_ENCODING_INVALID);                                                  \
-		Assert(String_Cmp(FormatList.FormatString, CStringL("%ls")) == 0);                                  \
-		Assert(FormatList.FormatCount == 1);                                                                \
-		FormatStr = CStringL("%*d %s");                                                                     \
-	    Result = FString_ParseFormatString(&FormatStr, &FormatList);                                        \
-		Assert(Result == FSTRING_FORMAT_VALID);                                                             \
-	    string Param = LString(12);                                                                         \
-	    Param.Encoding = STRING_ENCODING_UTF32;                                                             \
-		Param.Text32[0] = 'H';                                                                              \
-		Param.Text32[1] = 'i';                                                                              \
-		Param.Text32[2] = '!';                                                                              \
-	    Cursor = (usize) Stack_GetCursor();                                                                 \
-	    Result = FString_UpdateParamReferences(&FormatList, 23, 2, Param);                                  \
-		Assert(Result == FSTRING_FORMAT_ENCODING_INVALID);                                                  \
-		Assert(String_Cmp(FormatList.FormatString, CStringL("%s")) == 0);                                   \
-		Assert(FormatList.FormatCount == 1);                                                                \
 		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsOverflowedWidthParam, (                                      \
