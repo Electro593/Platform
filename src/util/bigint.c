@@ -99,7 +99,7 @@ BigInt_SInit(usize WordCount, ...)
 internal bigint
 BigInt_SScalar(ssize Value)
 {
-	if ((shalf) Value == Value) return BigInt(Value);
+	if (Value >= SHALF_MIN && Value <= SHALF_MAX) return BigInt(Value);
 	return BigInt_SInit(
 		2,
 		(usize) Value & UHALF_MAX,
@@ -446,7 +446,26 @@ BigInt_SSub(bigint A, bigint B)
 internal bigint
 BigInt_SNegate(bigint A)
 {
-	return BigInt_SSub(BigInt(0), A);
+	bigint AP = BigInt_Flatten(A);
+	if (AP.WordCount == 0) return BigInt_SScalar(-(ssize) AP.Word);
+	if (AP.WordCount == 1) return BigInt_SScalar(-(ssize) AP.Words[0]);
+	if (BigInt_IsZero(AP)) return BigInt(0);
+
+	bigint Result	  = BigInt_SAllocate(AP.WordCount + 1);
+	b08	   IsNegative = AP.SWords[AP.WordCount - 1] < 0;
+
+	usize C = 1;
+	for (usize I = 0; I < AP.WordCount; I++) {
+		usize D			= (~AP.Words[I] & UHALF_MAX) + C;
+		C				= D >> UHALF_BITS;
+		Result.Words[I] = D & UHALF_MAX;
+	}
+
+	usize D = Result.Words[AP.WordCount] = IsNegative ? C : C ? 0 : UHALF_MAX;
+	usize HasSign = Result.Words[AP.WordCount - 1] >> (UHALF_BITS - 1);
+	if ((D == UHALF_MAX && HasSign) || (D == 0 && !HasSign)) Result.WordCount--;
+
+	return Result;
 }
 
 internal bigint
@@ -456,71 +475,71 @@ BigInt_SAbs(bigint A)
 }
 
 internal bigint
-_BigInt_SMul(bigint A, bigint B, usize M)
-{
-	if (M == 1) {
-		usize Product = (usize) A.Words[0] * (usize) B.Words[0];
-		if (Product <= ((1ull << (UHALF_BITS - 1)) - 1)) return BigInt(Product);
-		return BigInt_SInit(2, Product & UHALF_MAX, Product >> UHALF_BITS);
-	} else {
-		bigint A0 = BigInt_Splice(&A, 0, M / 2);
-		bigint B0 = BigInt_Splice(&B, 0, M / 2);
-		bigint A1 = BigInt_Splice(&A, M / 2, M);
-		bigint B1 = BigInt_Splice(&B, M / 2, M);
-
-		bigint P00 = _BigInt_SMul(A0, B0, M / 2);
-		bigint P01 = _BigInt_SMul(A0, B1, M - M / 2);
-		bigint P10 = _BigInt_SMul(A1, B0, M - M / 2);
-		bigint P11 = _BigInt_SMul(A1, B1, M - M / 2);
-
-		bigint Cross = BigInt_SAdd(P01, P10);
-		Cross		 = BigInt_SShift(Cross, M / 2 * UHALF_BITS);
-		P11			 = BigInt_SShift(P11, 2 * (M / 2) * UHALF_BITS);
-
-		bigint Result = BigInt_SAdd(P00, Cross);
-		Result		  = BigInt_SAdd(Result, P11);
-		return BigInt_Flatten(Result);
-	}
-}
-
-internal bigint
 BigInt_SMul(bigint A, bigint B)
 {
 	bigint AP = BigInt_Flatten(A);
 	bigint BP = BigInt_Flatten(B);
 
-	if (!AP.WordCount) AP.SWords = &A.Word, AP.WordCount = 1;
-	if (!BP.WordCount) BP.SWords = &B.Word, BP.WordCount = 1;
+	if (!AP.WordCount) {
+		if (AP.Word == 1) return BP;
+		if (AP.Word == 0) return BigInt(0);
+		if (AP.Word == -1) return BigInt_SNegate(BP);
+		if (!BP.WordCount) return BigInt_SScalar(AP.Word * (ssize) BP.Word);
+		AP.SWords = &A.Word;
+		AP.WordCount++;
+	}
+
+	if (!BP.WordCount) {
+		if (BP.Word == 1) return AP;
+		if (BP.Word == 0) return BigInt(0);
+		if (BP.Word == -1) return BigInt_SNegate(AP);
+		BP.SWords = &B.Word;
+		BP.WordCount++;
+	}
 
 	Stack_Push();
 
+	b08 Negated	   = FALSE;
 	b08 IsNegative = FALSE;
 	if (BigInt_IsNegative(AP)) {
 		AP		   = BigInt_SNegate(AP);
 		IsNegative = !IsNegative;
+		Negated	   = TRUE;
 	}
 	if (BigInt_IsNegative(BP)) {
 		BP		   = BigInt_SNegate(BP);
 		IsNegative = !IsNegative;
+		Negated	   = TRUE;
+	}
+	if (!Negated) Stack_Pop();
+
+	bigint Product = BigInt_SAllocate(AP.WordCount + BP.WordCount + 1);
+	Mem_Set(Product.Words, 0, Product.WordCount * sizeof(uhalf));
+
+	for (usize I = 0; I < BP.WordCount; I++) {
+		usize P = 0;
+		for (usize J = 0; J < AP.WordCount; J++) {
+			P += AP.Words[J] * (usize) BP.Words[I];
+			P += Product.Words[I + J];
+
+			Product.Words[I + J] = P & UHALF_MAX;
+
+			P >>= UHALF_BITS;
+		}
+		Product.Words[I + AP.WordCount] = P;
 	}
 
-	bigint Result;
-	if (BigInt_IsZero(A) || BigInt_IsZero(B)) Result = BigInt(0);
-	else if (AP.WordCount == 1 && AP.SWords[0] == 1) Result = BP;
-	else if (BP.WordCount == 1 && BP.SWords[0] == 1) Result = AP;
-	else Result = _BigInt_SMul(AP, BP, MAX(AP.WordCount, BP.WordCount));
+	if (IsNegative) Product = BigInt_SNegate(Product);
+	else Product = BigInt_Flatten(Product);
 
-	if (IsNegative) Result = BigInt_SNegate(Result);
+	if (Negated) {
+		Stack_Pop();
+		vptr OldWords = Product.Words;
+		Product.Words = Stack_Allocate(Product.WordCount * sizeof(uhalf));
+		Mem_Cpy(Product.Words, OldWords, Product.WordCount * sizeof(uhalf));
+	}
 
-	Stack_Pop();
-
-	if (!Result.WordCount) return Result;
-	if (Result.WordCount == 1) return BigInt(Result.SWords[0]);
-
-	vptr OldWords = Result.Words;
-	Result.Words  = Stack_Allocate(Result.WordCount * sizeof(uhalf));
-	Mem_Cpy(Result.Words, OldWords, Result.WordCount * sizeof(uhalf));
-	return Result;
+	return Product;
 }
 
 internal void
@@ -531,17 +550,17 @@ BigInt_DivideUnsignedSingleWord(
 	bigint *RemOut
 )
 {
+	Assert(B.WordCount == 1);
+
 	if (QuotOut) {
-		*QuotOut = BigInt_SAllocate(MAX(A.WordCount - B.WordCount + 1, 1));
+		*QuotOut = BigInt_SAllocate(A.WordCount);
 		Mem_Set(QuotOut->Words, 0, QuotOut->WordCount * sizeof(uhalf));
 	}
 
 	Stack_Push();
 
-	bigint U = BigInt_SCopy(A);
-
-	Assert(B.WordCount == 1);
-	usize VW = B.Words[0];
+	bigint U  = BigInt_SCopy(A);
+	usize  VW = B.Words[0];
 
 	for (usize I = A.WordCount; I > 0; I--) {
 		usize UWH = I < A.WordCount ? U.Words[I] : 0;
@@ -568,31 +587,32 @@ BigInt_DivideUnsignedMultiWord(
 	bigint *RemOut
 )
 {
-	// Since A and B are expected to be flattened multiword positive numbers,
-	// there won't be any leading zeroes or 0-counts that we need to consider.
+	// Since A and B are expected to be flattened multiword positive
+	// numbers, there won't be any leading zeroes or 0-counts that we need
+	// to consider.
 
 	if (QuotOut) {
-		*QuotOut = BigInt_SAllocate(MAX(A.WordCount - B.WordCount + 1, 1));
+		*QuotOut = BigInt_SAllocate(A.WordCount - B.WordCount + 1);
 		Mem_Set(QuotOut->Words, 0, QuotOut->WordCount * sizeof(uhalf));
 	}
 	if (RemOut) {
-		*RemOut = BigInt_SAllocate(B.WordCount);
+		*RemOut = BigInt_SAllocate(B.WordCount + 1);
 		Mem_Set(RemOut->Words, 0, RemOut->WordCount * sizeof(uhalf));
 	}
 
 	Stack_Push();
 
-	// Obtain the normalization shift, e.g. the number of bits B[n-1] needs to
-	// be shifted by until the leading bit is set.
+	// Obtain the normalization shift, e.g. the number of bits B[n-1] needs
+	// to be shifted by until the leading bit is set.
 	u32	  NormShift;
 	uhalf BTop = B.Words[B.WordCount - 1];
 	Intrin_BitScanReverse(&NormShift, BTop);
 	NormShift = 31 - NormShift;
 
 	// Copy A and B into U and V respectively, shifting by NormShift. The
-	// normalization allows the quotient estimation later to be more accurate.
-	// We're using mutable buffers here instead of calling `BigInt_SShift` for
-	// performance.
+	// normalization allows the quotient estimation later to be more
+	// accurate. We're using mutable buffers here instead of calling
+	// `BigInt_SShift` for performance.
 	bigint U = BigInt_SAllocate(A.WordCount + 1);
 	bigint V = BigInt_SAllocate(B.WordCount);
 

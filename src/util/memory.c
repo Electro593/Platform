@@ -72,9 +72,54 @@ typedef struct stack {
 internal vptr
 Mem_Set(vptr Dest, s32 Data, usize Size)
 {
-	u08 *Dest08 = (u08 *) Dest;
-	u08	 Data08 = (u08) Data;
-	while (Size--) *Dest08++ = Data08;
+	u08 *DB = (u08 *) Dest;
+	u08	 SB = Data;
+
+	switch (Size) {
+		case 7: DB[6] = SB;	 // fallthrough
+		case 6: DB[5] = SB;	 // fallthrough
+		case 5: DB[4] = SB;	 // fallthrough
+		case 4: DB[3] = SB;	 // fallthrough
+		case 3: DB[2] = SB;	 // fallthrough
+		case 2: DB[1] = SB;	 // fallthrough
+		case 1: DB[0] = SB;	 // fallthrough
+		case 0: return Dest;
+	}
+
+	usize WB  = sizeof(usize);
+	usize AB  = (WB - ((usize) DB % WB)) % WB;
+	Size	 -= AB;
+	switch (AB) {
+		case 7: DB[6] = SB;	 // fallthrough
+		case 6: DB[5] = SB;	 // fallthrough
+		case 5: DB[4] = SB;	 // fallthrough
+		case 4: DB[3] = SB;	 // fallthrough
+		case 3: DB[2] = SB;	 // fallthrough
+		case 2: DB[1] = SB;	 // fallthrough
+		case 1: DB[0] = SB;
+	}
+	DB += AB;
+
+	usize *DW = (usize *) DB;
+	usize  SW = SB | (SB << 8) | (SB << 16) | (SB << 24);
+	if (WB == 8) SW |= SW << 32;
+
+	while (Size >= WB) {
+		*DW++  = SW;
+		Size  -= WB;
+	}
+
+	DB = (u08 *) DW;
+	switch (Size) {
+		case 7: DB[6] = SB;	 // fallthrough
+		case 6: DB[5] = SB;	 // fallthrough
+		case 5: DB[4] = SB;	 // fallthrough
+		case 4: DB[3] = SB;	 // fallthrough
+		case 3: DB[2] = SB;	 // fallthrough
+		case 2: DB[1] = SB;	 // fallthrough
+		case 1: DB[0] = SB;
+	}
+
 	return Dest;
 }
 
