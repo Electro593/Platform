@@ -393,44 +393,71 @@ Platform_Stub(void)
 // These are simple implementations of various util functions that we need
 // to have access to before we load the util module.
 
-internal void
-_Mem_Set(u08 *D, u08 B, u32 Bytes)
+inline internal void
+_Mem_Set(vptr D, u08 B, u32 Bytes)
 {
 	if (Mem_Set) {
 		Mem_Set(D, B, Bytes);
 		return;
 	}
-	while (Bytes--) *D++ = B;
+	u08 *DB = D;
+	while (Bytes--) *DB++ = B;
 }
 
-internal s08
-_Mem_Cmp(u08 *A, u08 *B, u32 Bytes)
+inline internal void
+_Mem_Cpy(vptr D, vptr S, u32 Bytes)
+{
+	if (Mem_Cpy) {
+		Mem_Cpy(D, S, Bytes);
+		return;
+	}
+	u08 *DB = D;
+	u08 *SB = S;
+	while (Bytes--) *DB++ = *SB++;
+}
+
+inline internal s08
+_Mem_Cmp(vptr A, vptr B, usize Bytes)
 {
 	if (Mem_Cmp) return Mem_Cmp(A, B, Bytes);
+	u08 *AB = A;
+	u08 *BB = B;
 	while (Bytes) {
-		if (*A > *B) return GREATER;
-		if (*A < *B) return LESS;
-		A++, B++, Bytes--;
+		if (*AB > *BB) return GREATER;
+		if (*AB < *BB) return LESS;
+		AB++, BB++, Bytes--;
 	}
 
 	return EQUAL;
 }
 
-internal u32
-_Mem_BytesUntil(u08 *P, c08 B)
+inline internal u32
+_Mem_BytesUntil(vptr P, c08 B)
 {
-	u32 Count = 0;
-	while (*P++ != B) Count++;
+	u32	 Count = 0;
+	u08 *PB	   = P;
+	while (*PB++ != B) Count++;
 	return Count;
 }
 
-internal string
+inline internal string
 _CString(c08 *Chars)
 {
-	u32 Length = _Mem_BytesUntil((u08 *) Chars, 0);
+	u32 Length = _Mem_BytesUntil(Chars, 0);
 	return (string) { .Text		= Chars,
 					  .Encoding = STRING_ENCODING_ASCII,
 					  .Length	= Length };
+}
+
+inline internal s08
+_Str_Cmp(vptr A, vptr B)
+{
+	if (!A && !B) return 0;
+	if (!A) return -1;
+	if (!B) return 1;
+	usize AL = _Mem_BytesUntil(A, 0) + 1;
+	usize BL = _Mem_BytesUntil(B, 0) + 1;
+	return _Mem_Cmp(A, B, MAX(AL, BL));
 }
 
 internal void
@@ -523,7 +550,7 @@ Platform_LoadModule(string Name)
 #endif
 
 	b08 UtilIsLoaded = _G.UtilIsLoaded;
-	Assert(UtilIsLoaded || _Mem_Cmp((u08 *) Name.Text, (u08 *) "util", 4) == 0);
+	Assert(UtilIsLoaded || _Str_Cmp(Name.Text, "util") == 0);
 	if (UtilIsLoaded) {
 		if (HashMap_Get(&_G.ModuleTable, &Name, &Module)) return Module;
 
@@ -552,14 +579,13 @@ Platform_LoadModule(string Name)
 	Module->Name			 = Name.Text;
 	Module->DebugLoadAddress = NULL;
 #ifdef _DEBUG
-	if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "util", 4) == EQUAL)
+	if (_Str_Cmp(Name.Text, "util") == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB000000000;
-	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "base", 4) == EQUAL)
+	else if (_Str_Cmp(Name.Text, "base") == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB100000000;
-	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "renderer_opengl", 15)
-			 == EQUAL)
+	else if (_Str_Cmp(Name.Text, "renderer_opengl") == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB200000000;
-	else if (_Mem_Cmp((u08 *) Name.Text, (u08 *) "wayland", 7) == EQUAL)
+	else if (_Str_Cmp(Name.Text, "wayland") == EQUAL)
 		Module->DebugLoadAddress = (vptr) 0x7DB300000000;
 #endif
 

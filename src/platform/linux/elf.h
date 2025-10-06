@@ -161,6 +161,12 @@ typedef s32 elf64_sword;
 typedef u64 elf64_xword;
 typedef s64 elf64_sxword;
 
+#define elf_addr  ELF_CAT3(elf, ELF_CLASS, _addr)
+#define elf_off   ELF_CAT3(elf, ELF_CLASS, _off)
+#define elf_half  ELF_CAT3(elf, ELF_CLASS, _half)
+#define elf_word  ELF_CAT3(elf, ELF_CLASS, _word)
+#define elf_sword ELF_CAT3(elf, ELF_CLASS, _sword)
+
 typedef struct elf_ident {
 	u08 MagicNumber[4];
 	u08 FileClass;
@@ -481,6 +487,43 @@ typedef struct elf64_dynamic {
 
 #define elf_dynamic ELF_CAT3(elf, ELF_CLASS, _dynamic)
 
+/* ========== ELF NOTE ========== */
+
+#define ELF_NOTE_GNU_ABI_TAG 1
+#define ELF_NOTE_GNU_HWCAP 2
+#define ELF_NOTE_GNU_BUILD_ID 3
+#define ELF_NOTE_GNU_GOLD_VERSION 4
+#define ELF_NOTE_GNU_PROPERTY_TYPE_0 5
+
+#define ELF_NOTE_GNU_ABI_TAG_OS_LINUX    0
+#define ELF_NOTE_GNU_ABI_TAG_OS_GNU      1
+#define ELF_NOTE_GNU_ABI_TAG_OS_SOLARIS2 2
+#define ELF_NOTE_GNU_ABI_TAG_OS_FREEBSD  3
+
+#define ELF_GNU_PROPERTY_X86_FEATURE_1       0xC0000002
+#define ELF_GNU_PROPERTY_X86_FEATURE_1_IBT   (1ull << 0)
+#define ELF_GNU_PROPERTY_X86_FEATURE_1_SHSTK (1ull << 1)
+
+#define ELF_GNU_PROPERTY_X86_ISA_1_USED     0xC0010002
+#define ELF_GNU_PROPERTY_X86_ISA_1_NEEDED   0xC0008002
+#define ELF_GNU_PROPERTY_X86_ISA_1_BASELINE (1ull << 0)
+#define ELF_GNU_PROPERTY_X86_ISA_1_V2       (1ull << 1)
+#define ELF_GNU_PROPERTY_X86_ISA_1_V3       (1ull << 2)
+#define ELF_GNU_PROPERTY_X86_ISA_1_V4       (1ull << 3)
+
+typedef struct elf_note {
+	elf_word NameSize;
+	elf_word DescriptorSize;
+	elf_word Type;
+	elf_word Words[];
+} elf_note;
+
+typedef struct elf_gnu_property {
+	elf_word Type;
+	elf_word DataSize;
+	u08		 Data[];
+} elf_gnu_property;
+
 /* ========== AUXILIARY VECTORS ========== */
 
 #define ELF_AT_NULL               0 /* end of vector */
@@ -539,6 +582,30 @@ typedef struct elf64_auxv {
 
 #define elf_auxv ELF_CAT3(elf, ELF_CLASS, _auxv)
 
+/* ========== DEBUG RENDEZVOUS ========== */
+
+typedef enum sys_r_debug_state {
+	SYS_R_DEBUG_STATE_CONSISTENT,
+	SYS_R_DEBUG_STATE_ADD,
+	SYS_R_DEBUG_STATE_DELETE
+} sys_r_debug_state;
+
+typedef struct sys_link_map {
+	usize				 DeltaAddr;
+	c08					*FileName;
+	elf_dynamic			*Dynamics;
+	struct sys_link_map *Next;
+	struct sys_link_map *Prev;
+} sys_link_map;
+
+typedef struct sys_r_debug {
+	s32			  Version;
+	sys_link_map *LinkMap;
+	void (*Breakpoint)(void);
+	sys_r_debug_state State;
+	vptr			  LoaderBase;
+} sys_r_debug;
+
 /* ========== HASH TABLE ========== */
 
 /* ========== IMPLEMENTATION ========== */
@@ -584,12 +651,13 @@ typedef struct elf_state {
 	usize PageSize;
 
 	// Mapped file
+	c08	 *FileName;
 	u32	  FileDescriptor;
 	u08	 *File;
 	usize FileSize;
 
 	// Quick access
-	elf_header *Header;
+	elf_header Header;
 
 	usize SectionHeaderCount;
 	u08	 *SectionHeaderTable;

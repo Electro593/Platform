@@ -333,9 +333,9 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 		Stack_Push();
 		Name = FNStringL("%s", FileName);
 	} else {
-		Name.Length = _Mem_BytesUntil((u08 *) FileName, 0);
+		Name.Length = _Mem_BytesUntil(FileName, 0);
 		Name.Text	= Platform_AllocateMemory(Name.Length);
-		_Mem_Cpy((u08 *) Name.Text, (u08 *) FileName, Name.Length + 1);
+		_Mem_Cpy(Name.Text, FileName, Name.Length + 1);
 	}
 	for (usize I = 0; I < Name.Length; I++)
 		if (Name.Text[I] == '/') Name.Text[I] = '\\';

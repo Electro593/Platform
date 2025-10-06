@@ -128,7 +128,6 @@ Wayland_TryInit(void)
 		Wayland_SyncAndHandleEvents();
 	}
 
-	STOP;
 	return _G.Connected;
 }
 

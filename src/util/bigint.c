@@ -835,13 +835,16 @@ BigInt_ToInt(bigint A)
 internal void
 BigInt_Print(bigint A)
 {
-	if (A.WordCount)
-		for (usize I = 0; I < A.WordCount; I++)
-			Platform_WriteConsole(
-				FStringL("%.8x", A.Words[A.WordCount - I - 1])
-			);
-	else Platform_WriteConsole(FStringL("%x", (uhalf) A.Word));
-	Platform_WriteConsole(CStringL("\n"));
+	bigint AP = BigInt_Flatten(A);
+
+	if (A.WordCount) {
+		Printf("%#x", A.Words[A.WordCount - 1]);
+		for (usize I = 1; I < A.WordCount; I++) {
+			Printf("_%.8x", A.Words[A.WordCount - I - 1]);
+		}
+	} else {
+		Printf("%#x", AP.Word);
+	}
 }
 
 #ifndef REGION_BIGINT_TESTS

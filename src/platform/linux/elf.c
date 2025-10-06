@@ -12,7 +12,7 @@ Elf_GetSectionHeader(elf_state *State, u64 Index)
 {
 	if (!State->SectionHeaderTable) return 0;
 	return (vptr) (State->SectionHeaderTable
-				   + State->Header->SectionHeaderSize * Index);
+				   + State->Header.SectionHeaderSize * Index);
 }
 
 internal u08 *
@@ -29,14 +29,14 @@ Elf_GetProgramHeader(elf_state *State, u64 Index)
 {
 	if (!State->ProgramHeaderTable) return 0;
 	return (vptr) (State->ProgramHeaderTable
-				   + State->Header->ProgramHeaderSize * Index);
+				   + State->Header.ProgramHeaderSize * Index);
 }
 
 internal b08
 Elf_CheckName(c08 *Name, c08 *Expected)
 {
-	usize Bytes	 = _Mem_BytesUntil((u08 *) Expected, 0);
-	b08	  Same	 = _Mem_Cmp((u08 *) Name, (u08 *) Expected, Bytes) == 0;
+	usize Bytes	 = _Mem_BytesUntil(Expected, 0);
+	b08	  Same	 = _Mem_Cmp(Name, Expected, Bytes) == 0;
 	b08	  Ending = Name[Bytes] == '.' || Name[Bytes] == '\0';
 	return Same && Ending;
 }
@@ -66,7 +66,7 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 	u32 Hash  = Elf_GnuHash(Name);
 	u32 Hash2 = Hash >> Table->BloomShift;
 
-	if (State->Header->Ident.FileClass == 32) {
+	if (State->Header.Ident.FileClass == 32) {
 		u32 N = Table->Bloom32[(Hash >> 5) & (Table->BloomSize - 1)];
 		u32 B = (1 << (Hash & 31)) | (1 << (Hash2 & 31));
 		if ((N & B) != B) return NULL;
@@ -105,7 +105,7 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 internal usize
 Elf_ExtractAddend(elf_state *State, usize Type)
 {
-	switch (State->Header->Machine) {
+	switch (State->Header.Machine) {
 		case ELF_MACHINE_X86_64: return 0;	// X86_64 uses only Rela
 		default				   : return 0;
 	}
@@ -115,7 +115,7 @@ internal usize
 Elf_ComputeRelocation(elf_state *State, usize Type, usize A, usize S, usize B)
 {
 	usize V = 0;
-	switch (State->Header->Machine) {
+	switch (State->Header.Machine) {
 		case ELF_MACHINE_X86_64: {
 			switch (Type) {
 				case ELF_RELOCATION_X86_64_64		: V = S + A; break;
@@ -133,7 +133,7 @@ internal void
 Elf_ApplyRelocation(elf_state *State, vptr Target, usize Type, usize Value)
 {
 	u64 *V64 = Target;
-	switch (State->Header->Machine) {
+	switch (State->Header.Machine) {
 		case ELF_MACHINE_X86_64: {
 			switch (Type) {
 				case ELF_RELOCATION_X86_64_64		: *V64 = Value; break;
@@ -192,7 +192,7 @@ Elf_HandleRelocations(elf_state *State)
 			}
 
 			usize SymbolIndex;
-			if (State->Header->Ident.FileClass == ELF_CLASS_32) {
+			if (State->Header.Ident.FileClass == ELF_CLASS_32) {
 				SymbolIndex = Rela->Info >> 8;
 				RelocType	= Rela->Info & 0xFF;
 			} else {
@@ -226,11 +226,11 @@ Elf_HandleRelocations(elf_state *State)
 internal elf_error
 Elf_LoadSections(elf_state *State, vptr LoadAddress)
 {
-	if (State->Header->Type == ELF_TYPE_DYNAMIC) {
+	if (State->Header.Type == ELF_TYPE_DYNAMIC) {
 		usize MinVAddr = (usize) -1;
 		usize MaxVAddr = 0;
 
-		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
+		for (usize I = 0; I < State->Header.ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
 			switch (Header->Type) {
 				case ELF_SEGMENT_TYPE_LOAD: {
@@ -260,7 +260,7 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 		if ((usize) Base & PageMask) return ELF_ERROR_OUT_OF_MEMORY;
 		if (Base && Base != LoadAddress) return ELF_ERROR_INVALID_MEM_MAP;
 
-		for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
+		for (usize I = 0; I < State->Header.ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
 			switch (Header->Type) {
 				case ELF_SEGMENT_TYPE_LOAD: {
@@ -335,7 +335,7 @@ Elf_LoadSections(elf_state *State, vptr LoadAddress)
 internal elf_error
 Elf_FixPermsAfterReloc(elf_state *State)
 {
-	for (usize I = 0; I < State->Header->ProgramHeaderCount; I++) {
+	for (usize I = 0; I < State->Header.ProgramHeaderCount; I++) {
 		elf_program_header *Header = Elf_GetProgramHeader(State, I);
 		if (Header->Type == ELF_SEGMENT_TYPE_GNU_RELRO) {
 			usize PageMask = State->PageSize - 1;
@@ -360,118 +360,120 @@ Elf_FixPermsAfterReloc(elf_state *State)
 }
 
 internal elf_error
-Elf_SetupAndValidate(elf_state *State)
+Elf_SetupAndValidate(elf_state *State, b08 IncludeSectionTable)
 {
-	State->Header = (vptr) State->File;
+	State->Header = *(elf_header *) State->File;
 
-	if (_Mem_Cmp(State->Header->Ident.MagicNumber, (u08 *) ELF_MAGIC_NUMBER, 4)
-		!= EQUAL)
+	if (_Mem_Cmp(State->Header.Ident.MagicNumber, ELF_MAGIC_NUMBER, 4) != EQUAL)
 		return ELF_ERROR_INVALID_FORMAT;
-	if (State->Header->Ident.FileClass != ELF_EXPECTED_CLASS)
+	if (State->Header.Ident.FileClass != ELF_EXPECTED_CLASS)
 		return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Ident.DataEncoding != ELF_EXPECTED_ENCODING)
+	if (State->Header.Ident.DataEncoding != ELF_EXPECTED_ENCODING)
 		return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Ident.FileVersion != ELF_EXPECTED_VERSION)
+	if (State->Header.Ident.FileVersion != ELF_EXPECTED_VERSION)
 		return ELF_ERROR_NOT_SUPPORTED;
 
-	if (State->Header->Type != ELF_TYPE_DYNAMIC) return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Machine != ELF_EXPECTED_MACHINE)
+	if (State->Header.Type != ELF_TYPE_DYNAMIC) return ELF_ERROR_NOT_SUPPORTED;
+	if (State->Header.Machine != ELF_EXPECTED_MACHINE)
 		return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->Version != ELF_EXPECTED_VERSION)
+	if (State->Header.Version != ELF_EXPECTED_VERSION)
 		return ELF_ERROR_NOT_SUPPORTED;
-	if (State->Header->ElfHeaderSize < sizeof(elf_header))
+	if (State->Header.ElfHeaderSize < sizeof(elf_header))
 		return ELF_ERROR_INVALID_FORMAT;
-	if (State->Header->SectionHeaderSize < sizeof(elf_section_header))
+	if (State->Header.SectionHeaderSize < sizeof(elf_section_header))
 		return ELF_ERROR_INVALID_FORMAT;
-	if (State->Header->ProgramHeaderSize < sizeof(elf_program_header))
+	if (State->Header.ProgramHeaderSize < sizeof(elf_program_header))
 		return ELF_ERROR_INVALID_FORMAT;
 
-	State->SectionHeaderCount = State->Header->SectionHeaderCount;
-	if (State->SectionHeaderCount || State->Header->SectionHeaderTableOffset) {
-		State->SectionHeaderTable =
-			State->File + State->Header->SectionHeaderTableOffset;
+	State->SectionHeaderCount = State->Header.SectionHeaderCount;
+	if (IncludeSectionTable) {
+		if (State->SectionHeaderCount || State->Header.SectionHeaderTableOffset)
+		{
+			State->SectionHeaderTable =
+				State->File + State->Header.SectionHeaderTableOffset;
 
-		State->NullSectionHeader = Elf_GetSectionHeader(State, 0);
-		if (State->NullSectionHeader->Name) return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->Type != ELF_SECTION_TYPE_NULL)
-			return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->Flags) return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->Address) return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->Offset) return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->Info) return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->AddressAlignment)
-			return ELF_ERROR_INVALID_FORMAT;
-		if (State->NullSectionHeader->EntrySize)
-			return ELF_ERROR_INVALID_FORMAT;
+			State->NullSectionHeader = Elf_GetSectionHeader(State, 0);
+			if (State->NullSectionHeader->Name) return ELF_ERROR_INVALID_FORMAT;
+			if (State->NullSectionHeader->Type != ELF_SECTION_TYPE_NULL)
+				return ELF_ERROR_INVALID_FORMAT;
+			if (State->NullSectionHeader->Flags)
+				return ELF_ERROR_INVALID_FORMAT;
+			if (State->NullSectionHeader->Address)
+				return ELF_ERROR_INVALID_FORMAT;
+			if (State->NullSectionHeader->Offset)
+				return ELF_ERROR_INVALID_FORMAT;
+			if (State->NullSectionHeader->Info) return ELF_ERROR_INVALID_FORMAT;
+			if (State->NullSectionHeader->AddressAlignment)
+				return ELF_ERROR_INVALID_FORMAT;
+			if (State->NullSectionHeader->EntrySize)
+				return ELF_ERROR_INVALID_FORMAT;
 
-		if (!State->SectionHeaderCount)
-			State->SectionHeaderCount = State->NullSectionHeader->Size;
-		else if (State->NullSectionHeader->Size)
-			return ELF_ERROR_INVALID_FORMAT;
+			if (!State->SectionHeaderCount)
+				State->SectionHeaderCount = State->NullSectionHeader->Size;
+			else if (State->NullSectionHeader->Size)
+				return ELF_ERROR_INVALID_FORMAT;
 
-		u64 Index = State->Header->SectionNameTableIndex;
-		if (Index == ELF_SECTION_INDEX_EXTENDED)
-			Index = State->NullSectionHeader->Link;
-		else if (Index >= ELF_SECTION_INDEX_LORESERVE)
-			return ELF_ERROR_INVALID_FORMAT;
-		else if (State->NullSectionHeader->Link)
-			return ELF_ERROR_INVALID_FORMAT;
-		State->SectionNameSectionHeader = Elf_GetSectionHeader(State, Index);
-		State->SectionNameTable =
-			(c08 *) Elf_GetSection(State, State->SectionNameSectionHeader);
+			u64 Index = State->Header.SectionNameTableIndex;
+			if (Index == ELF_SECTION_INDEX_EXTENDED)
+				Index = State->NullSectionHeader->Link;
+			else if (Index >= ELF_SECTION_INDEX_LORESERVE)
+				return ELF_ERROR_INVALID_FORMAT;
+			else if (State->NullSectionHeader->Link)
+				return ELF_ERROR_INVALID_FORMAT;
+			State->SectionNameSectionHeader =
+				Elf_GetSectionHeader(State, Index);
+			State->SectionNameTable =
+				(c08 *) Elf_GetSection(State, State->SectionNameSectionHeader);
 
-		for (usize I = 0; I < State->SectionHeaderCount; I++) {
-			elf_section_header *Header = Elf_GetSectionHeader(State, I);
-			c08				   *Name   = State->SectionNameTable + Header->Name;
-			vptr				Data   = State->File + Header->Offset;
+			for (usize I = 0; I < State->SectionHeaderCount; I++) {
+				elf_section_header *Header = Elf_GetSectionHeader(State, I);
+				c08 *Name = State->SectionNameTable + Header->Name;
+				vptr Data = State->File + Header->Offset;
 
-			if (Elf_CheckName(Name, ".text")) {
-				State->TextVAddr = Header->Address;
-			} else if (Elf_CheckName(Name, ".gnu.hash")) {
-				if (State->LookupType < ELF_LOOKUP_GNU_HASH) {
-					State->LookupType = ELF_LOOKUP_GNU_HASH;
+				if (Elf_CheckName(Name, ".text")) {
+					State->TextVAddr = Header->Address;
+				} else if (Elf_CheckName(Name, ".gnu.hash")) {
+					if (State->LookupType < ELF_LOOKUP_GNU_HASH) {
+						State->LookupType = ELF_LOOKUP_GNU_HASH;
 
-					State->GnuHashTable.Header		 = Header;
-					State->GnuHashTable.BucketCount	 = ((u32 *) Data)[0];
-					State->GnuHashTable.SymbolOffset = ((u32 *) Data)[1];
-					State->GnuHashTable.BloomSize	 = ((u32 *) Data)[2];
-					State->GnuHashTable.BloomShift	 = ((u32 *) Data)[3];
-					State->GnuHashTable.Bloom32		 = (u32 *) Data + 4;
+						State->GnuHashTable.Header		 = Header;
+						State->GnuHashTable.BucketCount	 = ((u32 *) Data)[0];
+						State->GnuHashTable.SymbolOffset = ((u32 *) Data)[1];
+						State->GnuHashTable.BloomSize	 = ((u32 *) Data)[2];
+						State->GnuHashTable.BloomShift	 = ((u32 *) Data)[3];
+						State->GnuHashTable.Bloom32		 = (u32 *) Data + 4;
 
-					usize BloomWords =
-						State->GnuHashTable.BloomSize
-						* ((State->Header->Ident.FileClass == ELF_CLASS_32)
-							   ? 1
-							   : 2);
+						usize BloomWords =
+							State->GnuHashTable.BloomSize
+							* ((State->Header.Ident.FileClass == ELF_CLASS_32)
+								   ? 1
+								   : 2);
 
-					State->GnuHashTable.Buckets =
-						State->GnuHashTable.Bloom32 + BloomWords;
-					State->GnuHashTable.Chain = State->GnuHashTable.Buckets
-											  + State->GnuHashTable.BucketCount;
+						State->GnuHashTable.Buckets =
+							State->GnuHashTable.Bloom32 + BloomWords;
+						State->GnuHashTable.Chain =
+							State->GnuHashTable.Buckets
+							+ State->GnuHashTable.BucketCount;
+					}
 				}
 			}
-		}
-	} else {
-		if (State->Header->SectionNameTableIndex != ELF_SECTION_INDEX_UNDEF)
+		} else if (State->Header.SectionNameTableIndex
+				   != ELF_SECTION_INDEX_UNDEF)
+		{
 			return ELF_ERROR_INVALID_FORMAT;
+		}
 	}
 
-	if (State->Header->ProgramHeaderCount) {
+	if (State->Header.ProgramHeaderCount) {
 		State->ProgramHeaderTable =
-			State->File + State->Header->ProgramHeaderTableOffset;
+			State->File + State->Header.ProgramHeaderTableOffset;
 
-		b08 FoundLoadable	   = FALSE;
-		b08 FoundPHDR		   = FALSE;
-		b08 FoundInterp		   = FALSE;
-		b08 NextMustBeLoadable = FALSE;
+		b08 FoundLoadable = FALSE;
+		b08 FoundPHDR	  = FALSE;
+		b08 FoundInterp	  = FALSE;
 
-		for (u32 I = 0; I < State->Header->ProgramHeaderCount; I++) {
+		for (u32 I = 0; I < State->Header.ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
-			if (NextMustBeLoadable) {
-				if (Header->Type != ELF_SEGMENT_TYPE_LOAD)
-					return ELF_ERROR_INVALID_FORMAT;
-				NextMustBeLoadable = FALSE;
-			}
 			switch (Header->Type) {
 				case ELF_SEGMENT_TYPE_NULL: break;
 				case ELF_SEGMENT_TYPE_LOAD:
@@ -482,8 +484,7 @@ Elf_SetupAndValidate(elf_state *State)
 				case ELF_SEGMENT_TYPE_INTERP:
 					if (FoundLoadable) return ELF_ERROR_INVALID_FORMAT;
 					if (FoundInterp) return ELF_ERROR_INVALID_FORMAT;
-					FoundInterp		   = TRUE;
-					NextMustBeLoadable = TRUE;
+					FoundInterp = TRUE;
 					break;
 				case ELF_SEGMENT_TYPE_NOTE: break;
 				case ELF_SEGMENT_TYPE_SHLIB:
@@ -492,18 +493,207 @@ Elf_SetupAndValidate(elf_state *State)
 				case ELF_SEGMENT_TYPE_PHDR:
 					if (FoundLoadable) return ELF_ERROR_INVALID_FORMAT;
 					if (FoundPHDR) return ELF_ERROR_INVALID_FORMAT;
-					FoundPHDR		   = TRUE;
-					NextMustBeLoadable = TRUE;
+					FoundPHDR = TRUE;
 					break;
 				case ELF_SEGMENT_TYPE_TLS: break;
 			}
 		}
 	} else {
-		if (State->Header->ProgramHeaderTableOffset)
+		if (State->Header.ProgramHeaderTableOffset)
 			return ELF_ERROR_INVALID_FORMAT;
 	}
 
 	return ELF_ERROR_SUCCESS;
+}
+
+internal void
+Elf_PrintGnuProperties(elf_gnu_property *Properties, usize DescSize)
+{
+	elf_gnu_property *Prop = Properties;
+	while ((usize) Prop < (usize) Properties + DescSize) {
+		switch (Prop->Type) {
+			case ELF_GNU_PROPERTY_X86_ISA_1_USED:  // fallthrough
+			case ELF_GNU_PROPERTY_X86_ISA_1_NEEDED: {
+				string ReqStr = Prop->Type == ELF_GNU_PROPERTY_X86_ISA_1_USED
+								  ? CStringL("Desired")
+								  : CStringL("Required");
+
+				Printf("GNU Properties: %s x86 Instruction Sets:\n", ReqStr);
+				usize D		  = Prop->Data[0] & 0xF;
+				b08	  Printed = FALSE;
+				b08	  Base = 0, SSE4 = 0, AVX2 = 0, AVX512 = 0;
+				if (D >= 8) AVX512 = 1;
+				if (D >= 4) AVX2 = 1;
+				if (D >= 2) SSE4 = 1;
+				if (D >= 1) Base = 1;
+				if (Base) {
+					Printed = TRUE;
+					Printf(
+						"\tCMOV, CX8, FPU, MMX, OSFXSR, SCE, SSE, "
+						"SSE2\n"
+					);
+				}
+				if (SSE4)
+					Printf(
+						"\tCMPXCHG16B, LAHF-SAHF, POPCNT, SSE3, SSSE3, "
+						"SSE4.1, SSE4.2\n"
+					);
+				if (AVX2)
+					Printf(
+						"\tAVX, AVX2, BMI1, BMI2, F16C, FMA, LZCNT, "
+						"MOVBE, XSAVE\n"
+					);
+				if (AVX512)
+					Printf(
+						"\tAVX512F, AVX512BW, AVX512CD, AVX512DQ, "
+						"AVX512VL\n"
+					);
+
+				usize B = 8 * sizeof(u32);
+				D		= Prop->Data[0] & ~0xF;
+				for (usize I = 0; I < Prop->DataSize / sizeof(u32);
+					 D		 = Prop->Data[++I])
+				{
+					for (usize J = 0; J < B && D; J++) {
+						if (D & (1 << J)) {
+							Printed = TRUE;
+							Printf("\tUnknown feature at bit %d\n", B * I + J);
+						}
+					}
+				}
+
+				if (!Printed) Printf("\tNone\n");
+			} break;
+			case ELF_GNU_PROPERTY_X86_FEATURE_1: {
+				Printf("GNU Properties: Used x86 Features:\n");
+				b08 Printed = FALSE;
+				if (Prop->Data[0] & ELF_GNU_PROPERTY_X86_FEATURE_1_IBT) {
+					Printed = TRUE;
+					Printf("\tIndirect Branch Tracking\n");
+				}
+				if (Prop->Data[0] & ELF_GNU_PROPERTY_X86_FEATURE_1_SHSTK) {
+					Printed = TRUE;
+					Printf("\tShadow Stacks\n");
+				}
+
+				usize B = 8 * sizeof(u32);
+				for (usize I = 0; I < Prop->DataSize / sizeof(u32); I++) {
+					usize D = Prop->Data[I];
+					for (usize J = 0; J < B && D; J++) {
+						if (D & (1 << J)) {
+							Printed = TRUE;
+							Printf("\tUnknown feature at bit %d\n", B * I + J);
+						}
+					}
+				}
+
+				if (!Printed) Printf("\tNone\n");
+			} break;
+			default: {
+				Printf("Unknown GNU Property: %#x\n", Prop->Type);
+			} break;
+		}
+		usize M		   = sizeof(usize) - 1;
+		usize DataSize = (Prop->DataSize + M) & ~M;
+		usize PropSize = sizeof(elf_gnu_property) + DataSize;
+		Prop		   = (vptr) ((usize) Prop + PropSize);
+	}
+}
+
+internal void
+Elf_PrintGnuNotes(u32 Type, u32 *Desc, u32 DescSize)
+{
+	switch (Type) {
+		case ELF_NOTE_GNU_ABI_TAG: {
+			string OS;
+			switch (Desc[0]) {
+				case ELF_NOTE_GNU_ABI_TAG_OS_LINUX:
+					OS = CStringL("Linux");
+					break;
+				case ELF_NOTE_GNU_ABI_TAG_OS_GNU: OS = CStringL("GNU"); break;
+				case ELF_NOTE_GNU_ABI_TAG_OS_SOLARIS2:
+					OS = CStringL("Solaris2");
+					break;
+				case ELF_NOTE_GNU_ABI_TAG_OS_FREEBSD:
+					OS = CStringL("FreeBSD");
+					break;
+			}
+			Printf(
+				"GNU ABI Tag: %s v%u.%u.%u\n",
+				OS,
+				Desc[1],
+				Desc[2],
+				Desc[3]
+			);
+		} break;
+		case ELF_NOTE_GNU_HWCAP: {
+			Printf("GNU Hardware Capabilities:\n");
+			usize Count	  = Desc[0];
+			usize Bitmask = Desc[1];
+			c08	 *Entry	  = (c08 *) &Desc[2];
+			for (usize J = 0; J < Count; J++) {
+				string Name	   = CString(Entry + 1);
+				b08	   Enabled = !!((1ull << Entry[0]) & Bitmask);
+				string EnabledStr =
+					Enabled ? CStringL("Enabled") : CStringL("Disabled");
+				Printf("\t%s: %s\n", Name, EnabledStr);
+			}
+		} break;
+		case ELF_NOTE_GNU_BUILD_ID: {
+			Stack_Push();
+			bigint Id = BigInt_SAllocate(DescSize / sizeof(uhalf) + 1);
+			Mem_Set(Id.Words, 0, Id.WordCount * sizeof(uhalf));
+			Mem_Cpy(Id.Words, Desc, DescSize);
+			Printf("GNU Build Id: ");
+			BigInt_Print(Id);
+			Printf("\n");
+			Stack_Pop();
+		} break;
+		case ELF_NOTE_GNU_GOLD_VERSION: {
+			Printf("GNU Gold Version: %s\n", CString((c08 *) Desc));
+		} break;
+		case ELF_NOTE_GNU_PROPERTY_TYPE_0: {
+			Elf_PrintGnuProperties((vptr) Desc, DescSize);
+		} break;
+		default: {
+			Printf("Unknown GNU Note: %d\n", Type);
+		} break;
+	}
+}
+
+inline internal void
+Elf_PrintNotes(elf_state *State)
+{
+	Printf("Parsing notes segment...\n");
+
+	for (usize I = 0; I < State->Header.ProgramHeaderCount; I++) {
+		elf_program_header *Header = Elf_GetProgramHeader(State, I);
+
+		if (Header->Type == ELF_SEGMENT_TYPE_NOTE) {
+			usize	  M		= sizeof(u32) - 1;
+			usize	  Notes = (usize) State->File + Header->VirtualAddress;
+			elf_note *Note	= (vptr) Notes;
+			while ((usize) Note < Notes + (usize) Header->MemSize) {
+				usize NameCount = (Note->NameSize + M) & ~M;
+				usize DescCount = (Note->DescriptorSize + M) & ~M;
+				usize NoteSize =
+					sizeof(elf_note) + (NameCount + DescCount) * sizeof(u32);
+
+				c08 *Name = Note->NameSize ? (c08 *) Note->Words : NULL;
+				u32 *Desc = Note->DescriptorSize
+							  ? (u32 *) ((usize) Note->Words + NameCount)
+							  : NULL;
+
+				if (_Str_Cmp(Name, "GNU") == 0)
+					Elf_PrintGnuNotes(Note->Type, Desc, Note->DescriptorSize);
+				else Printf("Unknown Notes Author: %s\n", CString(Name));
+
+				Note = (vptr) ((usize) Note + NoteSize);
+			}
+		}
+	}
+
+	Printf("\n");
 }
 
 /* ========== EXTERNAL API ========== */
@@ -517,6 +707,7 @@ Elf_Open(elf_state *State, c08 *FileName, usize PageSize)
 	if (State->State != ELF_STATE_CLOSED) return ELF_ERROR_INVALID_OPERATION;
 
 	*State			= (elf_state) { 0 };
+	State->FileName = FileName;
 	State->PageSize = PageSize;
 
 	State->FileDescriptor = Sys_Open(FileName, SYS_OPEN_READONLY, 0);
@@ -537,7 +728,7 @@ Elf_Open(elf_state *State, c08 *FileName, usize PageSize)
 	);
 	if (!CHECK(State->File)) return ELF_ERROR_UNKNOWN;
 
-	elf_error Error = Elf_SetupAndValidate(State);
+	elf_error Error = Elf_SetupAndValidate(State, TRUE);
 	if (Error) return Error;
 
 	State->State = ELF_STATE_OPENED;

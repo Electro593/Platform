@@ -39,9 +39,17 @@
 
 #include <macro.h>
 
-#define Error(Message) do { Platform_Assert(__FILE__, __LINE__, "", Message); STOP; } while(0)
+#define Error(Message) do {                                                   \
+	Platform_Assert(__FILE__, __LINE__, "", Message);                         \
+	STOP;                                                                     \
+} while(0)
 
-#define Printf(Format, ...) Platform_WriteConsole(FString(CString(Format), __VA_ARGS__))
+#define Printf(Format, ...) do {                                              \
+	Stack_Push();                                                             \
+	string Fmt = CString(Format);                                             \
+	Platform_WriteConsole(FString(Fmt __VA_OPT__(,) __VA_ARGS__));            \
+	Stack_Pop();                                                              \
+} while(0)
 
 #ifdef _DEBUG
 #define Assert(Expression, ...)                                               \
