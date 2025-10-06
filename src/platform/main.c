@@ -12,6 +12,7 @@
 
 #define INCLUDE_HEADER
 #include <util/main.c>
+#include <loader/main.c>
 #include "main.c"
 #ifdef _OPENGL
 #include <renderer_opengl/opengl.h>
@@ -100,7 +101,6 @@ typedef struct file_handle {
 
 #elif defined(_LINUX)
 #include <platform/linux/linux.h>
-#include <platform/linux/elf.h>
 
 typedef struct file_handle {
 	u32 FileDescriptor;
@@ -132,7 +132,7 @@ struct platform_module {
 #ifdef _WIN32
 	win32_module DLL;
 #else
-	elf_state ELF;
+	vptr ELF;
 #endif
 };
 
@@ -363,8 +363,6 @@ struct platform_state {
 	string *Args;
 
 	hashmap EnvTable;
-
-	usize PageSize;
 };
 
 typedef struct platform_funcs {

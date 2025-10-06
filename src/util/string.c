@@ -340,6 +340,7 @@ typedef struct fstring_format_list {
 #define STRING_FUNCS \
 	EXPORT(string, CLEString, vptr Text, usize Length, string_encoding Encoding) \
 	EXPORT(string, CString,   c08 *Text) \
+	EXPORT(string, HString,   heap *Heap, c08 *Text) \
 	EXPORT(string, LString,   usize Length) \
 	\
 	EXPORT(usize,  String_Cpy,  string Dest, string Src) \
@@ -430,6 +431,18 @@ CString(c08 *Text)
 {
 	usize Length = Mem_BytesUntil((u08 *) Text, 0);
 	return CLEString(Text, Length, STRING_ENCODING_ASCII);
+}
+
+/// @brief Same as `CString`, except the new string's data is allocated on the
+/// heap and copied in from the provided text.
+/// @param Text A pointer to the C string to use. Will be interpreted as ASCII.
+/// @return The newly constructed string.
+internal string
+HString(heap *Heap, c08 *Text)
+{
+	usize Length = Mem_BytesUntil((u08 *) Text, 0);
+	c08	 *HText	 = Heap_AllocateA(Heap, Length);
+	return CLEString(HText, Length, STRING_ENCODING_ASCII);
 }
 
 /// @brief Constructs a new ASCII string with a stack-allocated buffer. The

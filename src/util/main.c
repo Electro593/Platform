@@ -75,6 +75,8 @@ typedef struct util_funcs {
 #define EXPORT(R, N, ...) R (*N)(__VA_ARGS__);
 #define X UTIL_FUNCS
 #include <x.h>
+
+	b08 Initialized;
 } util_funcs;
 
 #if defined(_UTIL_MODULE)
@@ -95,19 +97,26 @@ util_funcs _F;
 external void
 Load(platform_state *Platform, platform_module *Module)
 {
-	platform_funcs *PlatformFuncs = Platform->Funcs;
+	if (Platform) {
+		platform_funcs *PlatformFuncs = Platform->Funcs;
 #define EXPORT(R, N, ...) N = PlatformFuncs->N;
 #define X PLATFORM_FUNCS
 #include <x.h>
+	}
 
-	_F = (util_funcs) {
+	if (!_F.Initialized) {
+		_F = (util_funcs) {
 #define EXPORT(R, N, ...) N,
 #define X UTIL_FUNCS
 #include <x.h>
-	};
+			.Initialized = TRUE
+		};
+	}
 
-	Module->Data  = &_G;
-	Module->Funcs = &_F;
+	if (Module) {
+		Module->Data  = &_G;
+		Module->Funcs = &_F;
+	}
 }
 
 #define TEST(FunctionName, TestName, TestCode)         \

@@ -25,7 +25,24 @@ __asm__(
 #define CHECK(Status) ((ssize)(Status) >= 0 || (ssize)(Status) < -4096)
 
 #include <platform/main.c>
-#include <platform/linux/elf.c>
+
+#ifdef _X64
+
+// rdi, rsi, rdx, rcx, r8, r9 -> rdi, rsi, rdx, r10, r8, r9
+#define SYSCALL(ID, Name, ReturnType, ...)     \
+	internal ReturnType __attribute__((naked)) \
+	Sys_##Name(__VA_ARGS__) {                  \
+		__asm__ (                              \
+			"mov $"#ID", %eax  \n"             \
+			"mov %rcx, %r10    \n"             \
+			"syscall           \n"             \
+			"ret               \n"             \
+		);                                     \
+	}
+LINUX_SYSCALLS
+#undef SYSCALL
+
+#endif
 
 #define VALIDATE(Result, ErrorMessage) \
 	do { \
@@ -39,25 +56,15 @@ global sys_timespec ClockResolution;
 
 internal opengl_funcs OpenGLFuncs;
 
-extern vptr dlopen(c08 *Path, s32 Flags);
-extern vptr dlsym(vptr Handle, c08 *Symbol);
-extern c08 *dlerror(void);
-
 internal opengl_funcs *
 Platform_LoadOpenGL(void)
 {
 	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
 
-	vptr Handle = dlopen("/usr/lib/libGL.so", 2);
-
-	if (!Handle) {
-		c08 *Message = dlerror();
-		Platform_WriteError(FStringL("%s\n", CString(Message)), 1);
-	}
-
-#define IMPORT(R, N, ...) OpenGLFuncs.OpenGL_##N = dlsym(Handle, "gl" #N);
-#define X OPENGL_FUNCS
-#include <x.h>
+	// 	vptr Handle = dlopen("/usr/lib/libGL.so", 2);
+	//
+	// #define IMPORT(R, N, ...) OpenGLFuncs.OpenGL_##N = dlsym(Handle, "gl"
+	// #N); #define X OPENGL_FUNCS #include <x.h>
 
 	OpenGLFuncs.Initialized = TRUE;
 	return &OpenGLFuncs;
@@ -246,33 +253,25 @@ Platform_CmpFileTime(datetime A, datetime B)
 internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 {
-	elf_error Error = Elf_GetProcAddress(&Module->ELF, Name, ProcOut);
-	if (Error == ELF_ERROR_NOT_FOUND) *ProcOut = (vptr) Platform_Stub;
-	else Assert(!Error, "Failed to get proc address");
+	*ProcOut = Loader_GetSymbol(Module->ELF, Name);
 }
 
 internal b08
 Platform_IsModuleBackendOpened(platform_module *Module)
 {
-	return Module->ELF.State == ELF_STATE_LOADED;
+	return Module->ELF != NULL;
 }
 
 internal void
 Platform_OpenModuleBackend(platform_module *Module)
 {
-	s32 Error = Elf_Open(&Module->ELF, Module->FileName, _G.PageSize);
-	Assert(!Error, "Failed to read elf");
-	Error = Elf_LoadProgram(&Module->ELF, Module->DebugLoadAddress);
-	Assert(!Error, "Failed to load elf");
+	Module->ELF = Loader_OpenShared(Module->FileName);
 }
 
 internal void
 Platform_CloseModuleBackend(platform_module *Module)
 {
-	s32 Error = Elf_Unload(&Module->ELF);
-	Assert(!Error, "Failed to unload elf");
-	Error = Elf_Close(&Module->ELF);
-	Assert(!Error, "Failed to close elf");
+	Loader_CloseShared(Module->ELF);
 }
 
 internal void
@@ -335,24 +334,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		"Failed to get clock resolution"
 	);
 
-	elf_auxv *AuxVectors;
-	u64		  EnvCount = 0, AuxCount = 0;
-	{
-		c08 **EnvParam = EnvParams;
-		while (*EnvParam) {
-			EnvCount++;
-			EnvParam++;
-		}
-
-		AuxVectors			= (elf_auxv *) (EnvParam + 1);
-		elf_auxv *AuxVector = AuxVectors;
-		while (AuxVector->Type != ELF_AT_NULL) AuxCount++, AuxVector++;
-	}
-
-	_G.PageSize = 4096;	 // Most common page size
-	for (u64 I = 0; I < AuxCount; I++)
-		if (AuxVectors[I].Type == ELF_AT_PAGESZ)
-			_G.PageSize = AuxVectors[I].Value;
+	usize EnvCount = 0;
+	for (; EnvParams[EnvCount]; EnvCount++);
 
 	Platform_LoadModule(UTIL_MODULE_NAME);
 	Platform_SetupArgTable(ArgCount, Args);

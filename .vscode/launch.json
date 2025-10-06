@@ -51,6 +51,31 @@
                     "ignoreFailures": false
                 }
             ]
+        },
+        {
+            "name": "Debug Loader (Linux)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/loader",
+			"args": [
+				"${workspaceFolder}/build/program"
+			],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "preLaunchTask": "Build Program (SH)",
+            "environment": [],
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "text": "source ${workspaceFolder}/Platform/scripts/linux.gdbinit",
+                    "ignoreFailures": false
+                }
+            ]
         }
     ]
 }

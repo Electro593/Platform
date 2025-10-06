@@ -7,6 +7,8 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
 #if _X64
 
 #define SYS_FILE_NONE (u32)(-1)
@@ -56,25 +58,6 @@
 #define SYS_CREATE_USER_WRITE   0x00200
 #define SYS_CREATE_USER_READ    0x00400
 
-#define SYS_ADDRESS_FAMILY_UNIX 1
-
-#define SYS_SOCKET_STREAM 1
-
-#define SYS_CLOCK_REALTIME 0
-
-typedef struct sys_sockaddr_unix {
-	u16 Family;
-	c08 Data[108];
-} sys_sockaddr_unix;
-
-typedef struct sys_sockaddr {
-	u16 Family;
-	union {
-		c08	 MinData[14];
-		char Data[];
-	};
-} sys_sockaddr;
-
 typedef struct sys_stat {
 	u64 DeviceID;
 	u64 Inode;
@@ -99,25 +82,40 @@ typedef struct sys_stat {
 	s64 _Padding1[3];
 } sys_stat;
 
-typedef struct sys_timespec {
-	s64 Seconds;
-	s64 Nano;
-} sys_timespec;
+#define LOADER_SYSCALLS \
+	SYSCALL(0,  Read,       ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
+	SYSCALL(1,  Write,      ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
+	SYSCALL(2,  Open,       s32,   c08 *Filename, s32 Flags, u16 Mode) \
+	SYSCALL(3,  Close,      s32,   u32 FileDescriptor) \
+	SYSCALL(5,  FileStat,   s32,   u32 FileDescriptor, sys_stat *Stat) \
+	SYSCALL(8,  Seek,       ssize, u32 FileDescriptor, ssize Offset, s32 Whence) \
+	SYSCALL(9,  MemMap,     vptr,  vptr Address, usize Length, s32 Protection, s32 Flags, u32 FileDescriptor, s64 Offset) \
+	SYSCALL(10, MemProtect, s32,   vptr Address, usize Length, s32 Protection) \
+	SYSCALL(11, MemUnmap,   s32,   vptr Address, usize Length) \
+	SYSCALL(60, Exit,       void,  s32 ErrorCode)
 
-#define LINUX_SYSCALLS \
-	SYSCALL(0,   Read,         ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
-	SYSCALL(1,   Write,        ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
-	SYSCALL(2,   Open,         s32,   c08 *Filename, s32 Flags, u16 Mode) \
-	SYSCALL(3,   Close,        s32,   u32 FileDescriptor) \
-	SYSCALL(5,   FileStat,     s32,   u32 FileDescriptor, sys_stat *Stat) \
-	SYSCALL(8,   Seek,         ssize, u32 FileDescriptor, ssize Offset, s32 Whence) \
-	SYSCALL(9,   MemMap,       vptr,  vptr Address, usize Length, s32 Protection, s32 Flags, u32 FileDescriptor, s64 Offset) \
-	SYSCALL(10,  MemProtect,   s32,   vptr Address, usize Length, s32 Protection) \
-	SYSCALL(11,  MemUnmap,     s32,   vptr Address, usize Length) \
-	SYSCALL(41,  Socket,       s32,   s32 Domain, s32 Type, s32 Protocol) \
-	SYSCALL(42,  Connect,      s32,   s32 SocketFileDescriptor, sys_sockaddr *Address, u32 AddressLength) \
-	SYSCALL(60,  Exit,         void,  s32 ErrorCode) \
-	SYSCALL(228, GetClockTime, s32,   s32 ClockID, sys_timespec *Timespec) \
-	SYSCALL(229, GetClockRes,  s32,   s32 ClockID, sys_timespec *Timespec)
+#endif	// _X64
 
-#endif
+#endif	// INCLUDE_HEADER
+
+#ifdef INCLUDE_SOURCE
+
+#if _X64
+
+// rdi, rsi, rdx, rcx, r8, r9 -> rdi, rsi, rdx, r10, r8, r9
+#define SYSCALL(ID, Name, ReturnType, ...)     \
+	internal ReturnType __attribute__((naked)) \
+	Sys_##Name(__VA_ARGS__) {                  \
+		__asm__ (                              \
+			"mov $"#ID", %eax  \n"             \
+			"mov %rcx, %r10    \n"             \
+			"syscall           \n"             \
+			"ret               \n"             \
+		);                                     \
+	}
+LOADER_SYSCALLS
+#undef SYSCALL
+
+#endif	// _X64
+
+#endif	// INCLUDE_SOURCE

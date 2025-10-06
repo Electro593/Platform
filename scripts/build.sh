@@ -39,11 +39,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-protector -Werror"
-CompilerSwitches="$CompilerSwitches -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
+CompilerSwitches="$CompilerSwitches -Wno-unused-function -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
 CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_OPENGL -D_WORD_SIZE=64"
 
-LinkerSwitches="$LinkerSwitches -nostdlib -lc"
+LinkerSwitches="$LinkerSwitches -nostdlib"
 
 if [[ "$Platform" = "win32" ]]; then
 	echo "Building for win32"
@@ -80,7 +80,7 @@ else
 fi
 
 ExeCompilerSwitches="$ExeCompilerSwitches $CompilerSwitches"
-ExeLinkerSwitches="$ExeLinkerSwitches $LinkerSwitches -ePlatform_Entry"
+ExeLinkerSwitches="$ExeLinkerSwitches $LinkerSwitches"
 
 DllCompilerSwitches="$DllCompilerSwitches $CompilerSwitches -fPIC"
 DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
@@ -97,16 +97,24 @@ build_module() {
 	ModuleName=$(basename $Module)
 	CapitalName=$(echo $ModuleName | awk '{ print toupper($0) }')
 
-	if [ "$ModuleName" = "template" ]; then
-		echo Skipping $Module
+	if [ "$ModuleName" = "loader" ]; then
+		echo Building $Module as a library
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
+		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
+			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
+			readelf -a "build/$ModuleName$DllSuffix" > "build/$ModuleName$DllSuffix.dump.dat" 2> /dev/null
+		else
+			echo Setting result after module $Module
+			Result=1
+		fi
 	elif [ "$ModuleName" = "platform" ]; then
 		echo Building $Module as an executable
-		gcc $ExeCompilerSwitches $ExeLinkerSwitches -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
-		gcc $ExeCompilerSwitches $ExeLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
+		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader.so -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
+		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader.so -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
 		if [[ -e "build/$ModuleName$ExeSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.asm"
-			objdump -xrR "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
-			if [[ $? -ne 0 ]]; then objdump -xr "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat"; fi
+			readelf -a "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
 		else
 			echo Setting result after module $Module
 			Result=1
@@ -117,8 +125,7 @@ build_module() {
 		gcc $DllCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
-			objdump -xrR "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
-			if [[ $? -ne 0 ]]; then objdump -xr "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat"; fi
+			readelf -a "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
 		else
 			echo Setting result after module $Module
 			Result=1
@@ -126,8 +133,10 @@ build_module() {
 	fi
 }
 
+Module="Platform/src/util/"; build_module
+Module="Platform/src/loader/"; build_module
+Module="Platform/src/platform/"; build_module
 for Module in src/*/; do build_module; done
-for Module in Platform/src/*/; do build_module; done
 
 if [[ -e build/*.obj ]]; then rm build/*.obj > /dev/null; fi
 if [[ -e build/*.exp ]]; then rm build/*.exp > /dev/null; fi

@@ -41,7 +41,7 @@ typedef struct hashmap {
    EXPORT(hashmap, HashMap_InitCustom,   heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCapacity, r32 ResizeThresh, r32 ResizeRate, hash_func HashFunc, vptr HashParam, cmp_func CmpFunc, vptr CmpParam) \
    EXPORT(hashmap, HashMap_Init,         heap *Heap, u32 KeySize, u32 ValueSize) \
    EXPORT(b08,     HashMap_Get,          hashmap *Map, vptr Key, vptr ValueOut) \
-   EXPORT(b08,     HashMap_Remove,       hashmap *Map, vptr Key, vptr ValueOut) \
+   EXPORT(b08,     HashMap_Remove,       hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut) \
    EXPORT(b08,     HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
    EXPORT(void,    HashMap_Free,         hashmap *Map)
 
@@ -117,7 +117,12 @@ BinarySearchArray(
 }
 
 internal void
-QuickSort(vptr Data, usize ElementSize, usize ElementCount, s08 (*Cmp)(vptr A, vptr B))
+QuickSort(
+	vptr  Data,
+	usize ElementSize,
+	usize ElementCount,
+	s08 (*Cmp)(vptr A, vptr B)
+)
 {
 #define QSORT_SWAP(A, B) \
 	do { \
@@ -185,7 +190,8 @@ internal usize
 HashMap_MemHash(vptr Data, vptr Param)
 {
 	u32 Hash = 5381;
-	for (usize I = 0; I < (usize) Param; I++) Hash = (Hash << 5) + Hash + ((u08 *) Data)[I];
+	for (usize I = 0; I < (usize) Param; I++)
+		Hash = (Hash << 5) + Hash + ((u08 *) Data)[I];
 	return Hash;
 }
 
@@ -228,7 +234,18 @@ HashMap_InitCustom(
 internal hashmap
 HashMap_Init(heap *Heap, u32 KeySize, u32 ValueSize)
 {
-	return HashMap_InitCustom(Heap, KeySize, ValueSize, 64, 0.5f, 2.0f, NULL, NULL, NULL, NULL);
+	return HashMap_InitCustom(
+		Heap,
+		KeySize,
+		ValueSize,
+		64,
+		0.5f,
+		2.0f,
+		NULL,
+		NULL,
+		NULL,
+		NULL
+	);
 }
 
 internal vptr
@@ -268,16 +285,18 @@ HashMap_Get(hashmap *Map, vptr Key, vptr ValueOut)
 }
 
 internal b08
-HashMap_Remove(hashmap *Map, vptr Key, vptr ValueOut)
+HashMap_Remove(hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut)
 {
 	vptr Value = HashMap_GetRef(Map, Key);
 	if (!Value) return FALSE;
 
-	usize *Hash = (usize *) (Value - Map->KeySize - sizeof(usize));
+	vptr StoredKey = Value - Map->KeySize;
+	usize *Hash = (usize *) (StoredKey - sizeof(usize));
 	*Hash		= HASH_DELETED;
 
+	if (KeyOut) Mem_Cpy(KeyOut, StoredKey, Map->KeySize);
 	if (ValueOut) Mem_Cpy(ValueOut, Value, Map->ValueSize);
-	Mem_Set(Value - Map->KeySize, 0, Map->KeySize + Map->ValueSize);
+	Mem_Set(StoredKey, 0, Map->KeySize + Map->ValueSize);
 
 	return TRUE;
 }
@@ -318,7 +337,8 @@ HashMap_Grow(hashmap *Map)
 	Map->Capacity		 = (u32) (Map->Capacity * Map->ResizeRate);
 	heap_handle *OldData = Map->Data;
 
-	Map->Data = Heap_Allocate(Heap_GetHeap(Map->Data), Map->Capacity * Map->EntrySize);
+	Map->Data =
+		Heap_Allocate(Heap_GetHeap(Map->Data), Map->Capacity * Map->EntrySize);
 	Mem_Set(Map->Data->Data, 0, Map->Data->Size);
 
 	for (usize I = 0; I < OldCapacity; I++) {
@@ -336,7 +356,8 @@ internal b08
 HashMap_Add(hashmap *Map, vptr Key, vptr Value)
 {
 	Map->EntryCount++;
-	if ((float) Map->EntryCount / Map->Capacity >= Map->ResizeThresh) HashMap_Grow(Map);
+	if ((float) Map->EntryCount / Map->Capacity >= Map->ResizeThresh)
+		HashMap_Grow(Map);
 
 	usize Hash = Map->Hash(Key, Map->HashParam);
 	return HashMap_AddWithHash(Map, Hash, Key, Value);

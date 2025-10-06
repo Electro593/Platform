@@ -1317,7 +1317,7 @@ Wayland_DeleteObject(vptr Object)
 	if (!Wayland_IsObjectValid(Object)) return;
 
 	wayland_interface *Interface = Object;
-	HashMap_Remove(&_G.IdTable, &Interface->Id, NULL);
+	HashMap_Remove(&_G.IdTable, &Interface->Id, NULL, NULL);
 	Mem_Set(Object, 0, Interface->Size);
 	Heap_FreeA(Object);
 }
