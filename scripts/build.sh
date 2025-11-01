@@ -103,7 +103,7 @@ build_module() {
 		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
-			readelf -a "build/$ModuleName$DllSuffix" > "build/$ModuleName$DllSuffix.dump.dat" 2> /dev/null
+			readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
 		else
 			echo Setting result after module $Module
 			Result=1
@@ -114,7 +114,7 @@ build_module() {
 		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader.so -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
 		if [[ -e "build/$ModuleName$ExeSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.asm"
-			readelf -a "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
+			readelf -a -x .data -x .got.plt "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
 		else
 			echo Setting result after module $Module
 			Result=1
@@ -125,7 +125,7 @@ build_module() {
 		gcc $DllCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
-			readelf -a "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
+			readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
 		else
 			echo Setting result after module $Module
 			Result=1

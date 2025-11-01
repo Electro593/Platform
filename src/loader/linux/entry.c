@@ -118,6 +118,7 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	elf_state LoaderElf;
 	elf_error Error = Elf_ReadLoadedImage(&LoaderElf, BaseAddress, _G.PageSize);
+	if (!LoaderElf.FileName) LoaderElf.FileName = "loader.so";
 	if (Error) return NULL;
 
 	elf_state UtilElf;
@@ -159,11 +160,13 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 	loader_module *LoaderModule =
 		Heap_AllocateA(_G.Heap, sizeof(loader_module));
 	LoaderModule->Elf = LoaderElf;
+	LoaderModule->RefCount = 1;
 	string LoaderStr  = HString(_G.Heap, LoaderElf.FileName);
 	HashMap_Add(&_G.Links, &LoaderStr, &LoaderModule);
 
 	loader_module *UtilModule = Heap_AllocateA(_G.Heap, sizeof(loader_module));
 	UtilModule->Elf			  = UtilElf;
+	UtilModule->RefCount = 1;
 	string UtilStr			  = HString(_G.Heap, UtilElf.FileName);
 	HashMap_Add(&_G.Links, &UtilStr, &UtilModule);
 
@@ -187,7 +190,6 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (Error) Sys_Exit(-2);
 	}
 
-	STOP;
 	return (vptr) (ProgramElf.ImageAddress
 				   - ProgramElf.VAddrOffset
 				   + ProgramElf.Header.Entry);

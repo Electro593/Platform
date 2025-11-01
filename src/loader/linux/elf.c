@@ -677,15 +677,12 @@ typedef struct elf_dynamic_state {
 	void (*Fini)(void);
 	c08	 *SoName;
 	c08	 *RPath;
-	b08	  Symbolic;
 	vptr  Rel;
 	usize RelSize;
 	usize RelEntrySize;
 	usize PltRel;
 	vptr  Debug;
-	b08	  TextRel;
 	vptr  JmpRel;
-	b08	  BindNow;
 	void (**InitArray)(void);
 	void (**FiniArray)(void);
 	usize InitArraySize;
@@ -744,6 +741,18 @@ typedef struct elf_state {
 #endif	// INCLUDE_HEADER
 
 #ifdef INCLUDE_SOURCE
+
+#ifdef _X64
+__asm__(
+	".globl Elf_LazyRelocationCallback  \n"
+	"Elf_LazyRelocationCallback:        \n"
+	"	mov 0(%rsp), %rdi               \n"
+	"	mov 8(%rsp), %rsi               \n"
+	"	call Elf_HandleLazyRelocation   \n"
+	"	jmp *%rax                       \n"
+);
+extern usize Elf_LazyRelocationCallback(elf_state *State, usize RelocIndex);
+#endif
 
 internal elf_section_header *
 Elf_GetSectionHeader(elf_state *State, u64 Index)
@@ -823,7 +832,7 @@ Elf_LookupSymbol_Hash(elf_state *State, c08 *Name)
 		elf_symbol *Symbol	= SymTab + SymIndex * SymTabEntrySize;
 		c08		   *SymName = StrTab + Symbol->Name;
 		if (Elf_CheckName(SymName, Name))
-			return State->ImageAddress - State->VAddrOffset + Symbol->Value;
+			return State->ImageAddress + Symbol->Value;
 
 		SymIndex = Chains[SymIndex];
 	}
@@ -871,7 +880,7 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 			elf_symbol *Symbol	= SymTab + SymIndex * SymTabEntrySize;
 			c08		   *SymName = StrTab + Symbol->Name;
 			if (Elf_CheckName(SymName, Name))
-				return State->ImageAddress - State->VAddrOffset + Symbol->Value;
+				return State->ImageAddress + Symbol->Value;
 		}
 
 		if (*ChainEntry & 1) break;
@@ -935,22 +944,21 @@ Elf_HandleRelocations(
 	usize	   SymTabEntrySize
 )
 {
+	// TODO Handle extralong symbol indexes
 	vptr		PrevTarget = NULL;
 	usize		Value	   = 0;
 	usize		RelocType  = 0;
 	elf_symbol *Symbol	   = NULL;
-
-	vptr Cursor = Relocs;
+	vptr		Cursor	   = Relocs;
+	usize		Base	   = (usize) State->ImageAddress;
 	while (Cursor < Relocs + RelocsSize) {
 		elf_relocation	 *Rel  = Cursor;
 		elf_relocation_a *Rela = Cursor;
 
-		vptr Target = State->ImageAddress - State->VAddrOffset + Rel->Offset;
+		vptr Target = (vptr) Base + Rel->Offset;
 		if (PrevTarget != Target) {
-			if (PrevTarget) {
-				c08 *Name = (c08 *) StrTab + Symbol->Name;
+			if (PrevTarget)
 				Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
-			}
 
 			if (IsRela) Value = Rela->Addend;
 			else Value = Elf_ExtractAddend(State, RelocType);
@@ -970,8 +978,8 @@ Elf_HandleRelocations(
 			State,
 			RelocType,
 			Value,
-			(usize) State->ImageAddress - State->VAddrOffset + Symbol->Value,
-			(usize) State->ImageAddress
+			Base + Symbol->Value,
+			Base
 		);
 
 		PrevTarget	= Target;
@@ -979,6 +987,68 @@ Elf_HandleRelocations(
 	}
 
 	if (PrevTarget) Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
+}
+
+internal void
+Elf_SetupLazyRelocation(
+	elf_state *State,
+	vptr	   Relocs,
+	usize	   RelocEntrySize,
+	usize	   RelocsSize,
+	vptr	   PltGot
+)
+{
+	vptr  Cursor = Relocs;
+	usize Base	 = (usize) State->ImageAddress;
+	while (Cursor < Relocs + RelocsSize) {
+		elf_relocation *Rel		= Cursor;
+		usize		   *Target	= (vptr) Base + Rel->Offset;
+		*Target				   += Base;
+		Cursor				   += RelocEntrySize;
+	}
+
+	usize *Words = PltGot;
+	Words[1]	 = (usize) State;
+	Words[2]	 = (usize) Elf_LazyRelocationCallback;
+}
+
+internal usize
+Elf_HandleLazyRelocation(elf_state *State, usize RelocIndex)
+{
+	usize IsRela = State->Dynamic.PltRel == ELF_DYNAMIC_TAG_RELA;
+	usize RelocSize =
+		IsRela ? sizeof(elf_relocation_a) : sizeof(elf_relocation);
+
+	elf_relocation_a *Reloc =
+		(vptr) (State->Dynamic.JmpRel + RelocIndex * RelocSize);
+
+	usize Base	 = (usize) State->ImageAddress;
+	vptr  Target = State->ImageAddress + Reloc->Offset;
+	usize SymbolIndex, RelocType;
+	if (State->Header.Ident.FileClass == ELF_CLASS_32) {
+		SymbolIndex = Reloc->Info >> 8;
+		RelocType	= Reloc->Info & 0xFF;
+	} else {
+		SymbolIndex = Reloc->Info >> 32;
+		RelocType	= Reloc->Info & 0xFFFFFFFF;
+	}
+
+	usize Addend = IsRela ? Reloc->Addend : Elf_ExtractAddend(State, RelocType);
+
+	elf_symbol *Symbol =
+		State->Dynamic.SymTab + State->Dynamic.SymTabEntrySize * SymbolIndex;
+
+	usize Value = Elf_ComputeRelocation(
+		State,
+		RelocType,
+		Addend,
+		Base + Symbol->Value,
+		Base
+	);
+
+	Elf_ApplyRelocation(State, Target, RelocType, Value);
+
+	return Value;
 }
 
 internal elf_error
@@ -1024,15 +1094,13 @@ Elf_HandleSectionRelocations(elf_state *State)
 internal void
 Elf_ReadDynamics(elf_state *State)
 {
-	vptr			   Base		= State->ImageAddress + State->VAddrOffset;
 	elf_dynamic_state *DynState = &State->Dynamic;
+	vptr			   Base		= State->ImageAddress;
 
 	for (usize I = 0; I < State->Header.ProgramHeaderCount; I++) {
 		elf_program_header *Header = Elf_GetProgramHeader(State, I);
 		if (Header->Type != ELF_SEGMENT_TYPE_DYNAMIC) continue;
-
-		DynState->Dynamics =
-			State->ImageAddress - State->VAddrOffset + Header->VirtualAddress;
+		DynState->Dynamics = Base + Header->VirtualAddress;
 		break;
 	}
 
@@ -1077,9 +1145,11 @@ Elf_ReadDynamics(elf_state *State)
 			case ELF_DYNAMIC_TAG_FINI:
 				DynState->Fini = Base + Dynamic->Pointer;
 				break;
-			case ELF_DYNAMIC_TAG_SONAME	 : SoName = Dynamic->Value; break;
-			case ELF_DYNAMIC_TAG_RPATH	 : RPath = Dynamic->Value; break;
-			case ELF_DYNAMIC_TAG_SYMBOLIC: DynState->Symbolic = TRUE; break;
+			case ELF_DYNAMIC_TAG_SONAME: SoName = Dynamic->Value; break;
+			case ELF_DYNAMIC_TAG_RPATH : RPath = Dynamic->Value; break;
+			case ELF_DYNAMIC_TAG_SYMBOLIC:
+				DynState->Flags |= ELF_DYNAMIC_FLAG_SYMBOLIC;
+				break;
 			case ELF_DYNAMIC_TAG_REL:
 				DynState->Rel = Base + Dynamic->Pointer;
 				break;
@@ -1095,10 +1165,15 @@ Elf_ReadDynamics(elf_state *State)
 			case ELF_DYNAMIC_TAG_DEBUG:
 				DynState->Debug = Base + Dynamic->Pointer;
 				break;
+			case ELF_DYNAMIC_TAG_TEXTREL:
+				DynState->Flags |= ELF_DYNAMIC_FLAG_TEXTREL;
+				break;
 			case ELF_DYNAMIC_TAG_JMPREL:
 				DynState->JmpRel = Base + Dynamic->Pointer;
 				break;
-			case ELF_DYNAMIC_TAG_BIND_NOW: DynState->BindNow = TRUE; break;
+			case ELF_DYNAMIC_TAG_BIND_NOW:
+				DynState->Flags |= ELF_DYNAMIC_FLAG_BIND_NOW;
+				break;
 			case ELF_DYNAMIC_TAG_INIT_ARRAY:
 				DynState->InitArray = Base + Dynamic->Pointer;
 				break;
@@ -1112,7 +1187,9 @@ Elf_ReadDynamics(elf_state *State)
 				DynState->FiniArraySize = Dynamic->Value;
 				break;
 			case ELF_DYNAMIC_TAG_RUNPATH: RunPath = Dynamic->Value; break;
-			case ELF_DYNAMIC_TAG_FLAGS	: DynState->Flags = Dynamic->Value; break;
+			case ELF_DYNAMIC_TAG_FLAGS:
+				DynState->Flags |= Dynamic->Value;
+				break;
 			case ELF_DYNAMIC_TAG_PREINIT_ARRAY:
 				DynState->PreinitArray = Base + Dynamic->Pointer;
 				break;
@@ -1146,8 +1223,6 @@ Elf_ReadDynamics(elf_state *State)
 internal void
 Elf_HandleDynamicRelocations(elf_state *State)
 {
-	Elf_ReadDynamics(State);
-
 	if (State->Dynamic.Rel) {
 		Elf_HandleRelocations(
 			State,
@@ -1172,6 +1247,30 @@ Elf_HandleDynamicRelocations(elf_state *State)
 			State->Dynamic.SymTab,
 			State->Dynamic.SymTabEntrySize
 		);
+	}
+
+	if (State->Dynamic.JmpRel) {
+		b08 IsRela = State->Dynamic.PltRel == ELF_DYNAMIC_TAG_RELA;
+		if (State->Dynamic.Flags & ELF_DYNAMIC_FLAG_BIND_NOW) {
+			Elf_HandleRelocations(
+				State,
+				State->Dynamic.JmpRel,
+				IsRela ? sizeof(elf_relocation_a) : sizeof(elf_relocation),
+				State->Dynamic.PltRelSize,
+				IsRela,
+				State->Dynamic.StrTab,
+				State->Dynamic.SymTab,
+				State->Dynamic.SymTabEntrySize
+			);
+		} else {
+			Elf_SetupLazyRelocation(
+				State,
+				State->Dynamic.JmpRel,
+				IsRela ? sizeof(elf_relocation_a) : sizeof(elf_relocation),
+				State->Dynamic.PltRelSize,
+				State->Dynamic.PltGot
+			);
+		}
 	}
 
 	if (State->Dynamic.GnuHash) {
@@ -1287,7 +1386,7 @@ Elf_LoadSegments(elf_state *State)
 		if (Error) return Error;
 
 		usize PageMask = State->PageSize - 1;
-		vptr  Base = State->ImageAddress = Sys_MemMap(
+		vptr  Base	   = Sys_MemMap(
 			 NULL,
 			 (State->ImageSize + PageMask) & ~PageMask,
 			 SYS_PROT_NONE,
@@ -1295,6 +1394,7 @@ Elf_LoadSegments(elf_state *State)
 			 -1,
 			 0
 		 );
+		State->ImageAddress = Base - State->VAddrOffset;
 		if ((ssize) Base == -1) return ELF_ERROR_OUT_OF_MEMORY;
 
 		for (usize I = 0; I < State->Header.ProgramHeaderCount; I++) {
@@ -1320,10 +1420,8 @@ Elf_FixPermsAfterReloc(elf_state *State)
 		elf_program_header *Header = Elf_GetProgramHeader(State, I);
 		if (Header->Type == ELF_SEGMENT_TYPE_GNU_RELRO) {
 			usize PageMask = State->PageSize - 1;
-			u32	 *Data	   = (vptr) State->ImageAddress
-					  - State->VAddrOffset
-					  + Header->VirtualAddress;
-			s32 Prot =
+			u32	 *Data = (vptr) State->ImageAddress + Header->VirtualAddress;
+			s32	  Prot =
 				0
 				| ((Header->Flags & ELF_SEGMENT_FLAG_READ) ? SYS_PROT_READ : 0)
 				| ((Header->Flags & ELF_SEGMENT_FLAG_WRITE) ? SYS_PROT_WRITE
@@ -1558,7 +1656,12 @@ Elf_ReadLoadedImage(elf_state *State, vptr BaseAddress, usize PageSize)
 	Error = Elf_ReadSegments(State);
 	if (Error) return Error;
 
-	State->ImageAddress = BaseAddress;
+	State->ImageAddress = BaseAddress - State->VAddrOffset;
+
+	Elf_ReadDynamics(State);
+
+	if (State->Dynamic.Flags & ELF_DYNAMIC_FLAG_STATIC_TLS)
+		return ELF_ERROR_INVALID_OPERATION;
 
 	Elf_HandleDynamicRelocations(State);
 
