@@ -43,7 +43,7 @@ Loader_OpenShared(c08 *Name)
 	}
 
 	elf_state Elf;
-	elf_error Error = Elf_Open(&Elf, Name, _G.PageSize);
+	elf_error Error = Elf_Load(&Elf, Name, _G.PageSize);
 	if (Error) return NULL;
 
 	Module	= Heap_AllocateA(_G.Heap, sizeof(loader_module) + NameStr.Length);
@@ -122,9 +122,7 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 	if (Error) return NULL;
 
 	elf_state UtilElf;
-	Error = Elf_Open(&UtilElf, "util.so", _G.PageSize);
-	if (Error) Sys_Exit(-1);
-	Error = Elf_LoadProgram(&UtilElf);
+	Error = Elf_Load(&UtilElf, "util.so", _G.PageSize);
 	if (Error) Sys_Exit(-1);
 
 	platform_module UtilPModule = { 0 };
@@ -159,14 +157,14 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	loader_module *LoaderModule =
 		Heap_AllocateA(_G.Heap, sizeof(loader_module));
-	LoaderModule->Elf = LoaderElf;
+	LoaderModule->Elf	   = LoaderElf;
 	LoaderModule->RefCount = 1;
-	string LoaderStr  = HString(_G.Heap, LoaderElf.FileName);
+	string LoaderStr	   = HString(_G.Heap, LoaderElf.FileName);
 	HashMap_Add(&_G.Links, &LoaderStr, &LoaderModule);
 
 	loader_module *UtilModule = Heap_AllocateA(_G.Heap, sizeof(loader_module));
 	UtilModule->Elf			  = UtilElf;
-	UtilModule->RefCount = 1;
+	UtilModule->RefCount	  = 1;
 	string UtilStr			  = HString(_G.Heap, UtilElf.FileName);
 	HashMap_Add(&_G.Links, &UtilStr, &UtilModule);
 
@@ -183,10 +181,10 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (Error) Sys_Exit(-2);
 	} else if (FileDescriptor != -1) {
 		Error =
-			Elf_OpenWithDescriptor(&ProgramElf, FileDescriptor, _G.PageSize);
+			Elf_LoadWithDescriptor(&ProgramElf, FileDescriptor, _G.PageSize);
 		if (Error) Sys_Exit(-2);
 	} else {
-		Error = Elf_Open(&ProgramElf, FileName, _G.PageSize);
+		Error = Elf_Load(&ProgramElf, FileName, _G.PageSize);
 		if (Error) Sys_Exit(-2);
 	}
 

@@ -654,10 +654,6 @@ typedef struct elf_gnu_hash_table {
 #define ELF_ERROR_OUT_OF_MEMORY     8
 #define ELF_ERROR_INVALID_MEM_MAP   9
 
-#define ELF_STATE_CLOSED           0
-#define ELF_STATE_OPENED           1
-#define ELF_STATE_LOADED           2
-
 typedef s32 elf_error;
 
 typedef struct elf_dynamic_state {
@@ -700,7 +696,6 @@ typedef struct elf_dynamic_state {
 
 typedef struct elf_state {
 	// General
-	u08	  State;
 	usize PageSize;
 
 	// Mapped file
@@ -712,27 +707,11 @@ typedef struct elf_state {
 	// Quick access
 	elf_header Header;
 
-	usize SectionHeaderCount;
-	u08	 *SectionHeaderTable;
-	u08	 *ProgramHeaderTable;
-
-	elf_section_header *NullSectionHeader;
-	elf_section_header *SectionNameSectionHeader;
-	c08				   *SectionNameTable;
+	u08 *ProgramHeaderTable;
 
 	elf_dynamic_state Dynamic;
 
-	usize LookupType;
-	c08	 *HashStrTab;
-	vptr  HashSymTab;
-	usize HashSymTabEntrySize;
-	union {
-		elf_hash_table	   *HashTable;
-		elf_gnu_hash_table *GnuHashTable;
-	};
-
 	// Loaded image
-	usize TextVAddr;
 	usize VAddrOffset;
 	vptr  ImageAddress;
 	usize ImageSize;
@@ -753,23 +732,6 @@ __asm__(
 );
 extern usize Elf_LazyRelocationCallback(elf_state *State, usize RelocIndex);
 #endif
-
-internal elf_section_header *
-Elf_GetSectionHeader(elf_state *State, u64 Index)
-{
-	if (!State->SectionHeaderTable) return 0;
-	return (vptr) (State->SectionHeaderTable
-				   + State->Header.SectionHeaderSize * Index);
-}
-
-internal u08 *
-Elf_GetSection(elf_state *State, elf_section_header *Header)
-{
-	if (!Header) return 0;
-	if (Header->Type == ELF_SECTION_TYPE_NULL) return 0;
-	if (Header->Type == ELF_SECTION_TYPE_NOBITS) return 0;
-	return State->File + Header->Offset;
-}
 
 internal elf_program_header *
 Elf_GetProgramHeader(elf_state *State, u64 Index)
@@ -809,25 +771,19 @@ Elf_GnuHash(c08 *Name)
 }
 
 internal vptr
-Elf_LookupSymbol_Linear(elf_state *State, c08 *Name)
-{
-	return NULL;
-}
-
-internal vptr
 Elf_LookupSymbol_Hash(elf_state *State, c08 *Name)
 {
-	vptr  StrTab		  = State->HashStrTab;
-	vptr  SymTab		  = State->HashSymTab;
-	usize SymTabEntrySize = State->HashSymTabEntrySize;
+	elf_hash_table *HashTab			= State->Dynamic.Hash;
+	c08			   *StrTab			= State->Dynamic.StrTab;
+	vptr			SymTab			= State->Dynamic.SymTab;
+	usize			SymTabEntrySize = State->Dynamic.SymTabEntrySize;
 
-	elf_hash_table *Table	= State->HashTable;
-	elf_word	   *Buckets = Table->Data;
-	elf_word	   *Chains	= Buckets + Table->BucketCount;
+	elf_word *Buckets = HashTab->Data;
+	elf_word *Chains  = Buckets + HashTab->BucketCount;
 
 	u32 Hash = Elf_GnuHash(Name);
 
-	u32 SymIndex = Buckets[Hash % Table->BucketCount];
+	u32 SymIndex = Buckets[Hash % HashTab->BucketCount];
 	while (SymIndex != ELF_SYMBOL_INDEX_UNDEFINED) {
 		elf_symbol *Symbol	= SymTab + SymIndex * SymTabEntrySize;
 		c08		   *SymName = StrTab + Symbol->Name;
@@ -843,37 +799,36 @@ Elf_LookupSymbol_Hash(elf_state *State, c08 *Name)
 internal vptr
 Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 {
-	vptr  StrTab		  = State->HashStrTab;
-	vptr  SymTab		  = State->HashSymTab;
-	usize SymTabEntrySize = State->HashSymTabEntrySize;
-
-	elf_gnu_hash_table *Table = State->GnuHashTable;
+	elf_gnu_hash_table *HashTab			= State->Dynamic.GnuHash;
+	c08				   *StrTab			= State->Dynamic.StrTab;
+	vptr				SymTab			= State->Dynamic.SymTab;
+	usize				SymTabEntrySize = State->Dynamic.SymTabEntrySize;
 
 	usize BloomWords =
-		Table->BloomSize
+		HashTab->BloomSize
 		* ((State->Header.Ident.FileClass == ELF_CLASS_32) ? 1 : 2);
 
-	elf32_word	*Bloom32 = (vptr) Table->Data;
-	elf64_xword *Bloom64 = (vptr) Table->Data;
+	elf32_word	*Bloom32 = (vptr) HashTab->Data;
+	elf64_xword *Bloom64 = (vptr) HashTab->Data;
 
-	elf_word *Buckets = Table->Data + BloomWords;
-	elf_word *Chain	  = Buckets + Table->BucketCount;
+	elf_word *Buckets = HashTab->Data + BloomWords;
+	elf_word *Chain	  = Buckets + HashTab->BucketCount;
 
 	u32 Hash  = Elf_GnuHash(Name);
-	u32 Hash2 = Hash >> Table->BloomShift;
+	u32 Hash2 = Hash >> HashTab->BloomShift;
 
 	if (State->Header.Ident.FileClass == 32) {
-		u32 N = Bloom32[(Hash >> 5) & (Table->BloomSize - 1)];
+		u32 N = Bloom32[(Hash >> 5) & (HashTab->BloomSize - 1)];
 		u32 B = (1 << (Hash & 31)) | (1 << (Hash2 & 31));
 		if ((N & B) != B) return NULL;
 	} else {
-		u64 N = Bloom64[(Hash >> 6) & (Table->BloomSize - 1)];
+		u64 N = Bloom64[(Hash >> 6) & (HashTab->BloomSize - 1)];
 		u64 B = (1ull << (Hash & 63)) | (1ull << (Hash2 & 63));
 		if ((N & B) != B) return NULL;
 	}
 
-	u32	 SymIndex	= Buckets[Hash % Table->BucketCount];
-	u32 *ChainEntry = Chain + SymIndex - Table->SymbolOffset;
+	u32	 SymIndex	= Buckets[Hash % HashTab->BucketCount];
+	u32 *ChainEntry = Chain + SymIndex - HashTab->SymbolOffset;
 
 	while (1) {
 		if ((Hash >> 1) == (*ChainEntry >> 1)) {
@@ -944,7 +899,6 @@ Elf_HandleRelocations(
 	usize	   SymTabEntrySize
 )
 {
-	// TODO Handle extralong symbol indexes
 	vptr		PrevTarget = NULL;
 	usize		Value	   = 0;
 	usize		RelocType  = 0;
@@ -1052,46 +1006,6 @@ Elf_HandleLazyRelocation(elf_state *State, usize RelocIndex)
 }
 
 internal elf_error
-Elf_HandleSectionRelocations(elf_state *State)
-{
-	for (usize I = 0; I < State->SectionHeaderCount; I++) {
-		elf_section_header *Header = Elf_GetSectionHeader(State, I);
-		vptr				Data   = State->File + Header->Offset;
-		char *Name = (char *) (State->SectionNameTable + Header->Name);
-
-		b08 IsRela = Elf_CheckName(Name, ".rela");
-		b08 IsRel  = !IsRela && Elf_CheckName(Name, ".rel");
-
-		if (!IsRela && !IsRel) continue;
-
-		elf_section_header *SymTabHeader =
-			Elf_GetSectionHeader(State, Header->Link);
-		vptr SymTab = State->File + SymTabHeader->Offset;
-
-		elf_section_header *TargetHeader =
-			Elf_GetSectionHeader(State, Header->Info);
-		vptr TargetBase = State->File + TargetHeader->Offset;
-
-		elf_section_header *StrTabHeader =
-			Elf_GetSectionHeader(State, SymTabHeader->Link);
-		vptr StrTab = State->File + StrTabHeader->Offset;
-
-		Elf_HandleRelocations(
-			State,
-			Data,
-			Header->EntrySize,
-			Header->Size,
-			IsRela,
-			StrTab,
-			SymTab,
-			SymTabHeader->EntrySize
-		);
-	}
-
-	return ELF_ERROR_SUCCESS;
-}
-
-internal void
 Elf_ReadDynamics(elf_state *State)
 {
 	elf_dynamic_state *DynState = &State->Dynamic;
@@ -1218,9 +1132,17 @@ Elf_ReadDynamics(elf_state *State)
 	DynState->SoName  = DynState->StrTab + SoName;
 	DynState->RPath	  = DynState->StrTab + RPath;
 	DynState->RunPath = DynState->StrTab + RunPath;
+
+	if (State->Dynamic.Flags & ELF_DYNAMIC_FLAG_STATIC_TLS)
+		return ELF_ERROR_NOT_SUPPORTED;
+
+	if (!State->Dynamic.Hash && !State->Dynamic.GnuHash)
+		return ELF_ERROR_INVALID_FORMAT;
+
+	return ELF_ERROR_SUCCESS;
 }
 
-internal void
+internal elf_error
 Elf_HandleDynamicRelocations(elf_state *State)
 {
 	if (State->Dynamic.Rel) {
@@ -1273,18 +1195,9 @@ Elf_HandleDynamicRelocations(elf_state *State)
 		}
 	}
 
-	if (State->Dynamic.GnuHash) {
-		State->LookupType = ELF_LOOKUP_GNU_HASH;
-		State->HashTable  = State->Dynamic.GnuHash;
-	} else if (State->Dynamic.Hash) {
-		State->LookupType = ELF_LOOKUP_HASH;
-		State->HashTable  = State->Dynamic.Hash;
-	}
-	State->HashStrTab		   = State->Dynamic.StrTab;
-	State->HashSymTab		   = State->Dynamic.SymTab;
-	State->HashSymTabEntrySize = State->Dynamic.SymTabEntrySize;
-
 	if (!State->FileName) State->FileName = State->Dynamic.SoName;
+
+	return ELF_ERROR_SUCCESS;
 }
 
 internal elf_error
@@ -1439,7 +1352,7 @@ Elf_FixPermsAfterReloc(elf_state *State)
 }
 
 internal elf_error
-Elf_SetupAndValidate(elf_state *State, b08 IncludeSectionTable)
+Elf_SetupAndValidate(elf_state *State)
 {
 	State->Header = *(elf_header *) State->File;
 
@@ -1464,94 +1377,11 @@ Elf_SetupAndValidate(elf_state *State, b08 IncludeSectionTable)
 	if (State->Header.ProgramHeaderSize < sizeof(elf_program_header))
 		return ELF_ERROR_INVALID_FORMAT;
 
-	State->SectionHeaderCount = State->Header.SectionHeaderCount;
-	if (IncludeSectionTable) {
-		if (State->SectionHeaderCount || State->Header.SectionHeaderTableOffset)
-		{
-			State->SectionHeaderTable =
-				State->File + State->Header.SectionHeaderTableOffset;
-
-			State->NullSectionHeader = Elf_GetSectionHeader(State, 0);
-			if (State->NullSectionHeader->Name) return ELF_ERROR_INVALID_FORMAT;
-			if (State->NullSectionHeader->Type != ELF_SECTION_TYPE_NULL)
-				return ELF_ERROR_INVALID_FORMAT;
-			if (State->NullSectionHeader->Flags)
-				return ELF_ERROR_INVALID_FORMAT;
-			if (State->NullSectionHeader->Address)
-				return ELF_ERROR_INVALID_FORMAT;
-			if (State->NullSectionHeader->Offset)
-				return ELF_ERROR_INVALID_FORMAT;
-			if (State->NullSectionHeader->Info) return ELF_ERROR_INVALID_FORMAT;
-			if (State->NullSectionHeader->AddressAlignment)
-				return ELF_ERROR_INVALID_FORMAT;
-			if (State->NullSectionHeader->EntrySize)
-				return ELF_ERROR_INVALID_FORMAT;
-
-			if (!State->SectionHeaderCount)
-				State->SectionHeaderCount = State->NullSectionHeader->Size;
-			else if (State->NullSectionHeader->Size)
-				return ELF_ERROR_INVALID_FORMAT;
-
-			u64 Index = State->Header.SectionNameTableIndex;
-			if (Index == ELF_SECTION_INDEX_EXTENDED)
-				Index = State->NullSectionHeader->Link;
-			else if (Index >= ELF_SECTION_INDEX_LORESERVE)
-				return ELF_ERROR_INVALID_FORMAT;
-			else if (State->NullSectionHeader->Link)
-				return ELF_ERROR_INVALID_FORMAT;
-			State->SectionNameSectionHeader =
-				Elf_GetSectionHeader(State, Index);
-			State->SectionNameTable =
-				(c08 *) Elf_GetSection(State, State->SectionNameSectionHeader);
-
-			for (usize I = 0; I < State->SectionHeaderCount; I++) {
-				elf_section_header *Header = Elf_GetSectionHeader(State, I);
-				c08 *Name = State->SectionNameTable + Header->Name;
-				vptr Data = State->File + Header->Offset;
-
-				if (Elf_CheckName(Name, ".text")) {
-					State->TextVAddr = Header->Address;
-				} else if (Elf_CheckName(Name, ".hash")) {
-					if (State->LookupType < ELF_LOOKUP_HASH) {
-						State->LookupType = ELF_LOOKUP_HASH;
-						State->HashTable  = Data;
-						elf_section_header *SymTabHeader =
-							Elf_GetSectionHeader(State, Header->Link);
-						State->HashSymTab =
-							(vptr) State->File + SymTabHeader->Offset;
-						State->HashSymTabEntrySize = SymTabHeader->EntrySize;
-						elf_section_header *StrTabHeader =
-							Elf_GetSectionHeader(State, SymTabHeader->Link);
-						State->HashStrTab =
-							(vptr) State->File + StrTabHeader->Offset;
-					}
-				} else if (Elf_CheckName(Name, ".gnu.hash")) {
-					if (State->LookupType < ELF_LOOKUP_GNU_HASH) {
-						State->LookupType	= ELF_LOOKUP_GNU_HASH;
-						State->GnuHashTable = Data;
-						elf_section_header *SymTabHeader =
-							Elf_GetSectionHeader(State, Header->Link);
-						State->HashSymTab =
-							(vptr) State->File + SymTabHeader->Offset;
-						State->HashSymTabEntrySize = SymTabHeader->EntrySize;
-						elf_section_header *StrTabHeader =
-							Elf_GetSectionHeader(State, SymTabHeader->Link);
-						State->HashStrTab =
-							(vptr) State->File + StrTabHeader->Offset;
-					}
-				}
-			}
-		} else if (State->Header.SectionNameTableIndex
-				   != ELF_SECTION_INDEX_UNDEF)
-		{
-			return ELF_ERROR_INVALID_FORMAT;
-		}
-	}
-
 	if (State->Header.ProgramHeaderCount) {
 		State->ProgramHeaderTable =
 			State->File + State->Header.ProgramHeaderTableOffset;
 
+		b08 FoundDynamic  = FALSE;
 		b08 FoundLoadable = FALSE;
 		b08 FoundPHDR	  = FALSE;
 		b08 FoundInterp	  = FALSE;
@@ -1559,32 +1389,29 @@ Elf_SetupAndValidate(elf_state *State, b08 IncludeSectionTable)
 		for (u32 I = 0; I < State->Header.ProgramHeaderCount; I++) {
 			elf_program_header *Header = Elf_GetProgramHeader(State, I);
 			switch (Header->Type) {
-				case ELF_SEGMENT_TYPE_NULL: break;
 				case ELF_SEGMENT_TYPE_LOAD:
 					if (Header->FileSize > Header->MemSize)
 						return ELF_ERROR_INVALID_FORMAT;
 					break;
-				case ELF_SEGMENT_TYPE_DYNAMIC: break;
+				case ELF_SEGMENT_TYPE_DYNAMIC:
+					if (FoundDynamic) return ELF_ERROR_INVALID_FORMAT;
+					FoundDynamic = TRUE;
+					break;
 				case ELF_SEGMENT_TYPE_INTERP:
 					if (FoundLoadable) return ELF_ERROR_INVALID_FORMAT;
 					if (FoundInterp) return ELF_ERROR_INVALID_FORMAT;
 					FoundInterp = TRUE;
 					break;
-				case ELF_SEGMENT_TYPE_NOTE: break;
-				case ELF_SEGMENT_TYPE_SHLIB:
-					return ELF_ERROR_INVALID_FORMAT;
-					break;
+				case ELF_SEGMENT_TYPE_SHLIB: return ELF_ERROR_INVALID_FORMAT;
 				case ELF_SEGMENT_TYPE_PHDR:
 					if (FoundLoadable) return ELF_ERROR_INVALID_FORMAT;
 					if (FoundPHDR) return ELF_ERROR_INVALID_FORMAT;
 					FoundPHDR = TRUE;
 					break;
-				case ELF_SEGMENT_TYPE_TLS: break;
 			}
 		}
 	} else {
-		if (State->Header.ProgramHeaderTableOffset)
-			return ELF_ERROR_INVALID_FORMAT;
+		return ELF_ERROR_INVALID_FORMAT;
 	}
 
 	return ELF_ERROR_SUCCESS;
@@ -1593,12 +1420,10 @@ Elf_SetupAndValidate(elf_state *State, b08 IncludeSectionTable)
 /* ========== EXTERNAL API ========== */
 
 internal elf_error
-Elf_OpenWithDescriptor(elf_state *State, u32 FileDescriptor, usize PageSize)
+Elf_LoadWithDescriptor(elf_state *State, u32 FileDescriptor, usize PageSize)
 {
 	// TODO: Don't allocate the entire file, just map what's needed
-
 	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_CLOSED) return ELF_ERROR_INVALID_OPERATION;
 
 	State->FileDescriptor = FileDescriptor;
 
@@ -1617,18 +1442,28 @@ Elf_OpenWithDescriptor(elf_state *State, u32 FileDescriptor, usize PageSize)
 	);
 	if ((usize) State->File >= 0xFFFFFFFFFFFFF000) return ELF_ERROR_UNKNOWN;
 
-	elf_error Error = Elf_SetupAndValidate(State, TRUE);
+	elf_error Error = Elf_SetupAndValidate(State);
 	if (Error) return Error;
 
-	State->State = ELF_STATE_OPENED;
+	Error = Elf_LoadSegments(State);
+	if (Error) return Error;
+
+	Error = Elf_ReadDynamics(State);
+	if (Error) return Error;
+
+	Error = Elf_HandleDynamicRelocations(State);
+	if (Error) return Error;
+
+	Error = Elf_FixPermsAfterReloc(State);
+	if (Error) return Error;
+
 	return ELF_ERROR_SUCCESS;
 }
 
 internal elf_error
-Elf_Open(elf_state *State, c08 *FileName, usize PageSize)
+Elf_Load(elf_state *State, c08 *FileName, usize PageSize)
 {
 	if (!State || !FileName) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_CLOSED) return ELF_ERROR_INVALID_OPERATION;
 
 	*State			= (elf_state) { 0 };
 	State->FileName = FileName;
@@ -1637,20 +1472,19 @@ Elf_Open(elf_state *State, c08 *FileName, usize PageSize)
 	u32 FD = Sys_Open(FileName, SYS_OPEN_READONLY, 0);
 	if (FD >= 0xFFFFF000) return ELF_ERROR_UNKNOWN;
 
-	return Elf_OpenWithDescriptor(State, FD, PageSize);
+	return Elf_LoadWithDescriptor(State, FD, PageSize);
 }
 
 internal elf_error
 Elf_ReadLoadedImage(elf_state *State, vptr BaseAddress, usize PageSize)
 {
 	if (!State || !BaseAddress) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_CLOSED) return ELF_ERROR_INVALID_OPERATION;
 
 	*State			= (elf_state) { 0 };
 	State->File		= BaseAddress;
 	State->PageSize = PageSize;
 
-	elf_error Error = Elf_SetupAndValidate(State, FALSE);
+	elf_error Error = Elf_SetupAndValidate(State);
 	if (Error) return Error;
 
 	Error = Elf_ReadSegments(State);
@@ -1658,36 +1492,15 @@ Elf_ReadLoadedImage(elf_state *State, vptr BaseAddress, usize PageSize)
 
 	State->ImageAddress = BaseAddress - State->VAddrOffset;
 
-	Elf_ReadDynamics(State);
-
-	if (State->Dynamic.Flags & ELF_DYNAMIC_FLAG_STATIC_TLS)
-		return ELF_ERROR_INVALID_OPERATION;
-
-	Elf_HandleDynamicRelocations(State);
-
-	Error = Elf_FixPermsAfterReloc(State);
+	Error = Elf_ReadDynamics(State);
 	if (Error) return Error;
 
-	State->State = ELF_STATE_LOADED;
-	return ELF_ERROR_SUCCESS;
-}
-
-internal elf_error
-Elf_LoadProgram(elf_state *State)
-{
-	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_OPENED) return ELF_ERROR_INVALID_OPERATION;
-
-	elf_error Error = Elf_LoadSegments(State);
-	if (Error) return Error;
-
-	Error = Elf_HandleSectionRelocations(State);
+	Error = Elf_HandleDynamicRelocations(State);
 	if (Error) return Error;
 
 	Error = Elf_FixPermsAfterReloc(State);
 	if (Error) return Error;
 
-	State->State = ELF_STATE_LOADED;
 	return ELF_ERROR_SUCCESS;
 }
 
@@ -1695,20 +1508,12 @@ internal elf_error
 Elf_GetProcAddress(elf_state *State, c08 *ProcName, vptr *ProcOut)
 {
 	if (!State || !ProcName || !ProcOut) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_LOADED) return ELF_ERROR_INVALID_OPERATION;
 
 	vptr Addr = NULL;
-	switch (State->LookupType) {
-		case ELF_LOOKUP_LINEAR:
-			Addr = Elf_LookupSymbol_Linear(State, ProcName);
-			break;
-		case ELF_LOOKUP_HASH:
-			Addr = Elf_LookupSymbol_Hash(State, ProcName);
-			break;
-		case ELF_LOOKUP_GNU_HASH:
-			Addr = Elf_LookupSymbol_GnuHash(State, ProcName);
-			break;
-	}
+
+	if (State->Dynamic.Hash) Addr = Elf_LookupSymbol_Hash(State, ProcName);
+	else if (State->Dynamic.GnuHash)
+		Addr = Elf_LookupSymbol_GnuHash(State, ProcName);
 
 	if (!Addr) return ELF_ERROR_NOT_FOUND;
 
@@ -1717,27 +1522,13 @@ Elf_GetProcAddress(elf_state *State, c08 *ProcName, vptr *ProcOut)
 }
 
 internal elf_error
-Elf_Unload(elf_state *State)
-{
-	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_LOADED) return ELF_ERROR_INVALID_OPERATION;
-
-	State->State = ELF_STATE_OPENED;
-	return ELF_ERROR_SUCCESS;
-}
-
-internal elf_error
 Elf_Close(elf_state *State)
 {
 	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
-	if (State->State != ELF_STATE_OPENED) return ELF_ERROR_INVALID_OPERATION;
 
-	s32 SysError = Sys_MemUnmap(State->File, State->FileSize);
-	if (SysError < 0 && SysError >= -4096) return ELF_ERROR_UNKNOWN;
-	SysError = Sys_Close(State->FileDescriptor);
-	if (SysError < 0 && SysError >= -4096) return ELF_ERROR_UNKNOWN;
+	Sys_MemUnmap(State->File, State->FileSize);
+	Sys_Close(State->FileDescriptor);
 
-	State->State = ELF_STATE_CLOSED;
 	return ELF_ERROR_SUCCESS;
 }
 
