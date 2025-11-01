@@ -325,7 +325,10 @@ typedef struct elf64_program_header {
 
 /* ========== ELF SYMBOL ========== */
 
-#define ELF_SYMBOL_INDEX_UNDEFINED 0
+#define ELF_SYMBOL_INDEX_UNDEFINED 0x0000
+#define ELF_SYMBOL_INDEX_ABSOLUTE  0xFFF1
+#define ELF_SYMBOL_INDEX_COMMON    0xFFF2
+#define ELF_SYMBOL_INDEX_EXTRA     0xFFFF
 
 #define ELF_SYMBOL_BINDING_LOCAL  0 // Only visible within a single object file
 #define ELF_SYMBOL_BINDING_GLOBAL 1 // Visible to all object files
@@ -742,11 +745,11 @@ Elf_GetProgramHeader(elf_state *State, u64 Index)
 }
 
 internal b08
-Elf_CheckName(c08 *Name, c08 *Expected)
+Elf_StrEqual(c08 *Name, c08 *Expected)
 {
 	c08 *A, *B;
 	for (A = Name, B = Expected; *A && *B && *A == *B; A++, B++);
-	return (!*A || *A == '.') && !*B;
+	return !*A && !*B;
 }
 
 internal u32
@@ -787,7 +790,7 @@ Elf_LookupSymbol_Hash(elf_state *State, c08 *Name)
 	while (SymIndex != ELF_SYMBOL_INDEX_UNDEFINED) {
 		elf_symbol *Symbol	= SymTab + SymIndex * SymTabEntrySize;
 		c08		   *SymName = StrTab + Symbol->Name;
-		if (Elf_CheckName(SymName, Name))
+		if (Elf_StrEqual(SymName, Name))
 			return State->ImageAddress + Symbol->Value;
 
 		SymIndex = Chains[SymIndex];
@@ -834,7 +837,7 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 		if ((Hash >> 1) == (*ChainEntry >> 1)) {
 			elf_symbol *Symbol	= SymTab + SymIndex * SymTabEntrySize;
 			c08		   *SymName = StrTab + Symbol->Name;
-			if (Elf_CheckName(SymName, Name))
+			if (Elf_StrEqual(SymName, Name))
 				return State->ImageAddress + Symbol->Value;
 		}
 
@@ -843,6 +846,23 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 	}
 
 	return NULL;
+}
+
+internal usize
+Elf_ResolveSymbol(elf_state *State, elf_symbol *Symbol)
+{
+	usize Index	  = Symbol->SectionIndex;
+	usize Binding = Symbol->Info >> 4;
+	usize Type	  = Symbol->Info & 15;
+	usize Value	  = Symbol->Value;
+
+	if (Binding == ELF_SYMBOL_BINDING_GLOBAL
+		&& Symbol->SectionIndex == ELF_SYMBOL_INDEX_UNDEFINED)
+	{ }
+
+	if (Symbol->SectionIndex != ELF_SYMBOL_INDEX_ABSOLUTE)
+		Value += (usize) State->ImageAddress;
+	return Value;
 }
 
 internal usize
@@ -887,7 +907,7 @@ Elf_ApplyRelocation(elf_state *State, vptr Target, usize Type, usize Value)
 	}
 }
 
-internal void
+internal elf_error
 Elf_HandleRelocations(
 	elf_state *State,
 	vptr	   Relocs,
@@ -928,22 +948,21 @@ Elf_HandleRelocations(
 		}
 		Symbol = (elf_symbol *) (SymTab + SymTabEntrySize * SymbolIndex);
 
-		Value = Elf_ComputeRelocation(
-			State,
-			RelocType,
-			Value,
-			Base + Symbol->Value,
-			Base
-		);
+		usize SymbolValue = Elf_ResolveSymbol(State, Symbol);
+
+		Value =
+			Elf_ComputeRelocation(State, RelocType, Value, SymbolValue, Base);
 
 		PrevTarget	= Target;
 		Cursor	   += RelocEntrySize;
 	}
 
 	if (PrevTarget) Elf_ApplyRelocation(State, PrevTarget, RelocType, Value);
+
+	return ELF_ERROR_SUCCESS;
 }
 
-internal void
+internal elf_error
 Elf_SetupLazyRelocation(
 	elf_state *State,
 	vptr	   Relocs,
@@ -964,6 +983,8 @@ Elf_SetupLazyRelocation(
 	usize *Words = PltGot;
 	Words[1]	 = (usize) State;
 	Words[2]	 = (usize) Elf_LazyRelocationCallback;
+
+	return ELF_ERROR_SUCCESS;
 }
 
 internal usize
@@ -991,14 +1012,10 @@ Elf_HandleLazyRelocation(elf_state *State, usize RelocIndex)
 
 	elf_symbol *Symbol =
 		State->Dynamic.SymTab + State->Dynamic.SymTabEntrySize * SymbolIndex;
+	usize SymbolValue = Elf_ResolveSymbol(State, Symbol);
 
-	usize Value = Elf_ComputeRelocation(
-		State,
-		RelocType,
-		Addend,
-		Base + Symbol->Value,
-		Base
-	);
+	usize Value =
+		Elf_ComputeRelocation(State, RelocType, Addend, SymbolValue, Base);
 
 	Elf_ApplyRelocation(State, Target, RelocType, Value);
 
@@ -1146,7 +1163,7 @@ internal elf_error
 Elf_HandleDynamicRelocations(elf_state *State)
 {
 	if (State->Dynamic.Rel) {
-		Elf_HandleRelocations(
+		elf_error Error = Elf_HandleRelocations(
 			State,
 			State->Dynamic.Rel,
 			State->Dynamic.RelEntrySize,
@@ -1156,10 +1173,11 @@ Elf_HandleDynamicRelocations(elf_state *State)
 			State->Dynamic.SymTab,
 			State->Dynamic.SymTabEntrySize
 		);
+		if (Error) return Error;
 	}
 
 	if (State->Dynamic.Rela) {
-		Elf_HandleRelocations(
+		elf_error Error = Elf_HandleRelocations(
 			State,
 			State->Dynamic.Rela,
 			State->Dynamic.RelaEntrySize,
@@ -1169,12 +1187,13 @@ Elf_HandleDynamicRelocations(elf_state *State)
 			State->Dynamic.SymTab,
 			State->Dynamic.SymTabEntrySize
 		);
+		if (Error) return Error;
 	}
 
 	if (State->Dynamic.JmpRel) {
 		b08 IsRela = State->Dynamic.PltRel == ELF_DYNAMIC_TAG_RELA;
 		if (State->Dynamic.Flags & ELF_DYNAMIC_FLAG_BIND_NOW) {
-			Elf_HandleRelocations(
+			elf_error Error = Elf_HandleRelocations(
 				State,
 				State->Dynamic.JmpRel,
 				IsRela ? sizeof(elf_relocation_a) : sizeof(elf_relocation),
@@ -1184,14 +1203,16 @@ Elf_HandleDynamicRelocations(elf_state *State)
 				State->Dynamic.SymTab,
 				State->Dynamic.SymTabEntrySize
 			);
+			if (Error) return Error;
 		} else {
-			Elf_SetupLazyRelocation(
+			elf_error Error = Elf_SetupLazyRelocation(
 				State,
 				State->Dynamic.JmpRel,
 				IsRela ? sizeof(elf_relocation_a) : sizeof(elf_relocation),
 				State->Dynamic.PltRelSize,
 				State->Dynamic.PltGot
 			);
+			if (Error) return Error;
 		}
 	}
 
@@ -1286,7 +1307,7 @@ Elf_ReadSegments(elf_state *State)
 	usize PageMask		= State->PageSize - 1;
 	MinVAddr		   &= ~PageMask;
 	State->VAddrOffset	= MinVAddr;
-	State->ImageSize	= MaxVAddr - MinVAddr;
+	State->ImageSize	= (MaxVAddr - MinVAddr + PageMask) & ~PageMask;
 
 	return ELF_ERROR_SUCCESS;
 }
@@ -1298,15 +1319,14 @@ Elf_LoadSegments(elf_state *State)
 		elf_error Error = Elf_ReadSegments(State);
 		if (Error) return Error;
 
-		usize PageMask = State->PageSize - 1;
-		vptr  Base	   = Sys_MemMap(
-			 NULL,
-			 (State->ImageSize + PageMask) & ~PageMask,
-			 SYS_PROT_NONE,
-			 SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS | SYS_MAP_NORESERVE,
-			 -1,
-			 0
-		 );
+		vptr Base = Sys_MemMap(
+			NULL,
+			State->ImageSize,
+			SYS_PROT_NONE,
+			SYS_MAP_PRIVATE | SYS_MAP_ANONYMOUS | SYS_MAP_NORESERVE,
+			-1,
+			0
+		);
 		State->ImageAddress = Base - State->VAddrOffset;
 		if ((ssize) Base == -1) return ELF_ERROR_OUT_OF_MEMORY;
 
@@ -1352,7 +1372,7 @@ Elf_FixPermsAfterReloc(elf_state *State)
 }
 
 internal elf_error
-Elf_SetupAndValidate(elf_state *State)
+Elf_SetupAndValidate(elf_state *State, c08 **EnvParams)
 {
 	State->Header = *(elf_header *) State->File;
 
@@ -1414,13 +1434,26 @@ Elf_SetupAndValidate(elf_state *State)
 		return ELF_ERROR_INVALID_FORMAT;
 	}
 
+	while (*EnvParams) {
+		c08 *A = *EnvParams, B = "LD_BIND_NOW";
+		for (; *A && *B && *A == *B; *A++, *B++);
+		if (*A == '=' && A[1] && !*B)
+			State->Dynamic.Flags |= ELF_DYNAMIC_FLAG_BIND_NOW;
+		EnvParams++;
+	}
+
 	return ELF_ERROR_SUCCESS;
 }
 
 /* ========== EXTERNAL API ========== */
 
 internal elf_error
-Elf_LoadWithDescriptor(elf_state *State, u32 FileDescriptor, usize PageSize)
+Elf_LoadWithDescriptor(
+	elf_state *State,
+	u32		   FileDescriptor,
+	c08		 **EnvParams,
+	usize	   PageSize
+)
 {
 	// TODO: Don't allocate the entire file, just map what's needed
 	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
@@ -1442,7 +1475,7 @@ Elf_LoadWithDescriptor(elf_state *State, u32 FileDescriptor, usize PageSize)
 	);
 	if ((usize) State->File >= 0xFFFFFFFFFFFFF000) return ELF_ERROR_UNKNOWN;
 
-	elf_error Error = Elf_SetupAndValidate(State);
+	elf_error Error = Elf_SetupAndValidate(State, EnvParams);
 	if (Error) return Error;
 
 	Error = Elf_LoadSegments(State);
@@ -1457,11 +1490,14 @@ Elf_LoadWithDescriptor(elf_state *State, u32 FileDescriptor, usize PageSize)
 	Error = Elf_FixPermsAfterReloc(State);
 	if (Error) return Error;
 
+	Sys_MemUnmap(State->File, State->FileSize);
+	Sys_Close(State->FileDescriptor);
+
 	return ELF_ERROR_SUCCESS;
 }
 
 internal elf_error
-Elf_Load(elf_state *State, c08 *FileName, usize PageSize)
+Elf_Load(elf_state *State, c08 *FileName, c08 **EnvParams, usize PageSize)
 {
 	if (!State || !FileName) return ELF_ERROR_INVALID_ARGUMENT;
 
@@ -1472,11 +1508,16 @@ Elf_Load(elf_state *State, c08 *FileName, usize PageSize)
 	u32 FD = Sys_Open(FileName, SYS_OPEN_READONLY, 0);
 	if (FD >= 0xFFFFF000) return ELF_ERROR_UNKNOWN;
 
-	return Elf_LoadWithDescriptor(State, FD, PageSize);
+	return Elf_LoadWithDescriptor(State, FD, EnvParams, PageSize);
 }
 
 internal elf_error
-Elf_ReadLoadedImage(elf_state *State, vptr BaseAddress, usize PageSize)
+Elf_ReadLoadedImage(
+	elf_state *State,
+	vptr	   BaseAddress,
+	c08		 **EnvParams,
+	usize	   PageSize
+)
 {
 	if (!State || !BaseAddress) return ELF_ERROR_INVALID_ARGUMENT;
 
@@ -1484,7 +1525,7 @@ Elf_ReadLoadedImage(elf_state *State, vptr BaseAddress, usize PageSize)
 	State->File		= BaseAddress;
 	State->PageSize = PageSize;
 
-	elf_error Error = Elf_SetupAndValidate(State);
+	elf_error Error = Elf_SetupAndValidate(State, EnvParams);
 	if (Error) return Error;
 
 	Error = Elf_ReadSegments(State);
@@ -1522,12 +1563,11 @@ Elf_GetProcAddress(elf_state *State, c08 *ProcName, vptr *ProcOut)
 }
 
 internal elf_error
-Elf_Close(elf_state *State)
+Elf_Unload(elf_state *State)
 {
 	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
 
-	Sys_MemUnmap(State->File, State->FileSize);
-	Sys_Close(State->FileDescriptor);
+	Sys_MemUnmap(State->ImageAddress + State->VAddrOffset, State->ImageSize);
 
 	return ELF_ERROR_SUCCESS;
 }

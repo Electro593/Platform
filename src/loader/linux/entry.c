@@ -14,6 +14,7 @@
 
 typedef struct loader_state {
 	usize PageSize;
+	c08 **EnvParams;
 
 	heap   *Heap;
 	hashmap Links;
@@ -43,7 +44,7 @@ Loader_OpenShared(c08 *Name)
 	}
 
 	elf_state Elf;
-	elf_error Error = Elf_Load(&Elf, Name, _G.PageSize);
+	elf_error Error = Elf_Load(&Elf, Name, _G.EnvParams, _G.PageSize);
 	if (Error) return NULL;
 
 	Module	= Heap_AllocateA(_G.Heap, sizeof(loader_module) + NameStr.Length);
@@ -79,7 +80,7 @@ Loader_CloseShared(vptr Module)
 
 	if (!Loader->RefCount) {
 		string Name = CString(Loader->Elf.FileName);
-		Elf_Close(&Loader->Elf);
+		Elf_Unload(&Loader->Elf);
 		HashMap_Remove(&_G.Links, &Name, NULL, NULL);
 		Mem_Set(Loader, 0, sizeof(loader_module) + Name.Length);
 		Heap_FreeA(Loader);
@@ -96,6 +97,7 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 	s32	 FileDescriptor = -1;
 	c08 *FileName		= NULL;
 	_G.PageSize			= 4096;
+	_G.EnvParams		= EnvParams;
 
 	elf_program_header *ProgramHeaders = NULL;
 	usize				ProgramHeaderEntrySize;
@@ -117,12 +119,13 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 	}
 
 	elf_state LoaderElf;
-	elf_error Error = Elf_ReadLoadedImage(&LoaderElf, BaseAddress, _G.PageSize);
+	elf_error Error =
+		Elf_ReadLoadedImage(&LoaderElf, BaseAddress, _G.EnvParams, _G.PageSize);
 	if (!LoaderElf.FileName) LoaderElf.FileName = "loader.so";
 	if (Error) return NULL;
 
 	elf_state UtilElf;
-	Error = Elf_Load(&UtilElf, "util.so", _G.PageSize);
+	Error = Elf_Load(&UtilElf, "util.so", _G.EnvParams, _G.PageSize);
 	if (Error) Sys_Exit(-1);
 
 	platform_module UtilPModule = { 0 };
@@ -177,14 +180,24 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 				ProgramBase = (vptr) ProgramHeaders - Header->VirtualAddress;
 			Header = (vptr) ((usize) Header + ProgramHeaderEntrySize);
 		}
-		Error = Elf_ReadLoadedImage(&ProgramElf, ProgramBase, _G.PageSize);
+		Error = Elf_ReadLoadedImage(
+			&ProgramElf,
+			ProgramBase,
+			EnvParams,
+			_G.PageSize
+		);
+		Sys_Close(FileDescriptor);
 		if (Error) Sys_Exit(-2);
 	} else if (FileDescriptor != -1) {
-		Error =
-			Elf_LoadWithDescriptor(&ProgramElf, FileDescriptor, _G.PageSize);
+		Error = Elf_LoadWithDescriptor(
+			&ProgramElf,
+			FileDescriptor,
+			EnvParams,
+			_G.PageSize
+		);
 		if (Error) Sys_Exit(-2);
 	} else {
-		Error = Elf_Load(&ProgramElf, FileName, _G.PageSize);
+		Error = Elf_Load(&ProgramElf, FileName, _G.EnvParams, _G.PageSize);
 		if (Error) Sys_Exit(-2);
 	}
 
