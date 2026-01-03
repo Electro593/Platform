@@ -36,6 +36,8 @@ Loader_OpenShared(c08 *Name)
 {
 	if (!Name) return NULL;
 
+	// TODO: Expand to full directory before checking
+
 	loader_module *Module;
 	string		   NameStr = CString(Name);
 	if (HashMap_Get(&_G.Links, &NameStr, &Module)) {
@@ -46,14 +48,21 @@ Loader_OpenShared(c08 *Name)
 	elf_state Elf;
 	elf_error Error = Elf_Load(&Elf, Name, _G.EnvParams, _G.PageSize);
 	if (Error) return NULL;
+	string SoName = CString(Elf.Dynamic.SoName);
 
-	Module	= Heap_AllocateA(_G.Heap, sizeof(loader_module) + NameStr.Length);
-	*Module = (loader_module) { 0 };
+	Module = Heap_AllocateA(
+		_G.Heap,
+		sizeof(loader_module) + NameStr.Length + SoName.Length
+	);
+	*Module		= (loader_module) { 0 };
 	Module->Elf = Elf;
 
 	NameStr.Text = (c08 *) (Module + 1);
 	Mem_Cpy(NameStr.Text, Name, NameStr.Length);
 	HashMap_Add(&_G.Links, &NameStr, &Module);
+
+	if (SoName.Length && String_Cmp(NameStr, SoName) != 0)
+		HashMap_Add(&_G.Links, &SoName, &Module);
 
 	return Module;
 }
@@ -79,10 +88,18 @@ Loader_CloseShared(vptr Module)
 	Loader->RefCount--;
 
 	if (!Loader->RefCount) {
-		string Name = CString(Loader->Elf.FileName);
+		string FileName = CString(Loader->Elf.FileName);
+		string SoName	= CString(Loader->Elf.Dynamic.SoName);
+
 		Elf_Unload(&Loader->Elf);
-		HashMap_Remove(&_G.Links, &Name, NULL, NULL);
-		Mem_Set(Loader, 0, sizeof(loader_module) + Name.Length);
+
+		if (FileName.Length) HashMap_Remove(&_G.Links, &FileName, NULL, NULL);
+		if (SoName.Length) HashMap_Remove(&_G.Links, &SoName, NULL, NULL);
+		Mem_Set(
+			Loader,
+			0,
+			sizeof(loader_module) + FileName.Length + SoName.Length
+		);
 		Heap_FreeA(Loader);
 	}
 }
@@ -121,7 +138,6 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 	elf_state LoaderElf;
 	elf_error Error =
 		Elf_ReadLoadedImage(&LoaderElf, BaseAddress, _G.EnvParams, _G.PageSize);
-	if (!LoaderElf.FileName) LoaderElf.FileName = "loader.so";
 	if (Error) return NULL;
 
 	elf_state UtilElf;
@@ -162,13 +178,13 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		Heap_AllocateA(_G.Heap, sizeof(loader_module));
 	LoaderModule->Elf	   = LoaderElf;
 	LoaderModule->RefCount = 1;
-	string LoaderStr	   = HString(_G.Heap, LoaderElf.FileName);
+	string LoaderStr	   = HString(_G.Heap, LoaderElf.Dynamic.SoName);
 	HashMap_Add(&_G.Links, &LoaderStr, &LoaderModule);
 
 	loader_module *UtilModule = Heap_AllocateA(_G.Heap, sizeof(loader_module));
 	UtilModule->Elf			  = UtilElf;
 	UtilModule->RefCount	  = 1;
-	string UtilStr			  = HString(_G.Heap, UtilElf.FileName);
+	string UtilStr			  = HString(_G.Heap, UtilElf.Dynamic.SoName);
 	HashMap_Add(&_G.Links, &UtilStr, &UtilModule);
 
 	elf_state ProgramElf;

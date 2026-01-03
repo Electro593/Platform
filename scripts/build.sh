@@ -99,8 +99,8 @@ build_module() {
 
 	if [ "$ModuleName" = "loader" ]; then
 		echo Building $Module as a library
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
 			readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
@@ -110,8 +110,8 @@ build_module() {
 		fi
 	elif [ "$ModuleName" = "platform" ]; then
 		echo Building $Module as an executable
-		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader.so -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
-		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader.so -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
+		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
+		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
 		if [[ -e "build/$ModuleName$ExeSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.asm"
 			readelf -a -x .data -x .got.plt "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
@@ -121,8 +121,8 @@ build_module() {
 		fi
 	else
 		echo Building $Module as a library
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
 			readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null

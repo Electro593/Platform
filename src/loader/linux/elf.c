@@ -855,13 +855,21 @@ Elf_ResolveSymbol(elf_state *State, elf_symbol *Symbol)
 	usize Binding = Symbol->Info >> 4;
 	usize Type	  = Symbol->Info & 15;
 	usize Value	  = Symbol->Value;
-
-	if (Binding == ELF_SYMBOL_BINDING_GLOBAL
-		&& Symbol->SectionIndex == ELF_SYMBOL_INDEX_UNDEFINED)
-	{ }
-
 	if (Symbol->SectionIndex != ELF_SYMBOL_INDEX_ABSOLUTE)
 		Value += (usize) State->ImageAddress;
+
+	if (Value
+		|| Binding != ELF_SYMBOL_BINDING_GLOBAL
+		|| Symbol->SectionIndex != ELF_SYMBOL_INDEX_UNDEFINED)
+		return Value;
+
+	elf_dynamic *Dynamic = State->Dynamic.Dynamics;
+	while (Dynamic->Tag != ELF_DYNAMIC_TAG_NULL) {
+		if (Dynamic->Tag != ELF_DYNAMIC_TAG_NEEDED) continue;
+
+		c08 *Needed = State->Dynamic.StrTab + Dynamic->Value;
+	}
+
 	return Value;
 }
 
@@ -1435,8 +1443,8 @@ Elf_SetupAndValidate(elf_state *State, c08 **EnvParams)
 	}
 
 	while (*EnvParams) {
-		c08 *A = *EnvParams, B = "LD_BIND_NOW";
-		for (; *A && *B && *A == *B; *A++, *B++);
+		c08 *A = *EnvParams, *B = "LD_BIND_NOW";
+		for (; *A && *B && *A == *B; A++, B++);
 		if (*A == '=' && A[1] && !*B)
 			State->Dynamic.Flags |= ELF_DYNAMIC_FLAG_BIND_NOW;
 		EnvParams++;
@@ -1524,6 +1532,8 @@ Elf_ReadLoadedImage(
 	*State			= (elf_state) { 0 };
 	State->File		= BaseAddress;
 	State->PageSize = PageSize;
+
+	// TODO: Get the actual full file name
 
 	elf_error Error = Elf_SetupAndValidate(State, EnvParams);
 	if (Error) return Error;
