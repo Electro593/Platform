@@ -728,9 +728,24 @@ typedef struct elf_state {
 __asm__(
 	".globl Elf_LazyRelocationCallback  \n"
 	"Elf_LazyRelocationCallback:        \n"
-	"	mov 0(%rsp), %rdi               \n"
-	"	mov 8(%rsp), %rsi               \n"
+	"	push %rdi                       \n"
+	"	push %rsi                       \n"
+	"	push %rdx                       \n"
+	"	push %rcx                       \n"
+	"	push %r8                        \n"
+	"	push %r9                        \n"
+	"	push %r10                       \n"
+	"	mov 56(%rsp), %rdi              \n"
+	"	mov 64(%rsp), %rsi              \n"
 	"	call Elf_HandleLazyRelocation   \n"
+	"	pop %r10                        \n"
+	"	pop %r9                         \n"
+	"	pop %r8                         \n"
+	"	pop %rcx                        \n"
+	"	pop %rdx                        \n"
+	"	pop %rsi                        \n"
+	"	pop %rdi                        \n"
+	"	add $16, %rsp                   \n"
 	"	jmp *%rax                       \n"
 );
 extern usize Elf_LazyRelocationCallback(elf_state *State, usize RelocIndex);
@@ -773,7 +788,7 @@ Elf_GnuHash(c08 *Name)
 	return Hash;
 }
 
-internal vptr
+internal elf_symbol *
 Elf_LookupSymbol_Hash(elf_state *State, c08 *Name)
 {
 	elf_hash_table *HashTab			= State->Dynamic.Hash;
@@ -790,8 +805,7 @@ Elf_LookupSymbol_Hash(elf_state *State, c08 *Name)
 	while (SymIndex != ELF_SYMBOL_INDEX_UNDEFINED) {
 		elf_symbol *Symbol	= SymTab + SymIndex * SymTabEntrySize;
 		c08		   *SymName = StrTab + Symbol->Name;
-		if (Elf_StrEqual(SymName, Name))
-			return State->ImageAddress + Symbol->Value;
+		if (Elf_StrEqual(SymName, Name)) return Symbol;
 
 		SymIndex = Chains[SymIndex];
 	}
@@ -799,7 +813,7 @@ Elf_LookupSymbol_Hash(elf_state *State, c08 *Name)
 	return NULL;
 }
 
-internal vptr
+internal elf_symbol *
 Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 {
 	elf_gnu_hash_table *HashTab			= State->Dynamic.GnuHash;
@@ -837,8 +851,7 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 		if ((Hash >> 1) == (*ChainEntry >> 1)) {
 			elf_symbol *Symbol	= SymTab + SymIndex * SymTabEntrySize;
 			c08		   *SymName = StrTab + Symbol->Name;
-			if (Elf_StrEqual(SymName, Name))
-				return State->ImageAddress + Symbol->Value;
+			if (Elf_StrEqual(SymName, Name)) return Symbol;
 		}
 
 		if (*ChainEntry & 1) break;
@@ -848,27 +861,50 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 	return NULL;
 }
 
-internal usize
-Elf_ResolveSymbol(elf_state *State, elf_symbol *Symbol)
+internal elf_symbol *
+Elf_LookupSymbol(elf_state *State, c08 *Name, elf_symbol *Symbol)
 {
-	usize Index	  = Symbol->SectionIndex;
-	usize Binding = Symbol->Info >> 4;
-	usize Type	  = Symbol->Info & 15;
-	usize Value	  = Symbol->Value;
-	if (Symbol->SectionIndex != ELF_SYMBOL_INDEX_ABSOLUTE)
-		Value += (usize) State->ImageAddress;
+	if (!Symbol) {
+		if (State->Dynamic.Hash) Symbol = Elf_LookupSymbol_Hash(State, Name);
+		if (State->Dynamic.GnuHash)
+			Symbol = Elf_LookupSymbol_GnuHash(State, Name);
+	}
 
-	if (Value
-		|| Binding != ELF_SYMBOL_BINDING_GLOBAL
-		|| Symbol->SectionIndex != ELF_SYMBOL_INDEX_UNDEFINED)
-		return Value;
+	if (Symbol && Symbol->SectionIndex != ELF_SYMBOL_INDEX_UNDEFINED)
+		return Symbol;
+
+	// TODO: Handle nested dependencies with breadth-first search
 
 	elf_dynamic *Dynamic = State->Dynamic.Dynamics;
 	while (Dynamic->Tag != ELF_DYNAMIC_TAG_NULL) {
-		if (Dynamic->Tag != ELF_DYNAMIC_TAG_NEEDED) continue;
+		if (Dynamic->Tag == ELF_DYNAMIC_TAG_NEEDED) {
+			loader_module *Module =
+				Loader_OpenShared(State->Dynamic.StrTab + Dynamic->Pointer);
+			Dynamic++;
 
-		c08 *Needed = State->Dynamic.StrTab + Dynamic->Value;
+			if (!Module) continue;
+
+			Symbol = Elf_LookupSymbol(&Module->Elf, Name, NULL);
+
+			Loader_CloseShared(Module);
+
+			if (Symbol) return Symbol;
+		}
 	}
+
+	return NULL;
+}
+
+internal usize
+Elf_ResolveSymbol(elf_state *State, c08 *Name, elf_symbol *Symbol)
+{
+	if (Name) Symbol = Elf_LookupSymbol(State, Name, Symbol);
+
+	if (Symbol->SectionIndex == ELF_SYMBOL_INDEX_UNDEFINED) return 0;
+
+	usize Value = Symbol->Value;
+	if (Symbol->SectionIndex != ELF_SYMBOL_INDEX_ABSOLUTE)
+		Value += (usize) State->ImageAddress;
 
 	return Value;
 }
@@ -927,12 +963,11 @@ Elf_HandleRelocations(
 	usize	   SymTabEntrySize
 )
 {
-	vptr		PrevTarget = NULL;
-	usize		Value	   = 0;
-	usize		RelocType  = 0;
-	elf_symbol *Symbol	   = NULL;
-	vptr		Cursor	   = Relocs;
-	usize		Base	   = (usize) State->ImageAddress;
+	vptr  PrevTarget = NULL;
+	usize Value		 = 0;
+	usize RelocType	 = 0;
+	vptr  Cursor	 = Relocs;
+	usize Base		 = (usize) State->ImageAddress;
 	while (Cursor < Relocs + RelocsSize) {
 		elf_relocation	 *Rel  = Cursor;
 		elf_relocation_a *Rela = Cursor;
@@ -954,9 +989,14 @@ Elf_HandleRelocations(
 			SymbolIndex = Rela->Info >> 32;
 			RelocType	= Rela->Info & 0xFFFFFFFF;
 		}
-		Symbol = (elf_symbol *) (SymTab + SymTabEntrySize * SymbolIndex);
 
-		usize SymbolValue = Elf_ResolveSymbol(State, Symbol);
+		usize SymbolValue = 0;
+		if (SymbolIndex) {
+			elf_symbol *Symbol =
+				(elf_symbol *) (SymTab + SymTabEntrySize * SymbolIndex);
+			c08 *SymbolName = StrTab + Symbol->Name;
+			SymbolValue		= Elf_ResolveSymbol(State, SymbolName, Symbol);
+		}
 
 		Value =
 			Elf_ComputeRelocation(State, RelocType, Value, SymbolValue, Base);
@@ -1018,9 +1058,13 @@ Elf_HandleLazyRelocation(elf_state *State, usize RelocIndex)
 
 	usize Addend = IsRela ? Reloc->Addend : Elf_ExtractAddend(State, RelocType);
 
-	elf_symbol *Symbol =
-		State->Dynamic.SymTab + State->Dynamic.SymTabEntrySize * SymbolIndex;
-	usize SymbolValue = Elf_ResolveSymbol(State, Symbol);
+	usize SymbolValue = 0;
+	if (SymbolIndex) {
+		elf_symbol *Symbol = State->Dynamic.SymTab
+						   + State->Dynamic.SymTabEntrySize * SymbolIndex;
+		c08 *SymbolName = State->Dynamic.StrTab + Symbol->Name;
+		SymbolValue		= Elf_ResolveSymbol(State, SymbolName, Symbol);
+	}
 
 	usize Value =
 		Elf_ComputeRelocation(State, RelocType, Addend, SymbolValue, Base);
@@ -1546,6 +1590,13 @@ Elf_ReadLoadedImage(
 	Error = Elf_ReadDynamics(State);
 	if (Error) return Error;
 
+	elf_dynamic *Dynamic = State->Dynamic.Dynamics;
+	while (Dynamic->Tag != ELF_DYNAMIC_TAG_NULL) {
+		if (Dynamic->Tag == ELF_DYNAMIC_TAG_NEEDED)
+			Loader_OpenShared(State->Dynamic.StrTab + Dynamic->Value);
+		Dynamic++;
+	}
+
 	Error = Elf_HandleDynamicRelocations(State);
 	if (Error) return Error;
 
@@ -1560,12 +1611,7 @@ Elf_GetProcAddress(elf_state *State, c08 *ProcName, vptr *ProcOut)
 {
 	if (!State || !ProcName || !ProcOut) return ELF_ERROR_INVALID_ARGUMENT;
 
-	vptr Addr = NULL;
-
-	if (State->Dynamic.Hash) Addr = Elf_LookupSymbol_Hash(State, ProcName);
-	else if (State->Dynamic.GnuHash)
-		Addr = Elf_LookupSymbol_GnuHash(State, ProcName);
-
+	vptr Addr = (vptr) Elf_ResolveSymbol(State, ProcName, NULL);
 	if (!Addr) return ELF_ERROR_NOT_FOUND;
 
 	*ProcOut = Addr;
@@ -1576,6 +1622,17 @@ internal elf_error
 Elf_Unload(elf_state *State)
 {
 	if (!State) return ELF_ERROR_INVALID_ARGUMENT;
+
+	elf_dynamic *Dynamic = State->Dynamic.Dynamics;
+	while (Dynamic->Tag != ELF_DYNAMIC_TAG_NULL) {
+		if (Dynamic->Tag == ELF_DYNAMIC_TAG_NEEDED) {
+			loader_module *Module =
+				Loader_OpenShared(State->Dynamic.StrTab + Dynamic->Value);
+			Loader_CloseShared(Module);
+			Loader_CloseShared(Module);
+		}
+		Dynamic++;
+	}
 
 	Sys_MemUnmap(State->ImageAddress + State->VAddrOffset, State->ImageSize);
 

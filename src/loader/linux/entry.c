@@ -31,15 +31,43 @@ typedef struct loader_module {
 
 global loader_state _G;
 
+internal string
+Loader_ExpandFullPath(c08 *FileName)
+{
+	return CString(FileName);
+}
+
+internal void
+Loader_RegisterElfModule(elf_state Elf)
+{
+	string FileName = Loader_ExpandFullPath(Elf.FileName);
+
+	loader_module *Module =
+		Heap_AllocateA(_G.Heap, sizeof(loader_module) + FileName.Length);
+	Module->Elf		 = Elf;
+	Module->RefCount = 1;
+
+	string StoredFileName = FileName;
+	StoredFileName.Text	  = (c08 *) (Module + 1);
+	Mem_Cpy(StoredFileName.Text, FileName.Text, FileName.Length);
+	HashMap_Add(&_G.Links, &StoredFileName, &Module);
+}
+
 external vptr
 Loader_OpenShared(c08 *Name)
 {
-	if (!Name) return NULL;
-
-	// TODO: Expand to full directory before checking
-
 	loader_module *Module;
-	string		   NameStr = CString(Name);
+	if (!Name) {
+		string EmptyString = EString();
+		if (HashMap_Get(&_G.Links, &EmptyString, &Module)) {
+			Module->RefCount++;
+			return Module;
+		}
+		return NULL;
+	}
+
+	string NameStr = Loader_ExpandFullPath(Name);
+
 	if (HashMap_Get(&_G.Links, &NameStr, &Module)) {
 		Module->RefCount++;
 		return Module;
@@ -48,21 +76,8 @@ Loader_OpenShared(c08 *Name)
 	elf_state Elf;
 	elf_error Error = Elf_Load(&Elf, Name, _G.EnvParams, _G.PageSize);
 	if (Error) return NULL;
-	string SoName = CString(Elf.Dynamic.SoName);
 
-	Module = Heap_AllocateA(
-		_G.Heap,
-		sizeof(loader_module) + NameStr.Length + SoName.Length
-	);
-	*Module		= (loader_module) { 0 };
-	Module->Elf = Elf;
-
-	NameStr.Text = (c08 *) (Module + 1);
-	Mem_Cpy(NameStr.Text, Name, NameStr.Length);
-	HashMap_Add(&_G.Links, &NameStr, &Module);
-
-	if (SoName.Length && String_Cmp(NameStr, SoName) != 0)
-		HashMap_Add(&_G.Links, &SoName, &Module);
+	Loader_RegisterElfModule(Elf);
 
 	return Module;
 }
@@ -104,6 +119,25 @@ Loader_CloseShared(vptr Module)
 	}
 }
 
+internal elf_state
+Loader_LoadUtil()
+{
+	elf_state UtilElf;
+	elf_error Error = Elf_Load(&UtilElf, "util.so", _G.EnvParams, _G.PageSize);
+	if (Error) Sys_Exit(-1);
+
+	platform_module UtilPlatformModule = { 0 };
+	Elf_GetProcAddress(&UtilElf, "Load", (vptr *) &UtilPlatformModule.Load);
+	UtilPlatformModule.Load(NULL, &UtilPlatformModule);
+	util_funcs Funcs = *(util_funcs *) UtilPlatformModule.Funcs;
+
+#define EXPORT(R, N, ...) N = Funcs.N;
+#define X UTIL_FUNCS
+#include <x.h>
+
+	return UtilElf;
+}
+
 internal vptr
 Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
@@ -112,9 +146,9 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	vptr BaseAddress	= NULL;
 	s32	 FileDescriptor = -1;
-	c08 *FileName		= NULL;
-	_G.PageSize			= 4096;
-	_G.EnvParams		= EnvParams;
+	c08 *FileName;
+	_G.PageSize	 = 4096;
+	_G.EnvParams = EnvParams;
 
 	elf_program_header *ProgramHeaders = NULL;
 	usize				ProgramHeaderEntrySize;
@@ -140,17 +174,7 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		Elf_ReadLoadedImage(&LoaderElf, BaseAddress, _G.EnvParams, _G.PageSize);
 	if (Error) return NULL;
 
-	elf_state UtilElf;
-	Error = Elf_Load(&UtilElf, "util.so", _G.EnvParams, _G.PageSize);
-	if (Error) Sys_Exit(-1);
-
-	platform_module UtilPModule = { 0 };
-	Elf_GetProcAddress(&UtilElf, "Load", (vptr *) &UtilPModule.Load);
-	UtilPModule.Load(NULL, &UtilPModule);
-	util_funcs Funcs = *(util_funcs *) UtilPModule.Funcs;
-#define EXPORT(R, N, ...) N = Funcs.N;
-#define X UTIL_FUNCS
-#include <x.h>
+	elf_state UtilElf = Loader_LoadUtil();
 
 	vptr HeapBase = Sys_MemMap(
 		NULL,
@@ -174,18 +198,8 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		NULL
 	);
 
-	loader_module *LoaderModule =
-		Heap_AllocateA(_G.Heap, sizeof(loader_module));
-	LoaderModule->Elf	   = LoaderElf;
-	LoaderModule->RefCount = 1;
-	string LoaderStr	   = HString(_G.Heap, LoaderElf.Dynamic.SoName);
-	HashMap_Add(&_G.Links, &LoaderStr, &LoaderModule);
-
-	loader_module *UtilModule = Heap_AllocateA(_G.Heap, sizeof(loader_module));
-	UtilModule->Elf			  = UtilElf;
-	UtilModule->RefCount	  = 1;
-	string UtilStr			  = HString(_G.Heap, UtilElf.Dynamic.SoName);
-	HashMap_Add(&_G.Links, &UtilStr, &UtilModule);
+	Loader_RegisterElfModule(LoaderElf);
+	Loader_RegisterElfModule(UtilElf);
 
 	elf_state ProgramElf;
 	if (ProgramHeaders) {
@@ -216,6 +230,8 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		Error = Elf_Load(&ProgramElf, FileName, _G.EnvParams, _G.PageSize);
 		if (Error) Sys_Exit(-2);
 	}
+
+	Loader_RegisterElfModule(ProgramElf);
 
 	return (vptr) (ProgramElf.ImageAddress
 				   - ProgramElf.VAddrOffset

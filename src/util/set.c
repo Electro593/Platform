@@ -290,9 +290,9 @@ HashMap_Remove(hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut)
 	vptr Value = HashMap_GetRef(Map, Key);
 	if (!Value) return FALSE;
 
-	vptr StoredKey = Value - Map->KeySize;
-	usize *Hash = (usize *) (StoredKey - sizeof(usize));
-	*Hash		= HASH_DELETED;
+	vptr   StoredKey = Value - Map->KeySize;
+	usize *Hash		 = (usize *) (StoredKey - sizeof(usize));
+	*Hash			 = HASH_DELETED;
 
 	if (KeyOut) Mem_Cpy(KeyOut, StoredKey, Map->KeySize);
 	if (ValueOut) Mem_Cpy(ValueOut, Value, Map->ValueSize);
@@ -313,12 +313,12 @@ HashMap_AddWithHash(hashmap *Map, usize Hash, vptr Key, vptr Value)
 
 		vptr   Entry	 = Map->Data->Data + P * Map->EntrySize;
 		usize *EntryHash = (usize *) Entry;
-		if (*EntryHash == Hash) break;
+		vptr   EntryKey	 = Entry + sizeof(usize);
+		if (*EntryHash == Hash && Map->Cmp(Key, EntryKey, Map->CmpParam)) break;
 		if (*EntryHash >= 2) continue;
 
 		*(usize *) Entry = Hash;
 
-		vptr EntryKey = Entry + sizeof(usize);
 		Mem_Cpy(EntryKey, Key, Map->KeySize);
 
 		vptr EntryValue = EntryKey + Map->KeySize;

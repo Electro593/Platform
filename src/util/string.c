@@ -429,6 +429,7 @@ CLEString(vptr Text, usize Length, string_encoding Encoding)
 internal string
 CString(c08 *Text)
 {
+	if (!Text) return EString();
 	usize Length = Mem_BytesUntil((u08 *) Text, 0);
 	return CLEString(Text, Length, STRING_ENCODING_ASCII);
 }

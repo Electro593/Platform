@@ -272,6 +272,7 @@ internal void
 Platform_CloseModuleBackend(platform_module *Module)
 {
 	Loader_CloseShared(Module->ELF);
+	Module->ELF = NULL;
 }
 
 internal void

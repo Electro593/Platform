@@ -99,8 +99,8 @@ build_module() {
 
 	if [ "$ModuleName" = "loader" ]; then
 		echo Building $Module as a library
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
 			readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
