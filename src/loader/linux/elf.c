@@ -600,30 +600,6 @@ typedef struct elf64_aux {
 
 #define elf_aux ELF_CAT3(elf, ELF_CLASS, _aux)
 
-/* ========== DEBUG RENDEZVOUS ========== */
-
-typedef enum sys_r_debug_state {
-	SYS_R_DEBUG_STATE_CONSISTENT,
-	SYS_R_DEBUG_STATE_ADD,
-	SYS_R_DEBUG_STATE_DELETE
-} sys_r_debug_state;
-
-typedef struct sys_link_map {
-	usize				 DeltaAddr;
-	c08					*FileName;
-	elf_dynamic			*Dynamics;
-	struct sys_link_map *Next;
-	struct sys_link_map *Prev;
-} sys_link_map;
-
-typedef struct sys_r_debug {
-	s32			  Version;
-	sys_link_map *LinkMap;
-	void (*Breakpoint)(void);
-	sys_r_debug_state State;
-	vptr			  LoaderBase;
-} sys_r_debug;
-
 /* ========== HASH TABLE ========== */
 
 #define ELF_LOOKUP_LINEAR   0
@@ -680,7 +656,6 @@ typedef struct elf_dynamic_state {
 	usize RelSize;
 	usize RelEntrySize;
 	usize PltRel;
-	vptr  Debug;
 	vptr  JmpRel;
 	void (**InitArray)(void);
 	void (**FiniArray)(void);
@@ -1144,9 +1119,6 @@ Elf_ReadDynamics(elf_state *State)
 				break;
 			case ELF_DYNAMIC_TAG_PLTREL:
 				DynState->PltRel = Dynamic->Value;
-				break;
-			case ELF_DYNAMIC_TAG_DEBUG:
-				DynState->Debug = Base + Dynamic->Pointer;
 				break;
 			case ELF_DYNAMIC_TAG_TEXTREL:
 				DynState->Flags |= ELF_DYNAMIC_FLAG_TEXTREL;

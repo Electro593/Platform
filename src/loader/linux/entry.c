@@ -16,13 +16,19 @@ typedef struct loader_state {
 	usize PageSize;
 	c08 **EnvParams;
 
+	string AbsoluteProgramName;
+
 	heap   *Heap;
 	hashmap Links;
+
+	sys_r_debug	  Debug;
+	sys_link_map *DebugLastLink;
 } loader_state;
 
 typedef struct loader_module {
-	elf_state Elf;
-	usize	  RefCount;
+	elf_state	  Elf;
+	sys_link_map *Link;
+	usize		  RefCount;
 } loader_module;
 
 #endif	// INCLUDE_HEADER
@@ -31,26 +37,75 @@ typedef struct loader_module {
 
 global loader_state _G;
 
+void
+Loader_DebugRendezvousCallback(void)
+{ }
+
 internal string
-Loader_ExpandFullPath(c08 *FileName)
+Loader_ResolveModuleName(c08 *ModuleName)
 {
-	return CString(FileName);
+	string Str = CString(ModuleName);
+	if (Str.Length == 0) return _G.AbsoluteProgramName;
+
+	usize SlashIndex = String_FindCharFromLeft(Str, '/');
+
+	// Absolute path
+	if (SlashIndex == 0) {
+		string Result = Str;
+		Result.Text	  = Heap_AllocateA(_G.Heap, Result.Length + 1);
+		Mem_Cpy(Result.Text, Str.Text, Str.Length);
+		Result.Text[Result.Length] = 0;
+		return Result;
+	}
+
+	char Cwd[4096];
+	Sys_GetCwd(Cwd, 4096);
+
+	// Relative path
+	if (SlashIndex != (usize) -1) {
+		string CwdStr = CString(Cwd);
+
+		string Result = EString();
+		Result.Length = CwdStr.Length + 1 + Str.Length;
+		Result.Text	  = Heap_AllocateA(_G.Heap, Result.Length + 1);
+
+		Mem_Cpy(Result.Text, CwdStr.Text, CwdStr.Length);
+		Result.Text[CwdStr.Length] = '/';
+		Mem_Cpy(Result.Text + CwdStr.Length + 1, Str.Text, Str.Length);
+		Result.Text[Result.Length] = 0;
+
+		return Result;
+	}
+
+	// Search path (not supported)
+	return EString();
 }
 
 internal void
 Loader_RegisterElfModule(elf_state Elf)
 {
-	string FileName = Loader_ExpandFullPath(Elf.FileName);
+	_G.Debug.State = SYS_R_DEBUG_STATE_ADD;
+	_G.Debug.Breakpoint();
 
-	loader_module *Module =
-		Heap_AllocateA(_G.Heap, sizeof(loader_module) + FileName.Length);
-	Module->Elf		 = Elf;
-	Module->RefCount = 1;
+	sys_link_map *LinkEntry = Heap_AllocateA(_G.Heap, sizeof(sys_link_map));
+	LinkEntry->DeltaAddr	= (usize) Elf.ImageAddress;
+	LinkEntry->FileName		= Elf.FileName;
+	LinkEntry->Dynamics		= (vptr) Elf.Dynamic.Dynamics;
+	LinkEntry->Next			= NULL;
+	LinkEntry->Prev			= _G.DebugLastLink;
+	if (_G.DebugLastLink) _G.DebugLastLink->Next = LinkEntry;
+	else _G.Debug.LinkMap = LinkEntry;
+	_G.DebugLastLink = LinkEntry;
 
-	string StoredFileName = FileName;
-	StoredFileName.Text	  = (c08 *) (Module + 1);
-	Mem_Cpy(StoredFileName.Text, FileName.Text, FileName.Length);
-	HashMap_Add(&_G.Links, &StoredFileName, &Module);
+	loader_module *Module = Heap_AllocateA(_G.Heap, sizeof(loader_module));
+	Module->Elf			  = Elf;
+	Module->RefCount	  = 1;
+	Module->Link		  = LinkEntry;
+
+	HashMap_Add(&_G.Links, &Elf.FileName, &Module);
+
+	_G.Debug.State = SYS_R_DEBUG_STATE_CONSISTENT;
+	_G.Debug.Breakpoint();
 }
 
 external vptr
@@ -66,15 +121,17 @@ Loader_OpenShared(c08 *Name)
 		return NULL;
 	}
 
-	string NameStr = Loader_ExpandFullPath(Name);
+	string AbsoluteFileName = Loader_ResolveModuleName(Name);
+	if (!AbsoluteFileName.Length) return NULL;
 
-	if (HashMap_Get(&_G.Links, &NameStr, &Module)) {
+	if (HashMap_Get(&_G.Links, &AbsoluteFileName, &Module)) {
 		Module->RefCount++;
 		return Module;
 	}
 
 	elf_state Elf;
-	elf_error Error = Elf_Load(&Elf, Name, _G.EnvParams, _G.PageSize);
+	elf_error Error =
+		Elf_Load(&Elf, AbsoluteFileName.Text, _G.EnvParams, _G.PageSize);
 	if (Error) return NULL;
 
 	Loader_RegisterElfModule(Elf);
@@ -103,19 +160,29 @@ Loader_CloseShared(vptr Module)
 	Loader->RefCount--;
 
 	if (!Loader->RefCount) {
+		_G.Debug.State = SYS_R_DEBUG_STATE_DELETE;
+		_G.Debug.Breakpoint();
+
 		string FileName = CString(Loader->Elf.FileName);
-		string SoName	= CString(Loader->Elf.Dynamic.SoName);
 
 		Elf_Unload(&Loader->Elf);
 
-		if (FileName.Length) HashMap_Remove(&_G.Links, &FileName, NULL, NULL);
-		if (SoName.Length) HashMap_Remove(&_G.Links, &SoName, NULL, NULL);
-		Mem_Set(
-			Loader,
-			0,
-			sizeof(loader_module) + FileName.Length + SoName.Length
-		);
+		if (Loader->Link->Prev) Loader->Link->Prev->Next = Loader->Link->Next;
+		if (Loader->Link->Next) Loader->Link->Next->Prev = Loader->Link->Prev;
+		if (_G.Debug.LinkMap == Loader->Link)
+			_G.Debug.LinkMap = Loader->Link->Next;
+		if (_G.DebugLastLink == Loader->Link)
+			_G.DebugLastLink = Loader->Link->Prev;
+		Heap_FreeA(Loader->Link);
+
+		HashMap_Remove(&_G.Links, &FileName, NULL, NULL);
+		Heap_FreeA(FileName.Text);
+
+		Mem_Set(Loader, 0, sizeof(loader_module));
 		Heap_FreeA(Loader);
+
+		_G.Debug.State = SYS_R_DEBUG_STATE_CONSISTENT;
+		_G.Debug.Breakpoint();
 	}
 }
 
@@ -146,9 +213,9 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	vptr BaseAddress	= NULL;
 	s32	 FileDescriptor = -1;
-	c08 *FileName;
-	_G.PageSize	 = 4096;
-	_G.EnvParams = EnvParams;
+	c08 *FileName		= ArgCount > 0 ? Args[0] : NULL;
+	_G.PageSize			= 4096;
+	_G.EnvParams		= EnvParams;
 
 	elf_program_header *ProgramHeaders = NULL;
 	usize				ProgramHeaderEntrySize;
@@ -198,7 +265,18 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		NULL
 	);
 
+	_G.AbsoluteProgramName = CString(FileName);
+
+	_G.Debug.Version	= 1;
+	_G.Debug.LoaderBase = BaseAddress;
+	_G.Debug.State		= SYS_R_DEBUG_STATE_CONSISTENT;
+	_G.Debug.Breakpoint = Loader_DebugRendezvousCallback;
+	_G.Debug.LinkMap	= NULL;
+
+	LoaderElf.FileName = Loader_ResolveModuleName("loader.so").Text;
 	Loader_RegisterElfModule(LoaderElf);
+
+	UtilElf.FileName = Loader_ResolveModuleName("util.so").Text;
 	Loader_RegisterElfModule(UtilElf);
 
 	elf_state ProgramElf;
@@ -231,6 +309,14 @@ Loader_LoadProcess(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (Error) Sys_Exit(-2);
 	}
 
+	elf_dynamic *Dynamic = ProgramElf.Dynamic.Dynamics;
+	while (Dynamic->Tag != ELF_DYNAMIC_TAG_NULL) {
+		if (Dynamic->Tag == ELF_DYNAMIC_TAG_DEBUG)
+			Dynamic->Pointer = (elf_addr) &_G.Debug;
+		Dynamic++;
+	}
+
+	ProgramElf.FileName = _G.AbsoluteProgramName.Text;
 	Loader_RegisterElfModule(ProgramElf);
 
 	return (vptr) (ProgramElf.ImageAddress

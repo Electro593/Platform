@@ -327,6 +327,17 @@ typedef struct fstring_format_list {
 /// @return The resulting formatted string.
 #define FNStringL(LITERAL, ...) FString(CNStringL(LITERAL), __VA_ARGS__)
 
+/// @brief Iterates through the codepoints of a string. Supports continue and
+/// break. Does not iterate by pointer.
+/// @param[in] INDEX The name of the variable representing the codepoint's index
+/// @param[in] CODEPOINT The name of the variable representing the codepoint
+/// @param[in] CURSOR The name of the variable representing the string cursor
+/// @param[in] STR The string to iterate over
+#define STRING_FOREACH(INDEX, CODEPOINT, CURSOR, STR) \
+	for (usize INDEX = 0; INDEX == 0;) \
+		for (string CURSOR = STR; INDEX == 0; INDEX++) \
+			for (c32 CODEPOINT = 0; CURSOR.Length ? (CODEPOINT = String_NextCodepoint(&CURSOR)), TRUE : FALSE; INDEX++)
+
 #endif	// SECTION_STRING_MACROS
 
 /***************************************************************************\
@@ -343,8 +354,9 @@ typedef struct fstring_format_list {
 	EXPORT(string, HString,   heap *Heap, c08 *Text) \
 	EXPORT(string, LString,   usize Length) \
 	\
-	EXPORT(usize,  String_Cpy,  string Dest, string Src) \
-	EXPORT(usize,  String_Fill, string Dest, u32 Codepoint, usize Count) \
+	EXPORT(usize,  String_FindCharFromLeft, string Str, c32 Target) \
+	EXPORT(usize,  String_Cpy,              string Dest, string Src) \
+	EXPORT(usize,  String_Fill,             string Dest, u32 Codepoint, usize Count) \
 	\
 	EXPORT(s08,    String_Cmp,     string A, string B) \
 	EXPORT(s08,    String_CmpPtr,  string *A, string *B, vptr _) \
@@ -398,9 +410,9 @@ typedef struct fstring_format_list {
 
 #ifndef SECTION_STRING_CONSTRUCTION
 
-/// @brief Constructs a new string given a text pointer, length, and encoding.
-/// Count is computed based on the encoding. Make sure `Length` is no larger
-/// than `Text`'s allocated size.
+/// @brief Constructs a new string given a text pointer, length, and
+/// encoding. Count is computed based on the encoding. Make sure `Length` is
+/// no larger than `Text`'s allocated size.
 /// @param Text A pointer to the string's text. If null, the string will be
 /// considered empty.
 /// @param Length The string's length. Make sure this is correct to avoid
@@ -442,7 +454,7 @@ internal string
 HString(heap *Heap, c08 *Text)
 {
 	usize Length = Mem_BytesUntil((u08 *) Text, 0);
-	c08	 *HText	 = Heap_AllocateA(Heap, Length);
+	c08	 *HText	 = Heap_AllocateA(Heap, Length + 1);
 	return CLEString(HText, Length, STRING_ENCODING_ASCII);
 }
 
@@ -466,6 +478,19 @@ LString(usize Length)
 \***************************************************************************/
 
 #ifndef SECTION_STRING_OPERATIONS
+
+/// @brief Locate the first index a codepoint appears in a string, starting from
+/// the first character.
+/// @param Str The string to search
+/// @param Target The codepoint to find
+/// @return The index the codepoint was found at, or `(usize) -1` if not found.
+internal usize
+String_FindCharFromLeft(string Str, c32 Target)
+{
+	STRING_FOREACH (I, C, Cursor, Str)
+		if (C == Target) return (usize) (Cursor.Text - Str.Text);
+	return (usize) -1;
+}
 
 /// @brief Copy a string's entire contents into another, respecting encoding.
 /// @param Dest The string to copy into.

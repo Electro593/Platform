@@ -82,6 +82,28 @@ typedef struct sys_stat {
 	s64 _Padding1[3];
 } sys_stat;
 
+typedef enum sys_r_debug_state {
+	SYS_R_DEBUG_STATE_CONSISTENT,
+	SYS_R_DEBUG_STATE_ADD,
+	SYS_R_DEBUG_STATE_DELETE
+} sys_r_debug_state;
+
+typedef struct sys_link_map {
+	usize				 DeltaAddr;
+	c08					*FileName;
+	vptr				 Dynamics;
+	struct sys_link_map *Next;
+	struct sys_link_map *Prev;
+} sys_link_map;
+
+typedef struct sys_r_debug {
+	s32			  Version;
+	sys_link_map *LinkMap;
+	void (*Breakpoint)(void);
+	sys_r_debug_state State;
+	vptr			  LoaderBase;
+} sys_r_debug;
+
 #define LOADER_SYSCALLS \
 	SYSCALL(0,  Read,       ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
 	SYSCALL(1,  Write,      ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \
@@ -92,7 +114,8 @@ typedef struct sys_stat {
 	SYSCALL(9,  MemMap,     vptr,  vptr Address, usize Length, s32 Protection, s32 Flags, u32 FileDescriptor, s64 Offset) \
 	SYSCALL(10, MemProtect, s32,   vptr Address, usize Length, s32 Protection) \
 	SYSCALL(11, MemUnmap,   s32,   vptr Address, usize Length) \
-	SYSCALL(60, Exit,       void,  s32 ErrorCode)
+	SYSCALL(60, Exit,       void,  s32 ErrorCode) \
+	SYSCALL(79, GetCwd,     s32,   c08 *Buffer, u64 Size)
 
 #endif	// _X64
 
