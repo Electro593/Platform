@@ -2,6 +2,7 @@
 
 Mode="debug"
 PositionalArgs=()
+UseLoader="false"
 
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -81,6 +82,12 @@ fi
 
 ExeCompilerSwitches="$ExeCompilerSwitches $CompilerSwitches"
 ExeLinkerSwitches="$ExeLinkerSwitches $LinkerSwitches"
+if [ "$UseLoader" = "true" ]; then
+	ExeCompilerSwitches="$ExeCompilerSwitches -D_USE_LOADER=1 -L./build -l:loader$DllSuffix"
+	ExeLinkerSwitches="$ExeLinkerSwitches -Wl,--dynamic-linker=./loader$DllSuffix"
+else
+	ExeCompilerSwitches="$ExeCompilerSwitches -lc"
+fi
 
 DllCompilerSwitches="$DllCompilerSwitches $CompilerSwitches -fPIC"
 DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
@@ -98,20 +105,22 @@ build_module() {
 	CapitalName=$(echo $ModuleName | awk '{ print toupper($0) }')
 
 	if [ "$ModuleName" = "loader" ]; then
-		echo Building $Module as a library
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
-		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
-			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
-			readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
-		else
-			echo Setting result after module $Module
-			Result=1
+		if [ "$UseLoader" = "true" ]; then
+			echo Building $Module as a library
+			gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+			gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
+			if [[ -e "build/$ModuleName$DllSuffix" ]]; then
+				objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
+				readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
+			else
+				echo Setting result after module $Module
+				Result=1
+			fi
 		fi
 	elif [ "$ModuleName" = "platform" ]; then
 		echo Building $Module as an executable
-		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
-		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -L./build -l:loader$DllSuffix -Wl,-rpath,.,-rpath-link,./build,--dynamic-linker=./loader$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
+		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -Wl,-rpath,. -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
+		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -Wl,-rpath,. -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
 		if [[ -e "build/$ModuleName$ExeSuffix" ]]; then
 			objdump --source-comment -M intel "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.asm"
 			readelf -a -x .data -x .got.plt "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null

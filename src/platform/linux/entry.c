@@ -253,7 +253,11 @@ Platform_CmpFileTime(datetime A, datetime B)
 internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 {
+	#ifdef _USE_LOADER
 	*ProcOut = Loader_GetSymbol(Module->ELF, Name);
+	#else
+	*ProcOut = dlsym(Module->ELF, Name);
+	#endif
 }
 
 internal b08
@@ -265,13 +269,21 @@ Platform_IsModuleBackendOpened(platform_module *Module)
 internal void
 Platform_OpenModuleBackend(platform_module *Module)
 {
+#ifdef _USE_LOADER
 	Module->ELF = Loader_OpenShared(Module->FileName);
+#else
+	Module->ELF = dlopen(Module->FileName, SYS_RUNTIME_LOADER_LAZY);
+#endif
 }
 
 internal void
 Platform_CloseModuleBackend(platform_module *Module)
 {
+#ifdef _USE_LOADER
 	Loader_CloseShared(Module->ELF);
+#else
+	dlclose(Module->ELF);
+#endif
 	Module->ELF = NULL;
 }
 

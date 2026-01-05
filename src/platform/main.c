@@ -12,7 +12,9 @@
 
 #define INCLUDE_HEADER
 #include <util/main.c>
+#ifdef _USE_LOADER
 #include <loader/main.c>
+#endif
 #include "main.c"
 #ifdef _OPENGL
 #include <renderer_opengl/opengl.h>

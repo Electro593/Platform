@@ -56,6 +56,13 @@
 #define SYS_CREATE_USER_WRITE   0x00200
 #define SYS_CREATE_USER_READ    0x00400
 
+#define SYS_RUNTIME_LOADER_LAZY     0x0001
+#define SYS_RUNTIME_LOADER_NOW      0x0002
+#define SYS_RUNTIME_LOADER_NOLOAD   0x0004
+#define SYS_RUNTIME_LOADER_DEEPBIND 0x0008
+#define SYS_RUNTIME_LOADER_GLOBAL   0x0100
+#define SYS_RUNTIME_LOADER_NODELETE 0x1000
+
 #define SYS_ADDRESS_FAMILY_UNIX 1
 
 #define SYS_SOCKET_STREAM 1
@@ -103,6 +110,12 @@ typedef struct sys_timespec {
 	s64 Seconds;
 	s64 Nano;
 } sys_timespec;
+
+#ifndef _USE_LOADER
+extern vptr dlopen(c08 *Path, s32 Flags);
+extern vptr dlsym(vptr Handle, c08 *Symbol);
+extern s32	dlclose(vptr Handle);
+#endif
 
 #define LINUX_SYSCALLS \
 	SYSCALL(0,   Read,         ssize, u32 FileDescriptor, c08 *Buffer, u64 Count) \

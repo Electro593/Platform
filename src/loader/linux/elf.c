@@ -656,6 +656,7 @@ typedef struct elf_dynamic_state {
 	usize RelSize;
 	usize RelEntrySize;
 	usize PltRel;
+	vptr  Debug;
 	vptr  JmpRel;
 	void (**InitArray)(void);
 	void (**FiniArray)(void);
@@ -677,10 +678,10 @@ typedef struct elf_state {
 	usize PageSize;
 
 	// Mapped file
-	c08	 *FileName;
-	u32	  FileDescriptor;
-	u08	 *File;
-	usize FileSize;
+	string FileName;
+	u32	   FileDescriptor;
+	u08	  *File;
+	usize  FileSize;
 
 	// Quick access
 	elf_header Header;
@@ -837,7 +838,12 @@ Elf_LookupSymbol_GnuHash(elf_state *State, c08 *Name)
 }
 
 internal elf_symbol *
-Elf_LookupSymbol(elf_state *State, c08 *Name, elf_symbol *Symbol)
+Elf_LookupSymbol(
+	elf_state  *State,
+	c08		   *Name,
+	elf_symbol *Symbol,
+	elf_state **StateOut
+)
 {
 	if (!Symbol) {
 		if (State->Dynamic.Hash) Symbol = Elf_LookupSymbol_Hash(State, Name);
@@ -845,8 +851,10 @@ Elf_LookupSymbol(elf_state *State, c08 *Name, elf_symbol *Symbol)
 			Symbol = Elf_LookupSymbol_GnuHash(State, Name);
 	}
 
-	if (Symbol && Symbol->SectionIndex != ELF_SYMBOL_INDEX_UNDEFINED)
+	if (Symbol && Symbol->SectionIndex != ELF_SYMBOL_INDEX_UNDEFINED) {
+		*StateOut = State;
 		return Symbol;
+	}
 
 	// TODO: Handle nested dependencies with breadth-first search
 
@@ -854,17 +862,17 @@ Elf_LookupSymbol(elf_state *State, c08 *Name, elf_symbol *Symbol)
 	while (Dynamic->Tag != ELF_DYNAMIC_TAG_NULL) {
 		if (Dynamic->Tag == ELF_DYNAMIC_TAG_NEEDED) {
 			loader_module *Module =
-				Loader_OpenShared(State->Dynamic.StrTab + Dynamic->Pointer);
-			Dynamic++;
+				Loader_OpenShared(State->Dynamic.StrTab + Dynamic->Value);
 
-			if (!Module) continue;
+			if (Module) {
+				Symbol = Elf_LookupSymbol(&Module->Elf, Name, NULL, StateOut);
 
-			Symbol = Elf_LookupSymbol(&Module->Elf, Name, NULL);
+				Loader_CloseShared(Module);
 
-			Loader_CloseShared(Module);
-
-			if (Symbol) return Symbol;
+				if (Symbol) return Symbol;
+			}
 		}
+		Dynamic++;
 	}
 
 	return NULL;
@@ -873,13 +881,14 @@ Elf_LookupSymbol(elf_state *State, c08 *Name, elf_symbol *Symbol)
 internal usize
 Elf_ResolveSymbol(elf_state *State, c08 *Name, elf_symbol *Symbol)
 {
-	if (Name) Symbol = Elf_LookupSymbol(State, Name, Symbol);
+	elf_state *FoundState;
+	if (Name) Symbol = Elf_LookupSymbol(State, Name, Symbol, &FoundState);
 
-	if (Symbol->SectionIndex == ELF_SYMBOL_INDEX_UNDEFINED) return 0;
+	if (!Symbol || Symbol->SectionIndex == ELF_SYMBOL_INDEX_UNDEFINED) return 0;
 
 	usize Value = Symbol->Value;
 	if (Symbol->SectionIndex != ELF_SYMBOL_INDEX_ABSOLUTE)
-		Value += (usize) State->ImageAddress;
+		Value += (usize) FoundState->ImageAddress;
 
 	return Value;
 }
@@ -1120,6 +1129,9 @@ Elf_ReadDynamics(elf_state *State)
 			case ELF_DYNAMIC_TAG_PLTREL:
 				DynState->PltRel = Dynamic->Value;
 				break;
+			case ELF_DYNAMIC_TAG_DEBUG:
+				Dynamic->Pointer = (elf_addr) DynState->Debug;
+				break;
 			case ELF_DYNAMIC_TAG_TEXTREL:
 				DynState->Flags |= ELF_DYNAMIC_FLAG_TEXTREL;
 				break;
@@ -1239,8 +1251,6 @@ Elf_HandleDynamicRelocations(elf_state *State)
 			if (Error) return Error;
 		}
 	}
-
-	if (!State->FileName) State->FileName = State->Dynamic.SoName;
 
 	return ELF_ERROR_SUCCESS;
 }
@@ -1521,15 +1531,14 @@ Elf_LoadWithDescriptor(
 }
 
 internal elf_error
-Elf_Load(elf_state *State, c08 *FileName, c08 **EnvParams, usize PageSize)
+Elf_Load(elf_state *State, string FileName, c08 **EnvParams, usize PageSize)
 {
-	if (!State || !FileName) return ELF_ERROR_INVALID_ARGUMENT;
+	if (!State || !FileName.Text) return ELF_ERROR_INVALID_ARGUMENT;
 
-	*State			= (elf_state) { 0 };
 	State->FileName = FileName;
 	State->PageSize = PageSize;
 
-	u32 FD = Sys_Open(FileName, SYS_OPEN_READONLY, 0);
+	u32 FD = Sys_Open(FileName.Text, SYS_OPEN_READONLY, 0);
 	if (FD >= 0xFFFFF000) return ELF_ERROR_UNKNOWN;
 
 	return Elf_LoadWithDescriptor(State, FD, EnvParams, PageSize);
@@ -1545,7 +1554,6 @@ Elf_ReadLoadedImage(
 {
 	if (!State || !BaseAddress) return ELF_ERROR_INVALID_ARGUMENT;
 
-	*State			= (elf_state) { 0 };
 	State->File		= BaseAddress;
 	State->PageSize = PageSize;
 

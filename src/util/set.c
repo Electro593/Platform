@@ -40,6 +40,7 @@ typedef struct hashmap {
    EXPORT(void,    QuickSort,            vptr Data, usize ElementSize, usize ElementCount, s08 (*Cmp)(vptr A, vptr B)) \
    EXPORT(hashmap, HashMap_InitCustom,   heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCapacity, r32 ResizeThresh, r32 ResizeRate, hash_func HashFunc, vptr HashParam, cmp_func CmpFunc, vptr CmpParam) \
    EXPORT(hashmap, HashMap_Init,         heap *Heap, u32 KeySize, u32 ValueSize) \
+   EXPORT(vptr,    HashMap_GetRef,       hashmap *Map, vptr Key) \
    EXPORT(b08,     HashMap_Get,          hashmap *Map, vptr Key, vptr ValueOut) \
    EXPORT(b08,     HashMap_Remove,       hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut) \
    EXPORT(b08,     HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
