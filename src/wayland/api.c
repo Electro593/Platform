@@ -406,8 +406,6 @@ struct wayland_message {
 struct wayland_interface {
 	wayland_object_type Type;
 
-	u08 VersionMap[8];
-
 	u16 Size;
 	u32 Version;
 	u32 Id;
@@ -434,7 +432,12 @@ struct wayland_display {
 struct wayland_registry {
 	wayland_interface Header;
 
-	void (*Bind)(wayland_registry *This, u32 Name, vptr Object);
+	vptr (*Bind)(
+		wayland_registry   *This,
+		u32					Name,
+		wayland_object_type Type,
+		u32					Version
+	);
 
 	void (*HandleGlobal)(
 		wayland_registry *This,
@@ -469,8 +472,8 @@ struct wayland_shared_memory_pool {
 		s32							 Stride,
 		wayland_shared_memory_format Format
 	);
-	void (*Destroy)(wayland_shared_memory_pool *This);
-	void (*Resize)(wayland_shared_memory_pool *This, s32 Size);
+	b08 (*Destroy)(wayland_shared_memory_pool *This);
+	b08 (*Resize)(wayland_shared_memory_pool *This, s32 Size);
 };
 
 struct wayland_shared_memory {
@@ -481,7 +484,7 @@ struct wayland_shared_memory {
 		s32					   FileDescriptor,
 		s32					   Size
 	);
-	void (*Release)(wayland_shared_memory *This);
+	b08 (*Release)(wayland_shared_memory *This);
 
 	void (*HandleFormat)(
 		wayland_shared_memory		*This,
@@ -492,7 +495,7 @@ struct wayland_shared_memory {
 struct wayland_buffer {
 	wayland_interface Header;
 
-	void (*Destroy)(wayland_buffer *This);
+	b08 (*Destroy)(wayland_buffer *This);
 
 	void (*HandleRelease)(wayland_buffer *This);
 };
@@ -500,15 +503,15 @@ struct wayland_buffer {
 struct wayland_data_offer {
 	wayland_interface Header;
 
-	void (*Accept)(wayland_data_offer *This, u32 Serial, string MimeType);
-	void (*Receive)(
+	b08 (*Accept)(wayland_data_offer *This, u32 Serial, string MimeType);
+	b08 (*Receive)(
 		wayland_data_offer *This,
 		string				MimeType,
 		s32					FileDescriptor
 	);
-	void (*Destroy)(wayland_data_offer *This);
-	void (*Finish)(wayland_data_offer *This);
-	void (*SetActions)(
+	b08 (*Destroy)(wayland_data_offer *This);
+	b08 (*Finish)(wayland_data_offer *This);
+	b08 (*SetActions)(
 		wayland_data_offer								*This,
 		wayland_data_device_manager_drag_and_drop_action Supported,
 		wayland_data_device_manager_drag_and_drop_action Preferred
@@ -528,9 +531,9 @@ struct wayland_data_offer {
 struct wayland_data_source {
 	wayland_interface Header;
 
-	void (*Offer)(wayland_data_source *This, string MimeType);
-	void (*Destroy)(wayland_data_source *This);
-	void (*SetActions)(
+	b08 (*Offer)(wayland_data_source *This, string MimeType);
+	b08 (*Destroy)(wayland_data_source *This);
+	b08 (*SetActions)(
 		wayland_data_source								*This,
 		wayland_data_device_manager_drag_and_drop_action DragAndDropActions
 	);
@@ -553,19 +556,19 @@ struct wayland_data_source {
 struct wayland_data_device {
 	wayland_interface Header;
 
-	void (*StartDrag)(
+	b08 (*StartDrag)(
 		wayland_data_device *This,
 		wayland_data_source *Source,
 		wayland_surface		*Origin,
 		wayland_surface		*Icon,
 		u32					 Serial
 	);
-	void (*SetSelection)(
+	b08 (*SetSelection)(
 		wayland_data_device *This,
 		wayland_data_source *Source,
 		u32					 Serial
 	);
-	void (*Release)(wayland_data_device *This);
+	b08 (*Release)(wayland_data_device *This);
 
 	void (*HandleDataOffer)(wayland_data_device *This, u32 NewDataOfferId);
 	void (*HandleEnter)(
@@ -610,29 +613,29 @@ struct wayland_shell {
 struct wayland_shell_surface {
 	wayland_interface Header;
 
-	void (*Pong)(wayland_shell_surface *This, u32 Serial);
-	void (*Move)(wayland_shell_surface *This, wayland_seat *Seat, u32 Serial);
-	void (*Resize)(
+	b08 (*Pong)(wayland_shell_surface *This, u32 Serial);
+	b08 (*Move)(wayland_shell_surface *This, wayland_seat *Seat, u32 Serial);
+	b08 (*Resize)(
 		wayland_shell_surface		*This,
 		wayland_seat				*Seat,
 		u32							 Serial,
 		wayland_shell_surface_resize Edges
 	);
-	void (*SetToplevel)(wayland_shell_surface *This);
-	void (*SetTransient)(
+	b08 (*SetToplevel)(wayland_shell_surface *This);
+	b08 (*SetTransient)(
 		wayland_shell_surface		   *This,
 		wayland_surface				   *Parent,
 		s32								X,
 		s32								Y,
 		wayland_shell_surface_transient Flags
 	);
-	void (*SetFullscreen)(
+	b08 (*SetFullscreen)(
 		wayland_shell_surface				   *This,
 		wayland_shell_surface_fullscreen_method Method,
 		u32										Framerate,
 		wayland_output						   *Output
 	);
-	void (*SetPopup)(
+	b08 (*SetPopup)(
 		wayland_shell_surface			*This,
 		wayland_seat					*Seat,
 		u32								 Serial,
@@ -641,9 +644,9 @@ struct wayland_shell_surface {
 		s32								 Y,
 		wayland_shell_surface_transient *Flags
 	);
-	void (*SetMaximized)(wayland_shell_surface *This, wayland_output *Output);
-	void (*SetTitle)(wayland_shell_surface *This, string Title);
-	void (*SetClass)(wayland_shell_surface *This, string Class);
+	b08 (*SetMaximized)(wayland_shell_surface *This, wayland_output *Output);
+	b08 (*SetTitle)(wayland_shell_surface *This, string Title);
+	b08 (*SetClass)(wayland_shell_surface *This, string Class);
 
 	void (*HandlePing)(wayland_shell_surface *This, u32 Serial);
 	void (*HandleConfigure)(
@@ -658,26 +661,26 @@ struct wayland_shell_surface {
 struct wayland_surface {
 	wayland_interface Header;
 
-	void (*Destroy)(wayland_surface *This);
-	void (*Attach)(wayland_surface *This, wayland_buffer *Buffer, s32 X, s32 Y);
-	void (*Damage)(wayland_surface *This, s32 X, s32 Y, s32 Width, s32 Height);
+	b08 (*Destroy)(wayland_surface *This);
+	b08 (*Attach)(wayland_surface *This, wayland_buffer *Buffer, s32 X, s32 Y);
+	b08 (*Damage)(wayland_surface *This, s32 X, s32 Y, s32 Width, s32 Height);
 	wayland_callback *(*Frame)(wayland_surface *This);
-	void (*SetOpaqueRegion)(wayland_surface *This, wayland_region *Region);
-	void (*SetInputRegion)(wayland_surface *This, wayland_region *Region);
-	void (*Commit)(wayland_surface *This);
-	void (*SetBufferTransform)(
+	b08 (*SetOpaqueRegion)(wayland_surface *This, wayland_region *Region);
+	b08 (*SetInputRegion)(wayland_surface *This, wayland_region *Region);
+	b08 (*Commit)(wayland_surface *This);
+	b08 (*SetBufferTransform)(
 		wayland_surface			*This,
 		wayland_output_transform Transform
 	);
-	void (*SetBufferScale)(wayland_surface *This, s32 Scale);
-	void (*DamageBuffer)(
+	b08 (*SetBufferScale)(wayland_surface *This, s32 Scale);
+	b08 (*DamageBuffer)(
 		wayland_surface *This,
 		s32				 X,
 		s32				 Y,
 		s32				 Width,
 		s32				 Height
 	);
-	void (*Offset)(wayland_surface *This, s32 X, s32 Y);
+	b08 (*Offset)(wayland_surface *This, s32 X, s32 Y);
 
 	void (*HandleEnter)(wayland_surface *This, wayland_output *Output);
 	void (*HandleLeave)(wayland_surface *This, wayland_output *Output);
@@ -694,7 +697,7 @@ struct wayland_seat {
 	wayland_pointer *(*GetPointer)(wayland_seat *This);
 	wayland_keyboard *(*GetKeyboard)(wayland_seat *This);
 	wayland_touch *(*GetTouch)(wayland_seat *This);
-	void (*Release)(wayland_seat *This);
+	b08 (*Release)(wayland_seat *This);
 
 	void (*HandleCapabilities)(
 		wayland_seat		   *This,
@@ -706,14 +709,14 @@ struct wayland_seat {
 struct wayland_pointer {
 	wayland_interface Header;
 
-	void (*SetCursor)(
+	b08 (*SetCursor)(
 		wayland_pointer *This,
 		u32				 Serial,
 		wayland_surface *Surface,
 		s32				 HotspotX,
 		s32				 HotspotY
 	);
-	void (*Release)(wayland_pointer *This);
+	b08 (*Release)(wayland_pointer *This);
 
 	void (*HandleEnter)(
 		wayland_pointer *This,
@@ -776,7 +779,7 @@ struct wayland_pointer {
 struct wayland_keyboard {
 	wayland_interface Header;
 
-	void (*Release)(wayland_keyboard *This);
+	b08 (*Release)(wayland_keyboard *This);
 
 	void (*HandleKeymap)(wayland_keyboard *This, s32 FileDescriptor, u32 Size);
 	void (*HandleEnter)(
@@ -811,7 +814,7 @@ struct wayland_keyboard {
 struct wayland_touch {
 	wayland_interface Header;
 
-	void (*Release)(wayland_touch *This);
+	b08 (*Release)(wayland_touch *This);
 
 	void (*HandleDown)(
 		wayland_touch	*This,
@@ -848,7 +851,7 @@ struct wayland_touch {
 struct wayland_output {
 	wayland_interface Header;
 
-	void (*Release)(wayland_output *This);
+	b08 (*Release)(wayland_output *This);
 
 	void (*HandleGeometry)(
 		wayland_output			*This,
@@ -877,15 +880,15 @@ struct wayland_output {
 struct wayland_region {
 	wayland_interface Header;
 
-	void (*Destroy)(wayland_region *This);
-	void (*Add)(wayland_region *This, s32 X, s32 Y, s32 Width, s32 Height);
-	void (*Subtract)(wayland_region *This, s32 X, s32 Y, s32 Width, s32 Height);
+	b08 (*Destroy)(wayland_region *This);
+	b08 (*Add)(wayland_region *This, s32 X, s32 Y, s32 Width, s32 Height);
+	b08 (*Subtract)(wayland_region *This, s32 X, s32 Y, s32 Width, s32 Height);
 };
 
 struct wayland_subcompositor {
 	wayland_interface Header;
 
-	void (*Destroy)(wayland_subcompositor *This);
+	b08 (*Destroy)(wayland_subcompositor *This);
 	wayland_subsurface *(*GetSubsurface)(
 		wayland_subcompositor *This,
 		wayland_surface		  *Surface,
@@ -896,19 +899,19 @@ struct wayland_subcompositor {
 struct wayland_subsurface {
 	wayland_interface Header;
 
-	void (*Destroy)(wayland_subsurface *This);
-	void (*SetPosition)(wayland_subsurface *This, s32 X, s32 Y);
-	void (*PlaceAbove)(wayland_subsurface *This, wayland_surface *Sibling);
-	void (*PlaceBelow)(wayland_subsurface *This, wayland_surface *Sibling);
-	void (*SetSync)(wayland_subsurface *This);
-	void (*SetDesync)(wayland_subsurface *This);
+	b08 (*Destroy)(wayland_subsurface *This);
+	b08 (*SetPosition)(wayland_subsurface *This, s32 X, s32 Y);
+	b08 (*PlaceAbove)(wayland_subsurface *This, wayland_surface *Sibling);
+	b08 (*PlaceBelow)(wayland_subsurface *This, wayland_surface *Sibling);
+	b08 (*SetSync)(wayland_subsurface *This);
+	b08 (*SetDesync)(wayland_subsurface *This);
 };
 
 struct wayland_fixes {
 	wayland_interface Header;
 
-	void (*Destroy)(wayland_fixes *This);
-	void (*DestroyRegistry)(wayland_fixes *This, wayland_registry *Registry);
+	b08 (*Destroy)(wayland_fixes *This);
+	b08 (*DestroyRegistry)(wayland_fixes *This, wayland_registry *Registry);
 };
 
 #define WAYLAND_API_FUNCS \
@@ -923,7 +926,7 @@ struct wayland_fixes {
 	INTERN(wayland_registry*, Wayland_Display_GetRegistry, wayland_display *This) \
 	\
 	INTERN(void, Wayland_Registry_HandleEvent, wayland_registry *This, wayland_message *Message) \
-	INTERN(void, Wayland_Registry_Bind,        wayland_registry *This, u32 Name, vptr Object) \
+	INTERN(vptr, Wayland_Registry_Bind,        wayland_registry *This, u32 Name, wayland_object_type Type, u32 Version) \
 	\
 	INTERN(void, Wayland_Callback_HandleEvent, wayland_callback *This, wayland_message *Message) \
 	\
@@ -931,9 +934,36 @@ struct wayland_fixes {
 	INTERN(wayland_surface*, Wayland_Compositor_CreateSurface, wayland_compositor *This) \
 	INTERN(wayland_region*,  Wayland_Compositor_CreateRegion,  wayland_compositor *This) \
 	\
+	INTERN(wayland_shell_surface*, Wayland_Shell_GetShellSurface, wayland_shell *This, wayland_surface *Surface) \
+	\
+	INTERN(void, Wayland_ShellSurface_HandleEvent,   wayland_shell_surface *This, wayland_message *Message) \
+	INTERN(b08,  Wayland_ShellSurface_Pong,          wayland_shell_surface *This, u32 Serial) \
+	INTERN(b08,  Wayland_ShellSurface_Move,          wayland_shell_surface *This, wayland_seat *Seat, u32 Serial) \
+	INTERN(b08,  Wayland_ShellSurface_Resize,        wayland_shell_surface *This, wayland_seat *Seat, u32 Serial, wayland_shell_surface_resize Edges) \
+	INTERN(b08,  Wayland_ShellSurface_SetToplevel,   wayland_shell_surface *This) \
+	INTERN(b08,  Wayland_ShellSurface_SetTransient,  wayland_shell_surface *This, wayland_surface *Parent, s32 X, s32 Y, wayland_shell_surface_transient Flags) \
+	INTERN(b08,  Wayland_ShellSurface_SetFullscreen, wayland_shell_surface *This, wayland_shell_surface_fullscreen_method Method, u32 Framerate, wayland_output *Output) \
+	INTERN(b08,  Wayland_ShellSurface_SetPopup,      wayland_shell_surface *This, wayland_seat *Seat, u32 Serial, wayland_surface *Parent, s32 X, s32 Y, wayland_shell_surface_transient *Flags) \
+	INTERN(b08,  Wayland_ShellSurface_SetMaximized,  wayland_shell_surface *This, wayland_output *Output) \
+	INTERN(b08,  Wayland_ShellSurface_SetTitle,      wayland_shell_surface *This, string Title) \
+	INTERN(b08,  Wayland_ShellSurface_SetClass,      wayland_shell_surface *This, string Class) \
+	\
+	INTERN(void,              Wayland_Surface_HandleEvent,        wayland_surface *This, wayland_message *Message) \
+	INTERN(b08,               Wayland_Surface_Destroy,            wayland_surface *This) \
+	INTERN(b08,               Wayland_Surface_Attach,             wayland_surface *This, wayland_buffer *Buffer, s32 X, s32 Y) \
+	INTERN(b08,               Wayland_Surface_Damage,             wayland_surface *This, s32 X, s32 Y, s32 Width, s32 Height) \
+	INTERN(wayland_callback*, Wayland_Surface_Frame,              wayland_surface *This) \
+	INTERN(b08,               Wayland_Surface_SetOpaqueRegion,    wayland_surface *This, wayland_region *Region) \
+	INTERN(b08,               Wayland_Surface_SetInputRegion,     wayland_surface *This, wayland_region *Region) \
+	INTERN(b08,               Wayland_Surface_Commit,             wayland_surface *This) \
+	INTERN(b08,               Wayland_Surface_SetBufferTransform, wayland_surface *This, wayland_output_transform Transform) \
+	INTERN(b08,               Wayland_Surface_SetBufferScale,     wayland_surface *This, s32 Scale) \
+	INTERN(b08,               Wayland_Surface_DamageBuffer,       wayland_surface *This, s32 X, s32 Y, s32 Width, s32 Height) \
+	INTERN(b08,               Wayland_Surface_Offset,             wayland_surface *This, s32 X, s32 Y) \
+	\
 	INTERN(void, Wayland_Fixes_HandleEvent,     wayland_fixes *This, wayland_message *Message) \
-	INTERN(void, Wayland_Fixes_Destroy,         wayland_fixes *This) \
-	INTERN(void, Wayland_Fixes_DestroyRegistry, wayland_fixes *This, wayland_registry *Registry) \
+	INTERN(b08,  Wayland_Fixes_Destroy,         wayland_fixes *This) \
+	INTERN(b08,  Wayland_Fixes_DestroyRegistry, wayland_fixes *This, wayland_registry *Registry) \
 	//
 
 #endif
@@ -963,10 +993,8 @@ static wayland_callback WaylandCallbackPrototype = {
 };
 
 static wayland_compositor WaylandCompositorPrototype = {
-	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_COMPOSITOR,
-					   .VersionMap	= { 6 },
-					   .Size		= sizeof(wayland_compositor),
-					   .HandleEvent = (vptr) Wayland_Compositor_HandleEvent },
+	.Header		   = { .Type = WAYLAND_OBJECT_TYPE_COMPOSITOR,
+					   .Size = sizeof(wayland_compositor) },
 	.CreateSurface = Wayland_Compositor_CreateSurface,
 	.CreateRegion  = Wayland_Compositor_CreateRegion,
 };
@@ -1035,44 +1063,42 @@ static wayland_data_device_manager WaylandDataDeviceManagerPrototype = {
 };
 
 static wayland_shell WaylandShellPrototype = {
-	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_SHELL,
-						 .Size		  = sizeof(wayland_shell),
-						 .HandleEvent = NULL },
-	.GetShellSurface = NULL,
+	.Header			 = { .Type = WAYLAND_OBJECT_TYPE_SHELL,
+						 .Size = sizeof(wayland_shell) },
+	.GetShellSurface = Wayland_Shell_GetShellSurface,
 };
 
 static wayland_shell_surface WaylandShellSurfacePrototype = {
 	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_SHELL_SURFACE,
 					   .Size		= sizeof(wayland_shell_surface),
-					   .HandleEvent = NULL },
-	.Pong		   = NULL,
-	.Move		   = NULL,
-	.Resize		   = NULL,
-	.SetToplevel   = NULL,
-	.SetTransient  = NULL,
-	.SetFullscreen = NULL,
-	.SetPopup	   = NULL,
-	.SetMaximized  = NULL,
-	.SetTitle	   = NULL,
-	.SetClass	   = NULL,
+					   .HandleEvent = (vptr) Wayland_ShellSurface_HandleEvent },
+	.Pong		   = Wayland_ShellSurface_Pong,
+	.Move		   = Wayland_ShellSurface_Move,
+	.Resize		   = Wayland_ShellSurface_Resize,
+	.SetToplevel   = Wayland_ShellSurface_SetToplevel,
+	.SetTransient  = Wayland_ShellSurface_SetTransient,
+	.SetFullscreen = Wayland_ShellSurface_SetFullscreen,
+	.SetPopup	   = Wayland_ShellSurface_SetPopup,
+	.SetMaximized  = Wayland_ShellSurface_SetMaximized,
+	.SetTitle	   = Wayland_ShellSurface_SetTitle,
+	.SetClass	   = Wayland_ShellSurface_SetClass,
 };
 
 static wayland_surface WaylandSurfacePrototype = {
 	.Header				= { .Type		 = WAYLAND_OBJECT_TYPE_SURFACE,
-							.VersionMap	 = { 1, 2, 3, 4, 5, 6 },
 							.Size		 = sizeof(wayland_surface),
-							.HandleEvent = NULL },
-	.Destroy			= NULL,
-	.Attach				= NULL,
-	.Damage				= NULL,
-	.Frame				= NULL,
-	.SetOpaqueRegion	= NULL,
-	.SetInputRegion		= NULL,
-	.Commit				= NULL,
-	.SetBufferTransform = NULL,
-	.SetBufferScale		= NULL,
-	.DamageBuffer		= NULL,
-	.Offset				= NULL,
+							.HandleEvent = (vptr) Wayland_Surface_HandleEvent },
+	.Destroy			= Wayland_Surface_Destroy,
+	.Attach				= Wayland_Surface_Attach,
+	.Damage				= Wayland_Surface_Damage,
+	.Frame				= Wayland_Surface_Frame,
+	.SetOpaqueRegion	= Wayland_Surface_SetOpaqueRegion,
+	.SetInputRegion		= Wayland_Surface_SetInputRegion,
+	.Commit				= Wayland_Surface_Commit,
+	.SetBufferTransform = Wayland_Surface_SetBufferTransform,
+	.SetBufferScale		= Wayland_Surface_SetBufferScale,
+	.DamageBuffer		= Wayland_Surface_DamageBuffer,
+	.Offset				= Wayland_Surface_Offset,
 };
 
 static wayland_seat WaylandSeatPrototype = {
@@ -1118,7 +1144,6 @@ static wayland_output WaylandOutputPrototype = {
 
 static wayland_region WaylandRegionPrototype = {
 	.Header	  = { .Type		   = WAYLAND_OBJECT_TYPE_REGION,
-				  .VersionMap  = {},
 				  .Size		   = sizeof(wayland_region),
 				  .HandleEvent = NULL },
 	.Destroy  = NULL,
@@ -1147,9 +1172,8 @@ static wayland_subsurface WaylandSubsurfacePrototype = {
 };
 
 static wayland_fixes WaylandFixesPrototype = {
-	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_FIXES,
-						 .Size		  = sizeof(wayland_fixes),
-						 .HandleEvent = (vptr) Wayland_Fixes_HandleEvent },
+	.Header			 = { .Type = WAYLAND_OBJECT_TYPE_FIXES,
+						 .Size = sizeof(wayland_fixes) },
 	.Destroy		 = Wayland_Fixes_Destroy,
 	.DestroyRegistry = Wayland_Fixes_DestroyRegistry,
 };
@@ -1186,7 +1210,12 @@ static u08 WaylandVersionMap[WAYLAND_OBJECT_TYPE_COUNT]
 							[WAYLAND_MAX_OBJECT_VERSION + 1] = {
 								[WAYLAND_OBJECT_TYPE_DISPLAY]	 = { [1] = 1 },
 								[WAYLAND_OBJECT_TYPE_REGISTRY]	 = { [1] = 1 },
-								[WAYLAND_OBJECT_TYPE_CALLBACK]	 = { [1] = 1 },
+								[WAYLAND_OBJECT_TYPE_CALLBACK]	 = { [1] = 1,
+																	 [2] = 1,
+																	 [3] = 1,
+																	 [4] = 1,
+																	 [5] = 1,
+																	 [6] = 1 },
 								[WAYLAND_OBJECT_TYPE_COMPOSITOR] = { [1] = 6 },
 								[WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL]  = {},
 								[WAYLAND_OBJECT_TYPE_SHARED_MEMORY]		  = {},
@@ -1195,8 +1224,9 @@ static u08 WaylandVersionMap[WAYLAND_OBJECT_TYPE_COUNT]
 								[WAYLAND_OBJECT_TYPE_DATA_SOURCE]		  = {},
 								[WAYLAND_OBJECT_TYPE_DATA_DEVICE]		  = {},
 								[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] = {},
-								[WAYLAND_OBJECT_TYPE_SHELL]				  = {},
-								[WAYLAND_OBJECT_TYPE_SHELL_SURFACE]		  = {},
+								[WAYLAND_OBJECT_TYPE_SHELL] = { [1] = 1 },
+								[WAYLAND_OBJECT_TYPE_SHELL_SURFACE] = { [1] =
+																			1 },
 								[WAYLAND_OBJECT_TYPE_SURFACE]		= { [1] = 1,
 																	[2] = 2,
 																	[3] = 3,
@@ -1278,7 +1308,7 @@ Wayland_IsObjectValid(vptr Object)
 		&& Interface->Type > WAYLAND_OBJECT_TYPE_UNKNOWN
 		&& Interface->Type < WAYLAND_OBJECT_TYPE_COUNT
 		&& Interface->Version > 0
-		&& Interface->Version < WAYLAND_MAX_OBJECT_VERSION;
+		&& Interface->Version <= WAYLAND_MAX_OBJECT_VERSION;
 }
 
 internal vptr
@@ -1308,7 +1338,7 @@ Wayland_CreateChildObject(vptr Parent, wayland_object_type Type)
 	u32 ParentVersion = ((wayland_interface *) Parent)->Version;
 	u32 Version		  = WaylandVersionMap[Type][ParentVersion];
 
-	return Wayland_CreateObject(Type, WaylandVersionMap[Type][Version]);
+	return Wayland_CreateObject(Type, Version);
 }
 
 internal void
@@ -1354,24 +1384,114 @@ Wayland_ConnectToServerSocket(file_handle *Socket)
 	return Connected;
 }
 
+/// @brief Sends a formatted message based on a template, object id, opcode, and
+/// params. The following are the accepted values:
+/// - i: 32-bit int
+/// - o: Pointer to a wayland object. May be null.
+/// - s: Pointer to a null-terminated string. May be null.
+/// - a: Pointer to a non-null-terminated string representing a data array.
+/// - f: File descriptor
+/// @param[in] Object The object being called
+/// @param[in] Opcode The index of the called function within the interface
+/// @param[in] Format A format string to declare the types of the parameters
+/// @param[in] ... The parameters to add to the message
 internal void
-Wayland_SendWord(u32 Word)
+Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 {
-	usize BytesWritten =
-		Platform_WriteFile(_G.Socket, &Word, sizeof(u32), (usize) -1);
-	Assert(BytesWritten = sizeof(u32));
-}
-
-internal void
-Wayland_SendMessage(u32 ObjectId, u16 Opcode, u16 WordCount, ...)
-{
-	Wayland_SendWord(ObjectId);
-	Wayland_SendWord(((2 + WordCount) * sizeof(u32)) << 16 | Opcode);
+	u16 ParamCount = 0;
+	for (c08 *C = Format; *C; C++) ParamCount++;
 
 	va_list Args;
-	VA_Start(Args, WordCount);
-	for (usize I = 0; I < WordCount; I++) Wayland_SendWord(VA_Next(Args, u32));
+	VA_Start(Args, Format);
+
+	u16 WordCount = 0;
+	for (usize I = 0; I < ParamCount; I++) {
+		switch (Format[I]) {
+			case 'i':
+				VA_Next(Args, u32);
+				WordCount++;
+				break;
+
+			case 'o':
+				VA_Next(Args, vptr);
+				WordCount++;
+				break;
+
+			case 's':
+				string *Str	 = VA_Next(Args, string *);
+				WordCount	+= Str ? (Str->Length + 8) / 4 : 1;
+				break;
+
+			case 'a':
+				string *Arr	 = VA_Next(Args, string *);
+				WordCount	+= Arr ? (Arr->Length + 7) / 4 : 1;
+				break;
+
+			case 'f':
+				// TODO: Handle file descriptor
+				VA_Next(Args, u32);
+				break;
+		}
+	}
+
 	VA_End(Args);
+	VA_Start(Args, Format);
+
+	Stack_Push();
+	usize MessageSize = (2 + WordCount) * sizeof(u32);
+	u32	 *Message	  = Stack_Allocate(MessageSize);
+
+	Message[0] = ((wayland_interface *) Object)->Id;
+	Message[1] = (MessageSize << 16) | Opcode;
+
+	usize W = 2;
+	for (usize I = 0; I < ParamCount; I++) {
+		switch (Format[I]) {
+			case 'i': Message[W++] = VA_Next(Args, u32); break;
+
+			case 'o':
+				wayland_interface *Object = VA_Next(Args, wayland_interface *);
+				Message[W++]			  = Object ? Object->Id : 0;
+				break;
+
+			case 's':
+				string *Str	 = VA_Next(Args, string *);
+				Message[W++] = Str ? Str->Length + 1 : 0;
+				if (Str) {
+					c08 *Dest	= (c08 *) &Message[W];
+					char Pad[4] = { 0 };
+					Mem_Cpy(Dest, Str->Text, Str->Length);
+					Mem_Cpy(Dest + Str->Length, Pad, 4 - Str->Length % 4);
+					W += (Str->Length + 4) / 4;
+				}
+				break;
+
+			case 'a':
+				string *Arr	 = VA_Next(Args, string *);
+				Message[W++] = Arr ? Arr->Length : 0;
+				if (Arr) {
+					c08 *Dest	= (c08 *) &Message[W];
+					char Pad[3] = { 0 };
+					Mem_Cpy(Dest, Arr->Text, Arr->Length);
+					Mem_Cpy(Dest + Arr->Length, Pad, (4 - Arr->Length % 4) % 4);
+					W += (Arr->Length + 3) / 4;
+				}
+				break;
+
+			case 'd':
+				// TODO: Handle file descriptor
+				VA_Next(Args, u32);
+				break;
+		}
+	}
+
+	VA_End(Args);
+
+	usize BytesWritten =
+		Platform_WriteFile(_G.Socket, Message, MessageSize, (usize) -1);
+	Assert(BytesWritten == MessageSize);
+
+	Stack_Pop();
 }
 
 internal wayland_message *
@@ -1425,23 +1545,23 @@ Wayland_HandleNextEvent(void)
 	MAC_CONCAT(Arg, ITER) = MAC_CONCAT(Wayland_Parse, ARG)(NAME, &I)
 #define MAC_FOR_FUNC_MAKE_PARSE_ARG(NAME, ARG, ITER) \
 	MAC_CONCAT(Arg, ITER).ARG
-#define TRYCALL(Handler, Name, Message, ...) \
-	if (Handler->Name) { \
-		usize I = 0; \
-		__VA_OPT__(wayland_primitive MAC_FOREACH(Message, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_MAKE_PARSE_PRIM, __VA_ARGS__);) \
-		(Handler->Name)(Handler __VA_OPT__(, MAC_FOREACH(Message, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_MAKE_PARSE_ARG, __VA_ARGS__))); \
+#define TRYCALL(OBJECT, VERSION, NAME, MESSAGE, ...)                                                                          \
+	if (OBJECT->NAME && OBJECT->Header.Version >= VERSION) {                                                                  \
+		usize I = 0;                                                                                                          \
+		__VA_OPT__(wayland_primitive MAC_FOREACH(MESSAGE, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_MAKE_PARSE_PRIM, __VA_ARGS__);)        \
+		(OBJECT->NAME)(OBJECT __VA_OPT__(, MAC_FOREACH(MESSAGE, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_MAKE_PARSE_ARG, __VA_ARGS__)));  \
 	}
 
-// internal wayland_primitive
-// Wayland_ParseSint(wayland_message *Message, usize *I)
-// {
-// 	wayland_primitive Prim;
-//
-// 	Prim.Sint  = (s32) Message->Data[*I];
-// 	*I		  += 1;
-//
-// 	return Prim;
-// }
+internal wayland_primitive
+Wayland_ParseSint(wayland_message *Message, usize *I)
+{
+	wayland_primitive Prim;
+
+	Prim.Sint  = (s32) Message->Data[*I];
+	*I		  += 1;
+
+	return Prim;
+}
 
 internal wayland_primitive
 Wayland_ParseUint(wayland_message *Message, usize *I)
@@ -1462,9 +1582,14 @@ Wayland_ParseString(wayland_message *Message, usize *I)
 	u32 Length	= Message->Data[*I];
 	*I		   += 1;
 
-	Prim.String =
-		CLEString((c08 *) &Message->Data[*I], Length, STRING_ENCODING_ASCII);
-	*I += (Prim.String.Length + 3) / 4;
+	Prim.String = EString();
+	if (Length)
+		Prim.String = CLEString(
+			(c08 *) &Message->Data[*I],
+			Length - 1,
+			STRING_ENCODING_ASCII
+		);
+	*I += (Length + 3) / 4;
 
 	return Prim;
 }
@@ -1513,32 +1638,37 @@ Wayland_GetDisplay()
 	}
 }
 
+#define DEPRECATED FPrintL("Warning: %s is deprecated", CString((c08*) __func__));
+#define VERSION(V) if (This->Header.Version < (V)) return 0;
+
 internal void
 Wayland_Display_HandleEvent(wayland_display *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
 		case 0:
-			TRYCALL(This, HandleError, Message, Object, Uint, String);
+			TRYCALL(This, 1, HandleError, Message, Object, Uint, String);
 			break;
-		case 1: TRYCALL(This, HandleDeleteId, Message, Uint); break;
+		case 1: TRYCALL(This, 1, HandleDeleteId, Message, Uint); break;
 	}
 }
 
 internal wayland_callback *
 Wayland_Display_Sync(wayland_display *This)
 {
+	VERSION(1)
 	wayland_callback *Callback =
 		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_CALLBACK);
-	Wayland_SendMessage(This->Header.Id, 0, 1, Callback->Header.Id);
+	if (Callback) Wayland_SendMessage(This, 0, "o", Callback);
 	return Callback;
 }
 
 internal wayland_registry *
 Wayland_Display_GetRegistry(wayland_display *This)
 {
+	VERSION(1)
 	wayland_registry *Registry =
 		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_REGISTRY);
-	Wayland_SendMessage(This->Header.Id, 1, 1, Registry->Header.Id);
+	if (Registry) Wayland_SendMessage(This, 1, "o", Registry);
 	return Registry;
 }
 
@@ -1546,77 +1676,352 @@ internal void
 Wayland_Registry_HandleEvent(wayland_registry *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
-		case 0: TRYCALL(This, HandleGlobal, Message, Uint, String, Uint); break;
-		case 1: TRYCALL(This, HandleGlobalRemove, Message, Uint); break;
+		case 0:
+			TRYCALL(This, 1, HandleGlobal, Message, Uint, String, Uint);
+			break;
+		case 1: TRYCALL(This, 1, HandleGlobalRemove, Message, Uint); break;
 	}
 }
 
-internal void
-Wayland_Registry_Bind(wayland_registry *This, u32 Name, vptr Object)
+internal vptr
+Wayland_Registry_Bind(
+	wayland_registry   *This,
+	u32					Name,
+	wayland_object_type Type,
+	u32					Version
+)
 {
-	wayland_interface *Interface = Object;
-	Wayland_SendMessage(This->Header.Id, 0, 2, Name, Interface->Id);
-	Interface->Name = Name;
+	VERSION(1)
+	wayland_interface *Object = Wayland_CreateObject(Type, Version);
+	if (Object)
+		Wayland_SendMessage(
+			This,
+			0,
+			"isio",
+			Name,
+			&WaylandNames[Type],
+			Version,
+			Object
+		);
+	return Object;
 }
 
 internal void
 Wayland_Callback_HandleEvent(wayland_callback *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
-		case 0: TRYCALL(This, HandleDone, Message, Uint); break;
-	}
-}
-
-internal void
-Wayland_Compositor_HandleEvent(
-	wayland_compositor *This,
-	wayland_message	   *Message
-)
-{
-	switch (Message->Opcode) {
+		case 0: TRYCALL(This, 1, HandleDone, Message, Uint); break;
 	}
 }
 
 internal wayland_surface *
 Wayland_Compositor_CreateSurface(wayland_compositor *This)
 {
+	VERSION(1)
 	wayland_surface *Surface =
 		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_SURFACE);
-	Wayland_SendMessage(This->Header.Id, 0, 1, Surface->Header.Id);
+	if (Surface) Wayland_SendMessage(This, 0, "o", Surface);
 	return Surface;
 }
 
 internal wayland_region *
 Wayland_Compositor_CreateRegion(wayland_compositor *This)
 {
+	VERSION(1)
 	wayland_region *Region =
 		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_REGION);
-	Wayland_SendMessage(This->Header.Id, 1, 1, Region->Header.Id);
+	if (Region) Wayland_SendMessage(This, 1, "o", Region);
 	return Region;
 }
 
+internal wayland_shell_surface *
+Wayland_Shell_GetShellSurface(wayland_shell *This, wayland_surface *Surface)
+{
+	VERSION(1)
+	wayland_shell_surface *ShellSurface =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_SHELL_SURFACE);
+	if (ShellSurface) Wayland_SendMessage(This, 0, "oo", ShellSurface, Surface);
+	return ShellSurface;
+}
+
 internal void
-Wayland_Fixes_HandleEvent(wayland_fixes *This, wayland_message *Message)
+Wayland_ShellSurface_HandleEvent(wayland_shell_surface *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
+		case 0: TRYCALL(This, 1, HandlePing, Message, Uint); break;
+		case 1: TRYCALL(This, 1, HandleConfigure, Message, Uint, Sint, Sint); break;
+		case 2: TRYCALL(This, 1, HandlePopupDone, Message); break;
 	}
 }
 
-internal void
-Wayland_Fixes_Destroy(wayland_fixes *This)
+internal b08
+Wayland_ShellSurface_Pong(wayland_shell_surface *This, u32 Serial)
 {
-	Wayland_SendMessage(This->Header.Id, 0, 0);
-	Wayland_DeleteObject(This);
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "i", Serial);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_Move(
+	wayland_shell_surface *This,
+	wayland_seat		  *Seat,
+	u32					   Serial
+)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 1, "oi", Seat, Serial);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_Resize(
+	wayland_shell_surface		*This,
+	wayland_seat				*Seat,
+	u32							 Serial,
+	wayland_shell_surface_resize Edges
+)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 2, "oii", Seat, Serial, Edges);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_SetToplevel(wayland_shell_surface *This)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 3, "");
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_SetTransient(
+	wayland_shell_surface		   *This,
+	wayland_surface				   *Parent,
+	s32								X,
+	s32								Y,
+	wayland_shell_surface_transient Flags
+)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 4, "oiii", Parent, X, Y, Flags);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_SetFullscreen(
+	wayland_shell_surface				   *This,
+	wayland_shell_surface_fullscreen_method Method,
+	u32										Framerate,
+	wayland_output						   *Output
+)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 5, "iio", Method, Framerate, Output);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_SetPopup(
+	wayland_shell_surface			*This,
+	wayland_seat					*Seat,
+	u32								 Serial,
+	wayland_surface					*Parent,
+	s32								 X,
+	s32								 Y,
+	wayland_shell_surface_transient *Flags
+)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 6, "oioiii", Seat, Serial, Parent, X, Y, Flags);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_SetMaximized(
+	wayland_shell_surface *This,
+	wayland_output		  *Output
+)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 7, "o", Output);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_SetTitle(wayland_shell_surface *This, string Title)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 8, "s", Title);
+	return 1;
+}
+
+internal b08
+Wayland_ShellSurface_SetClass(wayland_shell_surface *This, string Class)
+{
+	DEPRECATED
+	VERSION(1)
+	Wayland_SendMessage(This, 9, "s", Class);
+	return 1;
 }
 
 internal void
+Wayland_Surface_HandleEvent(wayland_surface *This, wayland_message *Message)
+{
+	switch (Message->Opcode) {
+		case 0: TRYCALL(This, 1, HandleEnter, Message, Object); break;
+		case 1: TRYCALL(This, 1, HandleLeave, Message, Object); break;
+		case 2:
+			TRYCALL(This, 6, HandlePreferredBufferScale, Message, Sint);
+			break;
+		case 3:
+			TRYCALL(This, 6, HandlePreferredBufferTransform, Message, Uint);
+			break;
+	}
+}
+
+internal b08
+Wayland_Surface_Destroy(wayland_surface *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DeleteObject(This);
+	return 1;
+}
+
+internal b08
+Wayland_Surface_Attach(
+	wayland_surface *This,
+	wayland_buffer	*Buffer,
+	s32				 X,
+	s32				 Y
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 1, "oii", Buffer, X, Y);
+	return 1;
+}
+
+internal b08
+Wayland_Surface_Damage(
+	wayland_surface *This,
+	s32				 X,
+	s32				 Y,
+	s32				 Width,
+	s32				 Height
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 2, "iiii", X, Y, Width, Height);
+	return 1;
+}
+
+internal wayland_callback *
+Wayland_Surface_Frame(wayland_surface *This)
+{
+	VERSION(1)
+	wayland_callback *Callback =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_CALLBACK);
+	if (Callback) Wayland_SendMessage(This, 3, "o", Callback);
+	return Callback;
+}
+
+internal b08
+Wayland_Surface_SetOpaqueRegion(wayland_surface *This, wayland_region *Region)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 4, "o", Region);
+	return 1;
+}
+
+internal b08
+Wayland_Surface_SetInputRegion(wayland_surface *This, wayland_region *Region)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 5, "o", Region);
+	return 1;
+}
+
+internal b08
+Wayland_Surface_Commit(wayland_surface *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 6, "");
+	return 1;
+}
+
+internal b08
+Wayland_Surface_SetBufferTransform(
+	wayland_surface			*This,
+	wayland_output_transform Transform
+)
+{
+	VERSION(2)
+	Wayland_SendMessage(This, 7, "i", Transform);
+	return 1;
+}
+
+internal b08
+Wayland_Surface_SetBufferScale(wayland_surface *This, s32 Scale)
+{
+	VERSION(3)
+	Wayland_SendMessage(This, 8, "i", Scale);
+	return 1;
+}
+
+internal b08
+Wayland_Surface_DamageBuffer(
+	wayland_surface *This,
+	s32				 X,
+	s32				 Y,
+	s32				 Width,
+	s32				 Height
+)
+{
+	VERSION(4)
+	Wayland_SendMessage(This, 9, "iiii", X, Y, Width, Height);
+	return 1;
+}
+
+internal b08
+Wayland_Surface_Offset(wayland_surface *This, s32 X, s32 Y)
+{
+	VERSION(5)
+	Wayland_SendMessage(This, 10, "ii", X, Y);
+	return 1;
+}
+
+internal b08
+Wayland_Fixes_Destroy(wayland_fixes *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DeleteObject(This);
+	return 1;
+}
+
+internal b08
 Wayland_Fixes_DestroyRegistry(wayland_fixes *This, wayland_registry *Registry)
 {
-	Wayland_SendMessage(This->Header.Id, 1, 1, Registry->Header.Id);
+	VERSION(1)
+	Wayland_SendMessage(This, 1, "o", Registry);
 	Wayland_DeleteObject(Registry);
+	return 1;
 }
 
 #undef TRYCALL
+#undef VERSION
+#undef DEPRECATED
 
 #endif
 #endif

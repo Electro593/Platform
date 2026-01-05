@@ -21,8 +21,8 @@
 #undef INCLUDE_SOURCE
 #else
 #ifdef INCLUDE_SOURCE
-extern wayland_state _G;
-extern wayland_funcs _F;
+global wayland_state _G;
+global wayland_funcs _F;
 #endif
 
 #include <wayland/api.c>
@@ -41,8 +41,6 @@ typedef struct wayland_state {
 	heap *Heap;
 
 	file_handle Socket;
-
-	vptr EGLHandle;
 
 	b08 Connected : 1;
 	b08 Attempted : 1;
@@ -87,9 +85,6 @@ typedef struct wayland_funcs {
 
 #ifdef _LINUX
 #ifdef INCLUDE_SOURCE
-wayland_state _G;
-wayland_funcs _F;
-
 external void
 Load(platform_state *Platform, platform_module *Module)
 {
@@ -118,7 +113,6 @@ external void
 Deinit(platform_state *Platform)
 {
 	Wayland_TryClose();
-	dlclose(_G.EGLHandle);
 }
 
 #endif

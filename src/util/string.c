@@ -326,6 +326,13 @@ typedef struct fstring_format_list {
 /// @param[in] ... The arguments to pass into FString.
 /// @return The resulting formatted string.
 #define FNStringL(LITERAL, ...) FString(CNStringL(LITERAL), __VA_ARGS__)
+#define FStringL(LITERAL, ...) FString(CStringL(LITERAL), __VA_ARGS__)
+
+/// @brief Calls FPrint with a literal format string, including its null
+/// terminator.
+/// @param[in] LITERAL The literal format string to use.
+/// @param[in] ... The arguments to pass into FPrint.
+#define FPrintL(LITERAL, ...) FPrint(CNStringL(LITERAL), __VA_ARGS__)
 
 /// @brief Iterates through the codepoints of a string. Supports continue and
 /// break. Does not iterate by pointer.
@@ -394,6 +401,7 @@ typedef struct fstring_format_list {
 	INTERN(fstring_format_status, FString_WriteFormats,           fstring_format_list *FormatList, string Buffer) \
 	EXPORT(string,                FVString,                       string Format, va_list Args) \
 	EXPORT(string,                FString,                        string Format, ...) \
+	EXPORT(void,                  FPrint,                         string Format, ...) \
 	//
 
 #endif	// SECTION_STRING_PROTOTYPES
@@ -3113,6 +3121,22 @@ FString(string Format, ...)
 
 	VA_End(Args);
 	return Result;
+}
+
+internal void
+FPrint(string Format, ...)
+{
+	Stack_Push();
+
+	va_list Args;
+	VA_Start(Args, Format);
+
+	string Result = FVString(Format, Args);
+
+	VA_End(Args);
+
+	Platform_WriteConsole(Result);
+	Stack_Pop();
 }
 
 #endif	// SECTION_STRING_FORMATTING

@@ -10,7 +10,7 @@
 #ifdef INCLUDE_HEADER
 
 #define WAYLAND_USER_FUNCS \
-	EXPORT(b08, Wayland_CreateWindow, c08 *Title, usize Width, usize Height)
+	EXPORT(wayland_surface *, Wayland_CreateOpenGLWindow, c08 *Title, usize Width, usize Height)
 
 #endif
 
@@ -27,6 +27,7 @@ Wayland_Display_HandleError(
 	string			   Message
 )
 {
+	STOP;
 	Platform_WriteError(
 		FStringL(
 			"[WAYLAND] An error occurred in a %s v%d with id %d: Error %d: "
@@ -55,19 +56,16 @@ Wayland_Registry_HandleGlobal(
 	u32				  Version
 )
 {
-#define MAYBE_BIND(NAME, FIELD, TYPE, VERSION)                                \
-	if (String_Cmp(Interface, CStringL("wl_" #NAME)) == 0                     \
-		&& Version >= VERSION)                                                \
-	{                                                                         \
-		_G.FIELD =                                                            \
-			Wayland_CreateObject(WAYLAND_OBJECT_TYPE_##TYPE, VERSION);        \
-		CALL(This, Bind, Name, _G.FIELD);                                     \
+#define MAYBE_BIND(NAME, FIELD, TYPE)                                            \
+	if (String_Cmp(Interface, CStringL("wl_" #NAME)) == 0) {                     \
+		_G.FIELD = CALL(This, Bind, Name, WAYLAND_OBJECT_TYPE_##TYPE, Version);  \
 	} else
 
-	MAYBE_BIND(compositor, Compositor, COMPOSITOR, 1)
-	MAYBE_BIND(shm, SharedMemory, SHARED_MEMORY, 1)
-	MAYBE_BIND(data_device_manager, DataDeviceManager, DATA_DEVICE_MANAGER, 1)
-	MAYBE_BIND(fixes, Fixes, FIXES, 1) { }
+	MAYBE_BIND(compositor, Compositor, COMPOSITOR)
+	// MAYBE_BIND(shm, SharedMemory, SHARED_MEMORY)
+	// MAYBE_BIND(data_device_manager, DataDeviceManager, DATA_DEVICE_MANAGER)
+	// MAYBE_BIND(fixes, Fixes, FIXES)
+	{ }
 
 #undef MAYBE_BIND
 }
@@ -142,11 +140,14 @@ Wayland_TryClose(void)
 
 #define INIT if (!Wayland_TryInit()) return FALSE;
 
-internal b08
-Wayland_CreateWindow(c08 *Title, usize Width, usize Height)
+internal wayland_surface *
+Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 {
 	INIT;
-	return FALSE;
+
+	wayland_surface *Surface = CALL(_G.Compositor, CreateSurface);
+
+	return Surface;
 }
 
 #undef INIT

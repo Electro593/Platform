@@ -37,8 +37,8 @@
 #undef INCLUDE_SOURCE
 #else
 #ifdef INCLUDE_SOURCE
-extern struct util_state _G;
-extern struct util_funcs _F;
+global util_state _G;
+global util_funcs _F;
 #endif
 
 #include <util/intrin.h>
@@ -91,9 +91,6 @@ typedef struct util_funcs {
 #endif
 
 #ifdef INCLUDE_SOURCE
-util_state _G;
-util_funcs _F;
-
 external void
 Load(platform_state *Platform, platform_module *Module)
 {
