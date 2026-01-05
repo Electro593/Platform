@@ -78,7 +78,6 @@ Platform_LoadWin32(void)
 #include <x.h>
 }
 
-#ifdef _OPENGL
 internal void
 Platform_LoadWGL(void)
 {
@@ -234,7 +233,6 @@ Platform_LoadOpenGL(void)
 
 	return &OpenGLFuncs;
 }
-#endif
 
 internal s64 Platform_WindowCallback(
 	win32_window Window,
@@ -246,9 +244,7 @@ internal s64 Platform_WindowCallback(
 internal void
 Platform_CreateWindow(void)
 {
-#ifdef _OPENGL
 	Platform_LoadWGL();
-#endif
 
 	win32_window_class_a WindowClass = { 0 };
 	WindowClass.Callback			 = Platform_WindowCallback;

@@ -35,6 +35,12 @@
 			"args": [
 				// "-RunTests"
 			],
+            "sourceFileMap": {
+                "${workspaceFolder}": {
+                    "editorPath": "${workspaceFolder}",
+                    "useForBreakpoints": true
+                }
+            },
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "preLaunchTask": "Build Program (SH)",

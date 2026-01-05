@@ -42,7 +42,7 @@ done
 CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-protector -Werror"
 CompilerSwitches="$CompilerSwitches -Wno-unused-function -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
-CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_OPENGL -D_WORD_SIZE=64"
+CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_WORD_SIZE=64"
 
 LinkerSwitches="$LinkerSwitches -nostdlib"
 
@@ -104,7 +104,9 @@ build_module() {
 	ModuleName=$(basename $Module)
 	CapitalName=$(echo $ModuleName | awk '{ print toupper($0) }')
 
-	if [ "$ModuleName" = "loader" ]; then
+	if [ "$ModuleName" = "template" ]; then
+		echo Skipping $Module
+	elif [ "$ModuleName" = "loader" ]; then
 		if [ "$UseLoader" = "true" ]; then
 			echo Building $Module as a library
 			gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
@@ -142,9 +144,7 @@ build_module() {
 	fi
 }
 
-Module="Platform/src/util/"; build_module
-Module="Platform/src/loader/"; build_module
-Module="Platform/src/platform/"; build_module
+for Module in Platform/src/*/; do build_module; done
 for Module in src/*/; do build_module; done
 
 if [[ -e build/*.obj ]]; then rm build/*.obj > /dev/null; fi

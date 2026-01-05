@@ -52,8 +52,6 @@ LINUX_SYSCALLS
 
 global sys_timespec ClockResolution;
 
-#ifdef _OPENGL
-
 internal opengl_funcs OpenGLFuncs;
 
 internal opengl_funcs *
@@ -61,16 +59,15 @@ Platform_LoadOpenGL(void)
 {
 	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
 
-	// 	vptr Handle = dlopen("/usr/lib/libGL.so", 2);
-	//
-	// #define IMPORT(R, N, ...) OpenGLFuncs.OpenGL_##N = dlsym(Handle, "gl"
-	// #N); #define X OPENGL_FUNCS #include <x.h>
+	vptr Handle = dlopen("/usr/lib/libGL.so", SYS_RUNTIME_LOADER_LAZY);
+
+#define IMPORT(R, N, ...) OpenGLFuncs.OpenGL_##N = dlsym(Handle, "gl" #N);
+#define X OPENGL_FUNCS
+#include <x.h>
 
 	OpenGLFuncs.Initialized = TRUE;
 	return &OpenGLFuncs;
 }
-
-#endif
 
 internal void
 Platform_CreateWindow(void)
@@ -253,11 +250,11 @@ Platform_CmpFileTime(datetime A, datetime B)
 internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 {
-	#ifdef _USE_LOADER
+#ifdef _USE_LOADER
 	*ProcOut = Loader_GetSymbol(Module->ELF, Name);
-	#else
+#else
 	*ProcOut = dlsym(Module->ELF, Name);
-	#endif
+#endif
 }
 
 internal b08

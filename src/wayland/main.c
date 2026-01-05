@@ -42,6 +42,8 @@ typedef struct wayland_state {
 
 	file_handle Socket;
 
+	vptr EGLHandle;
+
 	b08 Connected : 1;
 	b08 Attempted : 1;
 
@@ -69,14 +71,15 @@ typedef struct wayland_funcs {
 
 #if defined(_WAYLAND_MODULE)
 #ifdef _LINUX
-#define DEFAULT(R, N, ...) \
-            internal R N(__VA_ARGS__);
+#define INTERN(R, N, ...) internal R N(__VA_ARGS__);
+#define EXTERN(R, N, ...) external R N(__VA_ARGS__);
+#define IMPORT(R, LP, P, N, ...) global R (*P##N)(__VA_ARGS__);
+#define EXPORT(R, N, ...) internal R N(__VA_ARGS__);
 #define X WAYLAND_FUNCS
 #include <x.h>
 #endif
 #else
-#define EXPORT(R, N, ...) \
-            global R (*N)(__VA_ARGS__);
+#define EXPORT(R, N, ...) global R (*N)(__VA_ARGS__);
 #define X WAYLAND_FUNCS
 #include <x.h>
 #endif
@@ -115,6 +118,7 @@ external void
 Deinit(platform_state *Platform)
 {
 	Wayland_TryClose();
+	dlclose(_G.EGLHandle);
 }
 
 #endif

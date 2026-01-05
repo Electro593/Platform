@@ -16,9 +16,7 @@
 #include <loader/main.c>
 #endif
 #include "main.c"
-#ifdef _OPENGL
-#include <renderer_opengl/opengl.h>
-#endif
+#include <platform/opengl.h>
 #undef INCLUDE_HEADER
 
 #define INCLUDE_SOURCE
@@ -32,16 +30,7 @@ extern platform_funcs _F;
 
 #ifdef INCLUDE_HEADER
 
-#ifdef _OPENGL
-#define PLATFORM_OPENGL_FUNCS \
-		EXPORT(opengl_funcs*, Platform_LoadOpenGL, void) \
-		//
-#else
-#define PLATFORM_OPENGL_FUNCS
-#endif
-
 #define PLATFORM_FUNCS \
-	PLATFORM_OPENGL_FUNCS \
 	EXPORT(void,             Platform_Exit,                  u32 ExitCode) \
 	EXPORT(void,             Platform_CreateWindow,          void) \
 	EXPORT(void,             Platform_Assert,                c08 *File, u32 Line, c08 *Expression, c08 *Message) \
@@ -54,6 +43,7 @@ extern platform_funcs _F;
 	EXPORT(void,             Platform_UnloadModule,          platform_module *Module) \
 	EXPORT(b08,              Platform_ReloadModule,          platform_module *Module) \
 	EXPORT(platform_module*, Platform_LoadModule,            string Name) \
+	EXPORT(opengl_funcs*,    Platform_LoadOpenGL,            void) \
 	INTERN(void,             Platform_GetProcAddress,        platform_module *Module, c08 *Name, vptr *ProcOut) \
 	INTERN(b08,              Platform_IsModuleBackendOpened, platform_module *Module) \
 	INTERN(void,             Platform_OpenModuleBackend,     platform_module *Module) \
@@ -523,7 +513,7 @@ Platform_ReloadModule(platform_module *Module)
 
 	stack Stack;
 	if (_G.UtilIsLoaded) Stack = Stack_Get();
-	Module->Load(&_G, Module);
+	if (Module->Load) Module->Load(&_G, Module);
 	if (_G.UtilIsLoaded) Stack_Set(Stack);
 
 	if (Module->IsUtil) {
