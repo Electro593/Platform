@@ -914,6 +914,16 @@ struct wayland_fixes {
 	b08 (*DestroyRegistry)(wayland_fixes *This, wayland_registry *Registry);
 };
 
+typedef struct wayland_api_state {
+	heap Heap;
+
+	file_handle Socket;
+
+	// TODO Re-use deleted object ids
+	u32		NextObjectId;
+	hashmap IdTable;
+} wayland_api_state;
+
 #define WAYLAND_API_FUNCS \
 	INTERN(b08,  Wayland_IsObjectValid,     vptr Object) \
 	INTERN(vptr, Wayland_CreateObject,      wayland_object_type Type, u32 Version) \
@@ -1297,7 +1307,7 @@ static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
 internal u32
 Wayland_AllocateObjectId(void)
 {
-	return _G.NextObjectId++;
+	return _G.WaylandApi.NextObjectId++;
 }
 
 internal b08
@@ -1314,7 +1324,7 @@ Wayland_IsObjectValid(vptr Object)
 internal vptr
 Wayland_CreateObject(wayland_object_type Type, u32 Version)
 {
-	if (!_G.NextObjectId
+	if (!_G.WaylandApi.NextObjectId
 		|| Type == WAYLAND_OBJECT_TYPE_UNKNOWN
 		|| Type >= WAYLAND_OBJECT_TYPE_COUNT)
 		return NULL;
@@ -1322,10 +1332,10 @@ Wayland_CreateObject(wayland_object_type Type, u32 Version)
 	wayland_interface *Proto = WaylandPrototypes[Type];
 	if (!Proto) return NULL;
 
-	wayland_interface *Object = Heap_AllocateA(_G.Heap, Proto->Size);
+	wayland_interface *Object = Heap_AllocateA(_G.WaylandApi.Heap, Proto->Size);
 	Mem_Cpy(Object, Proto, Proto->Size);
 	Object->Id = Wayland_AllocateObjectId();
-	HashMap_Add(&_G.IdTable, &Object->Id, &Object);
+	HashMap_Add(&_G.WaylandApi.IdTable, &Object->Id, &Object);
 	Object->Version = Version ? Version : 1;
 	return Object;
 }
@@ -1347,19 +1357,23 @@ Wayland_DeleteObject(vptr Object)
 	if (!Wayland_IsObjectValid(Object)) return;
 
 	wayland_interface *Interface = Object;
-	HashMap_Remove(&_G.IdTable, &Interface->Id, NULL, NULL);
+	HashMap_Remove(&_G.WaylandApi.IdTable, &Interface->Id, NULL, NULL);
 	Mem_Set(Object, 0, Interface->Size);
 	Heap_FreeA(Object);
 }
 
 internal b08
-Wayland_ConnectToServerSocket(file_handle *Socket)
+Wayland_InitApi(heap *Heap)
 {
+	_G.WaylandApi.Heap = Heap;
+	_G.WaylandApi.IdTable =
+		HashMap_Init(Heap, sizeof(u32), sizeof(wayland_interface *));
+
 	s32	   FileDescriptor;
 	string WaylandSocket = Platform_GetEnvParam(CStringL("WAYLAND_SOCKET"));
 	if (String_TryParseS32(WaylandSocket, &FileDescriptor)) {
 #ifdef _LINUX
-		Socket->FileDescriptor = FileDescriptor;
+		_G.WaylandApi.Socket.FileDescriptor = FileDescriptor;
 #endif
 		return TRUE;
 	}
@@ -1373,9 +1387,12 @@ Wayland_ConnectToServerSocket(file_handle *Socket)
 	if (WaylandDisplay.Length) {
 		string SocketPath = FStringL("%s/%s", XdgRuntimeDir, WaylandDisplay);
 
-		if (!Platform_ConnectToLocalSocket(SocketPath, Socket)) {
+		if (!Platform_ConnectToLocalSocket(SocketPath, &_G.WaylandApi.Socket)) {
 			SocketPath = FStringL("%s/wayland-0", XdgRuntimeDir);
-			if (!Platform_ConnectToLocalSocket(SocketPath, Socket))
+			if (!Platform_ConnectToLocalSocket(
+					SocketPath,
+					&_G.WaylandApi.Socket
+				))
 				Connected = FALSE;
 		}
 	}
@@ -1487,8 +1504,12 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 
 	VA_End(Args);
 
-	usize BytesWritten =
-		Platform_WriteFile(_G.Socket, Message, MessageSize, (usize) -1);
+	usize BytesWritten = Platform_WriteFile(
+		_G.WaylandApi.Socket,
+		Message,
+		MessageSize,
+		(usize) -1
+	);
 	Assert(BytesWritten == MessageSize);
 
 	Stack_Pop();
@@ -1499,7 +1520,7 @@ Wayland_ReadMessage(void)
 {
 	u32	  Header[2];
 	usize BytesRead = Platform_ReadFile(
-		_G.Socket,
+		_G.WaylandApi.Socket,
 		(vptr) Header,
 		sizeof(wayland_message),
 		(usize) -1
@@ -1515,7 +1536,7 @@ Wayland_ReadMessage(void)
 	Message->Opcode			  = Opcode;
 	Message->Size			  = Size;
 	BytesRead				 += Platform_ReadFile(
-		   _G.Socket,
+		   _G.WaylandApi.Socket,
 		   Message->Data,
 		   Size - sizeof(wayland_message),
 		   (usize) -1
@@ -1532,7 +1553,7 @@ Wayland_HandleNextEvent(void)
 	wayland_message *Message = Wayland_ReadMessage();
 
 	wayland_interface *Object;
-	HashMap_Get(&_G.IdTable, &Message->ObjectId, &Object);
+	HashMap_Get(&_G.WaylandApi.IdTable, &Message->ObjectId, &Object);
 
 	if (!Wayland_IsObjectValid(Object)) return NULL;
 	if (Object->HandleEvent) Object->HandleEvent(Object, Message);
@@ -1616,7 +1637,8 @@ Wayland_ParseObject(wayland_message *Message, usize *I)
 	u32 ObjectId  = Message->Data[*I];
 	*I			 += 1;
 
-	if (!HashMap_Get(&_G.IdTable, &ObjectId, &Prim.Object)) Prim.Object = NULL;
+	if (!HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Prim.Object))
+		Prim.Object = NULL;
 
 	return Prim;
 }
@@ -1624,16 +1646,16 @@ Wayland_ParseObject(wayland_message *Message, usize *I)
 internal wayland_display *
 Wayland_GetDisplay()
 {
-	if (_G.IdTable.EntryCount) {
+	if (_G.WaylandApi.IdTable.EntryCount) {
 		wayland_display *Display;
 		u32				 Id = WAYLAND_DISPLAY_ID;
-		HashMap_Get(&_G.IdTable, &Id, &Display);
+		HashMap_Get(&_G.WaylandApi.IdTable, &Id, &Display);
 		if (!Wayland_IsObjectValid(Display)
 			|| Display->Header.Type != WAYLAND_OBJECT_TYPE_DISPLAY)
 			return NULL;
 		return Display;
 	} else {
-		_G.NextObjectId = WAYLAND_DISPLAY_ID;
+		_G.WaylandApi.NextObjectId = WAYLAND_DISPLAY_ID;
 		return Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY, 1);
 	}
 }
@@ -1745,11 +1767,16 @@ Wayland_Shell_GetShellSurface(wayland_shell *This, wayland_surface *Surface)
 }
 
 internal void
-Wayland_ShellSurface_HandleEvent(wayland_shell_surface *This, wayland_message *Message)
+Wayland_ShellSurface_HandleEvent(
+	wayland_shell_surface *This,
+	wayland_message		  *Message
+)
 {
 	switch (Message->Opcode) {
 		case 0: TRYCALL(This, 1, HandlePing, Message, Uint); break;
-		case 1: TRYCALL(This, 1, HandleConfigure, Message, Uint, Sint, Sint); break;
+		case 1:
+			TRYCALL(This, 1, HandleConfigure, Message, Uint, Sint, Sint);
+			break;
 		case 2: TRYCALL(This, 1, HandlePopupDone, Message); break;
 	}
 }
