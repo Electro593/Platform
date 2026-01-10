@@ -34,20 +34,26 @@ typedef void func_Module_Unload(platform_state *State);
 #define TEXTURES_DIR "assets/textures/"
 
 #if defined(_WIN32)
-#include <platform/win32/win32.h>
-
 typedef struct file_handle {
 	win32_handle Handle;
 } file_handle;
 
+typedef struct thread_handle {
+	s32 ThreadId;
+} thread_handle;
+
 #define NULL_FILE_HANDLE (file_handle){ .Handle = INVALID_HANDLE_VALUE }
 
 #elif defined(_LINUX)
-#include <platform/linux/linux.h>
-
 typedef struct file_handle {
 	u32 FileDescriptor;
 } file_handle;
+
+typedef struct thread_handle {
+	s32	  ThreadId;
+	vptr  Stack;
+	usize StackSize;
+} thread_handle;
 
 #define NULL_FILE_HANDLE (file_handle){ .FileDescriptor = SYS_FILE_NONE }
 #else
@@ -298,7 +304,8 @@ typedef enum file_mode {
 	INTERN(b08,              Platform_IsModuleBackendOpened, platform_module *Module) \
 	INTERN(void,             Platform_OpenModuleBackend,     platform_module *Module) \
 	INTERN(void,             Platform_CloseModuleBackend,    platform_module *Module) \
-	EXPORT(b08,              Platform_ConnectToLocalSocket,  string Name, file_handle *FileHandleOut) \
+	EXPORT(b08,              Platform_CreateThread,          thread_handle *ThreadHandle, s32 (*Callback)(vptr UserParam), vptr UserParam) \
+	EXPORT(b08,              Platform_JoinThread,            thread_handle ThreadHandle) \
 	EXPORT(string,           Platform_GetEnvParam,           string Name) \
 	EXPORT(s08,              Platform_CmpFileTime,           datetime A, datetime B) \
 	EXPORT(b08,              Platform_OpenFile,              file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \

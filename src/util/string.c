@@ -318,21 +318,21 @@ typedef struct fstring_format_list {
 /// @param[in] LITERAL The literal format string to use.
 /// @param[in] ... The arguments to pass into FString.
 /// @return The resulting formatted string.
-#define FStringL(LITERAL, ...) FString(CStringL(LITERAL), __VA_ARGS__)
+#define FStringL(LITERAL, ...) FString(CStringL(LITERAL) __VA_OPT__(,) __VA_ARGS__)
 
 /// @brief Calls FString with a literal format string, including its null
 /// terminator.
 /// @param[in] LITERAL The literal format string to use.
 /// @param[in] ... The arguments to pass into FString.
 /// @return The resulting formatted string.
-#define FNStringL(LITERAL, ...) FString(CNStringL(LITERAL), __VA_ARGS__)
-#define FStringL(LITERAL, ...) FString(CStringL(LITERAL), __VA_ARGS__)
+#define FNStringL(LITERAL, ...) FString(CNStringL(LITERAL) __VA_OPT__(,) __VA_ARGS__)
+#define FStringL(LITERAL, ...) FString(CStringL(LITERAL) __VA_OPT__(,) __VA_ARGS__)
 
 /// @brief Calls FPrint with a literal format string, including its null
 /// terminator.
 /// @param[in] LITERAL The literal format string to use.
 /// @param[in] ... The arguments to pass into FPrint.
-#define FPrintL(LITERAL, ...) FPrint(CNStringL(LITERAL), __VA_ARGS__)
+#define FPrintL(LITERAL, ...) FPrint(CNStringL(LITERAL) __VA_OPT__(,) __VA_ARGS__)
 
 /// @brief Iterates through the codepoints of a string. Supports continue and
 /// break. Does not iterate by pointer.
@@ -430,6 +430,7 @@ typedef struct fstring_format_list {
 internal string
 CLEString(vptr Text, usize Length, string_encoding Encoding)
 {
+
 	Assert(Encoding < STRING_ENCODING_COUNT);
 
 	string String;

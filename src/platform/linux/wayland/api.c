@@ -11,12 +11,12 @@
 
 typedef u32 wayland_fixed;
 
-typedef enum wayland_display_error		  wayland_display_error;
-typedef enum wayland_shared_memory_error  wayland_shared_memory_error;
-typedef enum wayland_shared_memory_format wayland_shared_memory_format;
-typedef enum wayland_data_offer_error	  wayland_data_offer_error;
-typedef enum wayland_data_source_error	  wayland_data_source_error;
-typedef enum wayland_data_device_error	  wayland_data_device_error;
+typedef enum wayland_display_error	   wayland_display_error;
+typedef enum wayland_shm_error		   wayland_shm_error;
+typedef enum wayland_shm_format		   wayland_shm_format;
+typedef enum wayland_data_offer_error  wayland_data_offer_error;
+typedef enum wayland_data_source_error wayland_data_source_error;
+typedef enum wayland_data_device_error wayland_data_device_error;
 typedef enum wayland_data_device_manager_drag_and_drop_action
 	wayland_data_device_manager_drag_and_drop_action;
 typedef enum wayland_shell_error			 wayland_shell_error;
@@ -40,6 +40,19 @@ typedef enum wayland_output_transform		wayland_output_transform;
 typedef enum wayland_output_mode			wayland_output_mode;
 typedef enum wayland_subcompositor_error	wayland_subcompositor_error;
 typedef enum wayland_subsurface_error		wayland_subsurface_error;
+typedef enum wayland_xdg_wm_base_error		wayland_xdg_wm_base_error;
+typedef enum wayland_xdg_positioner_error	wayland_xdg_positioner_error;
+typedef enum wayland_xdg_positioner_anchor	wayland_xdg_positioner_anchor;
+typedef enum wayland_xdg_positioner_gravity wayland_xdg_positioner_gravity;
+typedef enum wayland_xdg_positioner_constraint_adjustment
+	wayland_xdg_positioner_constraint_adjustment;
+typedef enum wayland_xdg_surface_error		  wayland_xdg_surface_error;
+typedef enum wayland_xdg_toplevel_error		  wayland_xdg_toplevel_error;
+typedef enum wayland_xdg_toplevel_resize_edge wayland_xdg_toplevel_resize_edge;
+typedef enum wayland_xdg_toplevel_state		  wayland_xdg_toplevel_state;
+typedef enum wayland_xdg_toplevel_wm_capabilities
+									 wayland_xdg_toplevel_wm_capabilities;
+typedef enum wayland_xdg_popup_error wayland_xdg_popup_error;
 
 typedef struct wayland_array	wayland_array;
 typedef union wayland_primitive wayland_primitive;
@@ -50,8 +63,8 @@ typedef struct wayland_display			   wayland_display;
 typedef struct wayland_registry			   wayland_registry;
 typedef struct wayland_callback			   wayland_callback;
 typedef struct wayland_compositor		   wayland_compositor;
-typedef struct wayland_shared_memory_pool  wayland_shared_memory_pool;
-typedef struct wayland_shared_memory	   wayland_shared_memory;
+typedef struct wayland_shm_pool			   wayland_shm_pool;
+typedef struct wayland_shm				   wayland_shm;
 typedef struct wayland_buffer			   wayland_buffer;
 typedef struct wayland_data_offer		   wayland_data_offer;
 typedef struct wayland_data_source		   wayland_data_source;
@@ -69,9 +82,13 @@ typedef struct wayland_region			   wayland_region;
 typedef struct wayland_subcompositor	   wayland_subcompositor;
 typedef struct wayland_subsurface		   wayland_subsurface;
 typedef struct wayland_fixes			   wayland_fixes;
+typedef struct wayland_xdg_wm_base		   wayland_xdg_wm_base;
+typedef struct wayland_xdg_positioner	   wayland_xdg_positioner;
+typedef struct wayland_xdg_surface		   wayland_xdg_surface;
+typedef struct wayland_xdg_toplevel		   wayland_xdg_toplevel;
+typedef struct wayland_xdg_popup		   wayland_xdg_popup;
 
 #define WAYLAND_DISPLAY_ID 1
-#define WAYLAND_MAX_OBJECT_VERSION 6
 
 typedef enum wayland_object_type : u16 {
 	WAYLAND_OBJECT_TYPE_UNKNOWN,
@@ -79,8 +96,8 @@ typedef enum wayland_object_type : u16 {
 	WAYLAND_OBJECT_TYPE_REGISTRY,
 	WAYLAND_OBJECT_TYPE_CALLBACK,
 	WAYLAND_OBJECT_TYPE_COMPOSITOR,
-	WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL,
-	WAYLAND_OBJECT_TYPE_SHARED_MEMORY,
+	WAYLAND_OBJECT_TYPE_SHM_POOL,
+	WAYLAND_OBJECT_TYPE_SHM,
 	WAYLAND_OBJECT_TYPE_BUFFER,
 	WAYLAND_OBJECT_TYPE_DATA_OFFER,
 	WAYLAND_OBJECT_TYPE_DATA_SOURCE,
@@ -99,6 +116,12 @@ typedef enum wayland_object_type : u16 {
 	WAYLAND_OBJECT_TYPE_SUBSURFACE,
 	WAYLAND_OBJECT_TYPE_FIXES,
 
+	WAYLAND_OBJECT_TYPE_XDG_WM_BASE,
+	WAYLAND_OBJECT_TYPE_XDG_POSITIONER,
+	WAYLAND_OBJECT_TYPE_XDG_SURFACE,
+	WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL,
+	WAYLAND_OBJECT_TYPE_XDG_POPUP,
+
 	WAYLAND_OBJECT_TYPE_COUNT
 } wayland_object_type;
 
@@ -109,137 +132,137 @@ enum wayland_display_error {
 	WAYLAND_DISPLAY_ERROR_IMPLEMENTATION = 3,
 };
 
-enum wayland_shared_memory_error {
-	WAYLAND_SHARED_MEMORY_ERROR_INVALID_FORMAT			= 0,
-	WAYLAND_SHARED_MEMORY_ERROR_INVALID_STRIDE			= 1,
-	WAYLAND_SHARED_MEMORY_ERROR_INVALID_FILE_DESCRIPTOR = 2,
+enum wayland_shm_error {
+	WAYLAND_SHM_ERROR_INVALID_FORMAT		  = 0,
+	WAYLAND_SHM_ERROR_INVALID_STRIDE		  = 1,
+	WAYLAND_SHM_ERROR_INVALID_FILE_DESCRIPTOR = 2,
 };
 
-enum wayland_shared_memory_format {
+enum wayland_shm_format {
 	// clang-format off
-	WAYLAND_SHARED_MEMORY_FORMAT_ARGB8888             = 0x00000000, // - 32-bit ARGB format, [31:0] A:R:G:B 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XRGB8888             = 0x00000001, // - 32-bit RGB format, [31:0] x:R:G:B 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_C8                   = 0x20203843, // - 8-bit color index format, [7:0] C
-	WAYLAND_SHARED_MEMORY_FORMAT_RGB332               = 0x38424752, // - 8-bit RGB format, [7:0] R:G:B 3:3:2
-	WAYLAND_SHARED_MEMORY_FORMAT_BGR233               = 0x38524742, // - 8-bit BGR format, [7:0] B:G:R 2:3:3
-	WAYLAND_SHARED_MEMORY_FORMAT_XRGB4444             = 0x32315258, // - 16-bit xRGB format, [15:0] x:R:G:B 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XBGR4444             = 0x32314258, // - 16-bit xBGR format, [15:0] x:B:G:R 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBX4444             = 0x32315852, // - 16-bit RGBx format, [15:0] R:G:B:x 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRX4444             = 0x32315842, // - 16-bit BGRx format, [15:0] B:G:R:x 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ARGB4444             = 0x32315241, // - 16-bit ARGB format, [15:0] A:R:G:B 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ABGR4444             = 0x32314241, // - 16-bit ABGR format, [15:0] A:B:G:R 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBA4444             = 0x32314152, // - 16-bit RBGA format, [15:0] R:G:B:A 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRA4444             = 0x32314142, // - 16-bit BGRA format, [15:0] B:G:R:A 4:4:4:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XRGB1555             = 0x35315258, // - 16-bit xRGB format, [15:0] x:R:G:B 1:5:5:5 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XBGR1555             = 0x35314258, // - 16-bit xBGR 1555 format, [15:0] x:B:G:R 1:5:5:5 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBX5551             = 0x35315852, // - 16-bit RGBx 5551 format, [15:0] R:G:B:x 5:5:5:1 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRX5551             = 0x35315842, // - 16-bit BGRx 5551 format, [15:0] B:G:R:x 5:5:5:1 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ARGB1555             = 0x35315241, // - 16-bit ARGB 1555 format, [15:0] A:R:G:B 1:5:5:5 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ABGR1555             = 0x35314241, // - 16-bit ABGR 1555 format, [15:0] A:B:G:R 1:5:5:5 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBA5551             = 0x35314152, // - 16-bit RGBA 5551 format, [15:0] R:G:B:A 5:5:5:1 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRA5551             = 0x35314142, // - 16-bit BGRA 5551 format, [15:0] B:G:R:A 5:5:5:1 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGB565               = 0x36314752, // - 16-bit RGB 565 format, [15:0] R:G:B 5:6:5 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGR565               = 0x36314742, // - 16-bit BGR 565 format, [15:0] B:G:R 5:6:5 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGB888               = 0x34324752, // - 24-bit RGB format, [23:0] R:G:B little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGR888               = 0x34324742, // - 24-bit BGR format, [23:0] B:G:R little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XBGR8888             = 0x34324258, // - 32-bit xBGR format, [31:0] x:B:G:R 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBX8888             = 0x34325852, // - 32-bit RGBx format, [31:0] R:G:B:x 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRX8888             = 0x34325842, // - 32-bit BGRx format, [31:0] B:G:R:x 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ABGR8888             = 0x34324241, // - 32-bit ABGR format, [31:0] A:B:G:R 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBA8888             = 0x34324152, // - 32-bit RGBA format, [31:0] R:G:B:A 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRA8888             = 0x34324142, // - 32-bit BGRA format, [31:0] B:G:R:A 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XRGB2101010          = 0x30335258, // - 32-bit xRGB format, [31:0] x:R:G:B 2:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XBGR2101010          = 0x30334258, // - 32-bit xBGR format, [31:0] x:B:G:R 2:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBX1010102          = 0x30335852, // - 32-bit RGBx format, [31:0] R:G:B:x 10:10:10:2 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRX1010102          = 0x30335842, // - 32-bit BGRx format, [31:0] B:G:R:x 10:10:10:2 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ARGB2101010          = 0x30335241, // - 32-bit ARGB format, [31:0] A:R:G:B 2:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ABGR2101010          = 0x30334241, // - 32-bit ABGR format, [31:0] A:B:G:R 2:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBA1010102          = 0x30334152, // - 32-bit RGBA format, [31:0] R:G:B:A 10:10:10:2 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRA1010102          = 0x30334142, // - 32-bit BGRA format, [31:0] B:G:R:A 10:10:10:2 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_YUYV                 = 0x56595559, // - packed YCbCr format, [31:0] Cr0:Y1:Cb0:Y0 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_YVYU                 = 0x55595659, // - packed YCbCr format, [31:0] Cb0:Y1:Cr0:Y0 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_UYVY                 = 0x59565955, // - packed YCbCr format, [31:0] Y1:Cr0:Y0:Cb0 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_VYUY                 = 0x59555956, // - packed YCbCr format, [31:0] Y1:Cb0:Y0:Cr0 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_AYUV                 = 0x56555941, // - packed AYCbCr format, [31:0] A:Y:Cb:Cr 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_NV12                 = 0x3231564e, // - 2 plane YCbCr Cr:Cb format, 2x2 subsampled Cr:Cb plane
-	WAYLAND_SHARED_MEMORY_FORMAT_NV21                 = 0x3132564e, // - 2 plane YCbCr Cb:Cr format, 2x2 subsampled Cb:Cr plane
-	WAYLAND_SHARED_MEMORY_FORMAT_NV16                 = 0x3631564e, // - 2 plane YCbCr Cr:Cb format, 2x1 subsampled Cr:Cb plane
-	WAYLAND_SHARED_MEMORY_FORMAT_NV61                 = 0x3136564e, // - 2 plane YCbCr Cb:Cr format, 2x1 subsampled Cb:Cr plane
-	WAYLAND_SHARED_MEMORY_FORMAT_YUV410               = 0x39565559, // - 3 plane YCbCr format, 4x4 subsampled Cb (1) and Cr (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YVU410               = 0x39555659, // - 3 plane YCbCr format, 4x4 subsampled Cr (1) and Cb (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YUV411               = 0x31315559, // - 3 plane YCbCr format, 4x1 subsampled Cb (1) and Cr (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YVU411               = 0x31315659, // - 3 plane YCbCr format, 4x1 subsampled Cr (1) and Cb (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YUV420               = 0x32315559, // - 3 plane YCbCr format, 2x2 subsampled Cb (1) and Cr (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YVU420               = 0x32315659, // - 3 plane YCbCr format, 2x2 subsampled Cr (1) and Cb (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YUV422               = 0x36315559, // - 3 plane YCbCr format, 2x1 subsampled Cb (1) and Cr (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YVU422               = 0x36315659, // - 3 plane YCbCr format, 2x1 subsampled Cr (1) and Cb (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YUV444               = 0x34325559, // - 3 plane YCbCr format, non-subsampled Cb (1) and Cr (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_YVU444               = 0x34325659, // - 3 plane YCbCr format, non-subsampled Cr (1) and Cb (2) planes
-	WAYLAND_SHARED_MEMORY_FORMAT_R8                   = 0x20203852, // - [7:0] R
-	WAYLAND_SHARED_MEMORY_FORMAT_R16                  = 0x20363152, // - [15:0] R little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RG88                 = 0x38384752, // - [15:0] R:G 8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_GR88                 = 0x38385247, // - [15:0] G:R 8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_RG1616               = 0x32334752, // - [31:0] R:G 16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_GR1616               = 0x32335247, // - [31:0] G:R 16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XRGB16161616F        = 0x48345258, // - [63:0] x:R:G:B 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XBGR16161616F        = 0x48344258, // - [63:0] x:B:G:R 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ARGB16161616F        = 0x48345241, // - [63:0] A:R:G:B 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ABGR16161616F        = 0x48344241, // - [63:0] A:B:G:R 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XYUV8888             = 0x56555958, // - [31:0] X:Y:Cb:Cr 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_VUY888               = 0x34325556, // - [23:0] Cr:Cb:Y 8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_VUY101010            = 0x30335556, // - Y followed by U then V, 10:10:10. Non-linear modifier only
-	WAYLAND_SHARED_MEMORY_FORMAT_Y210                 = 0x30313259, // - [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 10:6:10:6:10:6:10:6 little endian per 2 Y pixels
-	WAYLAND_SHARED_MEMORY_FORMAT_Y212                 = 0x32313259, // - [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 12:4:12:4:12:4:12:4 little endian per 2 Y pixels
-	WAYLAND_SHARED_MEMORY_FORMAT_Y216                 = 0x36313259, // - [63:0] Cr0:Y1:Cb0:Y0 16:16:16:16 little endian per 2 Y pixels
-	WAYLAND_SHARED_MEMORY_FORMAT_Y410                 = 0x30313459, // - [31:0] A:Cr:Y:Cb 2:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_Y412                 = 0x32313459, // - [63:0] A:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_Y416                 = 0x36313459, // - [63:0] A:Cr:Y:Cb 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XVYU2101010          = 0x30335658, // - [31:0] X:Cr:Y:Cb 2:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XVYU12_16161616      = 0x36335658, // - [63:0] X:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XVYU16161616         = 0x38345658, // - [63:0] X:Cr:Y:Cb 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_Y0L0                 = 0x304c3059, // - [63:0] A3:A2:Y3:0:Cr0:0:Y2:0:A1:A0:Y1:0:Cb0:0:Y0:0 1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_X0L0                 = 0x304c3058, // - [63:0] X3:X2:Y3:0:Cr0:0:Y2:0:X1:X0:Y1:0:Cb0:0:Y0:0 1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_Y0L2                 = 0x324c3059, // - [63:0] A3:A2:Y3:Cr0:Y2:A1:A0:Y1:Cb0:Y0 1:1:10:10:10:1:1:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_X0L2                 = 0x324c3058, // - [63:0] X3:X2:Y3:Cr0:Y2:X1:X0:Y1:Cb0:Y0 1:1:10:10:10:1:1:10:10:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_YUV420_8BIT          = 0x38305559, //
-	WAYLAND_SHARED_MEMORY_FORMAT_YUV420_10BIT         = 0x30315559, //
-	WAYLAND_SHARED_MEMORY_FORMAT_XRGB8888_A8          = 0x38415258, //
-	WAYLAND_SHARED_MEMORY_FORMAT_XBGR8888_A8          = 0x38414258, //
-	WAYLAND_SHARED_MEMORY_FORMAT_RGBX8888_A8          = 0x38415852, //
-	WAYLAND_SHARED_MEMORY_FORMAT_BGRX8888_A8          = 0x38415842, //
-	WAYLAND_SHARED_MEMORY_FORMAT_RGB888_A8            = 0x38413852, //
-	WAYLAND_SHARED_MEMORY_FORMAT_BGR888_A8            = 0x38413842, //
-	WAYLAND_SHARED_MEMORY_FORMAT_RGB565_A8            = 0x38413552, //
-	WAYLAND_SHARED_MEMORY_FORMAT_BGR565_A8            = 0x38413542, //
-	WAYLAND_SHARED_MEMORY_FORMAT_NV24                 = 0x3432564e, // - non-subsampled Cr:Cb plane
-	WAYLAND_SHARED_MEMORY_FORMAT_NV42                 = 0x3234564e, // - non-subsampled Cb:Cr plane
-	WAYLAND_SHARED_MEMORY_FORMAT_P210                 = 0x30313250, // - 2x1 subsampled Cr:Cb plane, 10 bit per channel
-	WAYLAND_SHARED_MEMORY_FORMAT_P010                 = 0x30313050, // - 2x2 subsampled Cr:Cb plane 10 bits per channel
-	WAYLAND_SHARED_MEMORY_FORMAT_P012                 = 0x32313050, // - 2x2 subsampled Cr:Cb plane 12 bits per channel
-	WAYLAND_SHARED_MEMORY_FORMAT_P016                 = 0x36313050, // - 2x2 subsampled Cr:Cb plane 16 bits per channel
-	WAYLAND_SHARED_MEMORY_FORMAT_AXBXGXRX106106106106 = 0x30314241, // - [63:0] A:x:B:x:G:x:R:x 10:6:10:6:10:6:10:6 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_NV15                 = 0x3531564e, // - 2x2 subsampled Cr:Cb plane
-	WAYLAND_SHARED_MEMORY_FORMAT_Q410                 = 0x30313451, //
-	WAYLAND_SHARED_MEMORY_FORMAT_Q401                 = 0x31303451, //
-	WAYLAND_SHARED_MEMORY_FORMAT_XRGB16161616         = 0x38345258, // - [63:0] x:R:G:B 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XBGR16161616         = 0x38344258, // - [63:0] x:B:G:R 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ARGB16161616         = 0x38345241, // - [63:0] A:R:G:B 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_ABGR16161616         = 0x38344241, // - [63:0] A:B:G:R 16:16:16:16 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_C1                   = 0x20203143, // - [7:0] C0:C1:C2:C3:C4:C5:C6:C7 1:1:1:1:1:1:1:1 eight pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_C2                   = 0x20203243, // - [7:0] C0:C1:C2:C3 2:2:2:2 four pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_C4                   = 0x20203443, // - [7:0] C0:C1 4:4 two pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_D1                   = 0x20203144, // - [7:0] D0:D1:D2:D3:D4:D5:D6:D7 1:1:1:1:1:1:1:1 eight pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_D2                   = 0x20203244, // - [7:0] D0:D1:D2:D3 2:2:2:2 four pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_D4                   = 0x20203444, // - [7:0] D0:D1 4:4 two pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_D8                   = 0x20203844, // - [7:0] D
-	WAYLAND_SHARED_MEMORY_FORMAT_R1                   = 0x20203152, // - [7:0] R0:R1:R2:R3:R4:R5:R6:R7 1:1:1:1:1:1:1:1 eight pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_R2                   = 0x20203252, // - [7:0] R0:R1:R2:R3 2:2:2:2 four pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_R4                   = 0x20203452, // - [7:0] R0:R1 4:4 two pixels/byte
-	WAYLAND_SHARED_MEMORY_FORMAT_R10                  = 0x20303152, // - [15:0] x:R 6:10 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_R12                  = 0x20323152, // - [15:0] x:R 4:12 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_AVUY8888             = 0x59555641, // - [31:0] A:Cr:Cb:Y 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_XVUY8888             = 0x59555658, // - [31:0] X:Cr:Cb:Y 8:8:8:8 little endian
-	WAYLAND_SHARED_MEMORY_FORMAT_P030                 = 0x30333050, // - 2x2 subsampled Cr:Cb plane 10 bits per channel packed
+	WAYLAND_SHM_FORMAT_ARGB8888             = 0x00000000, // - 32-bit ARGB format, [31:0] A:R:G:B 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_XRGB8888             = 0x00000001, // - 32-bit RGB format, [31:0] x:R:G:B 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_C8                   = 0x20203843, // - 8-bit color index format, [7:0] C
+	WAYLAND_SHM_FORMAT_RGB332               = 0x38424752, // - 8-bit RGB format, [7:0] R:G:B 3:3:2
+	WAYLAND_SHM_FORMAT_BGR233               = 0x38524742, // - 8-bit BGR format, [7:0] B:G:R 2:3:3
+	WAYLAND_SHM_FORMAT_XRGB4444             = 0x32315258, // - 16-bit xRGB format, [15:0] x:R:G:B 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_XBGR4444             = 0x32314258, // - 16-bit xBGR format, [15:0] x:B:G:R 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_RGBX4444             = 0x32315852, // - 16-bit RGBx format, [15:0] R:G:B:x 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_BGRX4444             = 0x32315842, // - 16-bit BGRx format, [15:0] B:G:R:x 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_ARGB4444             = 0x32315241, // - 16-bit ARGB format, [15:0] A:R:G:B 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_ABGR4444             = 0x32314241, // - 16-bit ABGR format, [15:0] A:B:G:R 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_RGBA4444             = 0x32314152, // - 16-bit RBGA format, [15:0] R:G:B:A 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_BGRA4444             = 0x32314142, // - 16-bit BGRA format, [15:0] B:G:R:A 4:4:4:4 little endian
+	WAYLAND_SHM_FORMAT_XRGB1555             = 0x35315258, // - 16-bit xRGB format, [15:0] x:R:G:B 1:5:5:5 little endian
+	WAYLAND_SHM_FORMAT_XBGR1555             = 0x35314258, // - 16-bit xBGR 1555 format, [15:0] x:B:G:R 1:5:5:5 little endian
+	WAYLAND_SHM_FORMAT_RGBX5551             = 0x35315852, // - 16-bit RGBx 5551 format, [15:0] R:G:B:x 5:5:5:1 little endian
+	WAYLAND_SHM_FORMAT_BGRX5551             = 0x35315842, // - 16-bit BGRx 5551 format, [15:0] B:G:R:x 5:5:5:1 little endian
+	WAYLAND_SHM_FORMAT_ARGB1555             = 0x35315241, // - 16-bit ARGB 1555 format, [15:0] A:R:G:B 1:5:5:5 little endian
+	WAYLAND_SHM_FORMAT_ABGR1555             = 0x35314241, // - 16-bit ABGR 1555 format, [15:0] A:B:G:R 1:5:5:5 little endian
+	WAYLAND_SHM_FORMAT_RGBA5551             = 0x35314152, // - 16-bit RGBA 5551 format, [15:0] R:G:B:A 5:5:5:1 little endian
+	WAYLAND_SHM_FORMAT_BGRA5551             = 0x35314142, // - 16-bit BGRA 5551 format, [15:0] B:G:R:A 5:5:5:1 little endian
+	WAYLAND_SHM_FORMAT_RGB565               = 0x36314752, // - 16-bit RGB 565 format, [15:0] R:G:B 5:6:5 little endian
+	WAYLAND_SHM_FORMAT_BGR565               = 0x36314742, // - 16-bit BGR 565 format, [15:0] B:G:R 5:6:5 little endian
+	WAYLAND_SHM_FORMAT_RGB888               = 0x34324752, // - 24-bit RGB format, [23:0] R:G:B little endian
+	WAYLAND_SHM_FORMAT_BGR888               = 0x34324742, // - 24-bit BGR format, [23:0] B:G:R little endian
+	WAYLAND_SHM_FORMAT_XBGR8888             = 0x34324258, // - 32-bit xBGR format, [31:0] x:B:G:R 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_RGBX8888             = 0x34325852, // - 32-bit RGBx format, [31:0] R:G:B:x 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_BGRX8888             = 0x34325842, // - 32-bit BGRx format, [31:0] B:G:R:x 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_ABGR8888             = 0x34324241, // - 32-bit ABGR format, [31:0] A:B:G:R 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_RGBA8888             = 0x34324152, // - 32-bit RGBA format, [31:0] R:G:B:A 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_BGRA8888             = 0x34324142, // - 32-bit BGRA format, [31:0] B:G:R:A 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_XRGB2101010          = 0x30335258, // - 32-bit xRGB format, [31:0] x:R:G:B 2:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_XBGR2101010          = 0x30334258, // - 32-bit xBGR format, [31:0] x:B:G:R 2:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_RGBX1010102          = 0x30335852, // - 32-bit RGBx format, [31:0] R:G:B:x 10:10:10:2 little endian
+	WAYLAND_SHM_FORMAT_BGRX1010102          = 0x30335842, // - 32-bit BGRx format, [31:0] B:G:R:x 10:10:10:2 little endian
+	WAYLAND_SHM_FORMAT_ARGB2101010          = 0x30335241, // - 32-bit ARGB format, [31:0] A:R:G:B 2:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_ABGR2101010          = 0x30334241, // - 32-bit ABGR format, [31:0] A:B:G:R 2:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_RGBA1010102          = 0x30334152, // - 32-bit RGBA format, [31:0] R:G:B:A 10:10:10:2 little endian
+	WAYLAND_SHM_FORMAT_BGRA1010102          = 0x30334142, // - 32-bit BGRA format, [31:0] B:G:R:A 10:10:10:2 little endian
+	WAYLAND_SHM_FORMAT_YUYV                 = 0x56595559, // - packed YCbCr format, [31:0] Cr0:Y1:Cb0:Y0 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_YVYU                 = 0x55595659, // - packed YCbCr format, [31:0] Cb0:Y1:Cr0:Y0 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_UYVY                 = 0x59565955, // - packed YCbCr format, [31:0] Y1:Cr0:Y0:Cb0 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_VYUY                 = 0x59555956, // - packed YCbCr format, [31:0] Y1:Cb0:Y0:Cr0 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_AYUV                 = 0x56555941, // - packed AYCbCr format, [31:0] A:Y:Cb:Cr 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_NV12                 = 0x3231564e, // - 2 plane YCbCr Cr:Cb format, 2x2 subsampled Cr:Cb plane
+	WAYLAND_SHM_FORMAT_NV21                 = 0x3132564e, // - 2 plane YCbCr Cb:Cr format, 2x2 subsampled Cb:Cr plane
+	WAYLAND_SHM_FORMAT_NV16                 = 0x3631564e, // - 2 plane YCbCr Cr:Cb format, 2x1 subsampled Cr:Cb plane
+	WAYLAND_SHM_FORMAT_NV61                 = 0x3136564e, // - 2 plane YCbCr Cb:Cr format, 2x1 subsampled Cb:Cr plane
+	WAYLAND_SHM_FORMAT_YUV410               = 0x39565559, // - 3 plane YCbCr format, 4x4 subsampled Cb (1) and Cr (2) planes
+	WAYLAND_SHM_FORMAT_YVU410               = 0x39555659, // - 3 plane YCbCr format, 4x4 subsampled Cr (1) and Cb (2) planes
+	WAYLAND_SHM_FORMAT_YUV411               = 0x31315559, // - 3 plane YCbCr format, 4x1 subsampled Cb (1) and Cr (2) planes
+	WAYLAND_SHM_FORMAT_YVU411               = 0x31315659, // - 3 plane YCbCr format, 4x1 subsampled Cr (1) and Cb (2) planes
+	WAYLAND_SHM_FORMAT_YUV420               = 0x32315559, // - 3 plane YCbCr format, 2x2 subsampled Cb (1) and Cr (2) planes
+	WAYLAND_SHM_FORMAT_YVU420               = 0x32315659, // - 3 plane YCbCr format, 2x2 subsampled Cr (1) and Cb (2) planes
+	WAYLAND_SHM_FORMAT_YUV422               = 0x36315559, // - 3 plane YCbCr format, 2x1 subsampled Cb (1) and Cr (2) planes
+	WAYLAND_SHM_FORMAT_YVU422               = 0x36315659, // - 3 plane YCbCr format, 2x1 subsampled Cr (1) and Cb (2) planes
+	WAYLAND_SHM_FORMAT_YUV444               = 0x34325559, // - 3 plane YCbCr format, non-subsampled Cb (1) and Cr (2) planes
+	WAYLAND_SHM_FORMAT_YVU444               = 0x34325659, // - 3 plane YCbCr format, non-subsampled Cr (1) and Cb (2) planes
+	WAYLAND_SHM_FORMAT_R8                   = 0x20203852, // - [7:0] R
+	WAYLAND_SHM_FORMAT_R16                  = 0x20363152, // - [15:0] R little endian
+	WAYLAND_SHM_FORMAT_RG88                 = 0x38384752, // - [15:0] R:G 8:8 little endian
+	WAYLAND_SHM_FORMAT_GR88                 = 0x38385247, // - [15:0] G:R 8:8 little endian
+	WAYLAND_SHM_FORMAT_RG1616               = 0x32334752, // - [31:0] R:G 16:16 little endian
+	WAYLAND_SHM_FORMAT_GR1616               = 0x32335247, // - [31:0] G:R 16:16 little endian
+	WAYLAND_SHM_FORMAT_XRGB16161616F        = 0x48345258, // - [63:0] x:R:G:B 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_XBGR16161616F        = 0x48344258, // - [63:0] x:B:G:R 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_ARGB16161616F        = 0x48345241, // - [63:0] A:R:G:B 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_ABGR16161616F        = 0x48344241, // - [63:0] A:B:G:R 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_XYUV8888             = 0x56555958, // - [31:0] X:Y:Cb:Cr 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_VUY888               = 0x34325556, // - [23:0] Cr:Cb:Y 8:8:8 little endian
+	WAYLAND_SHM_FORMAT_VUY101010            = 0x30335556, // - Y followed by U then V, 10:10:10. Non-linear modifier only
+	WAYLAND_SHM_FORMAT_Y210                 = 0x30313259, // - [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 10:6:10:6:10:6:10:6 little endian per 2 Y pixels
+	WAYLAND_SHM_FORMAT_Y212                 = 0x32313259, // - [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 12:4:12:4:12:4:12:4 little endian per 2 Y pixels
+	WAYLAND_SHM_FORMAT_Y216                 = 0x36313259, // - [63:0] Cr0:Y1:Cb0:Y0 16:16:16:16 little endian per 2 Y pixels
+	WAYLAND_SHM_FORMAT_Y410                 = 0x30313459, // - [31:0] A:Cr:Y:Cb 2:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_Y412                 = 0x32313459, // - [63:0] A:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
+	WAYLAND_SHM_FORMAT_Y416                 = 0x36313459, // - [63:0] A:Cr:Y:Cb 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_XVYU2101010          = 0x30335658, // - [31:0] X:Cr:Y:Cb 2:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_XVYU12_16161616      = 0x36335658, // - [63:0] X:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
+	WAYLAND_SHM_FORMAT_XVYU16161616         = 0x38345658, // - [63:0] X:Cr:Y:Cb 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_Y0L0                 = 0x304c3059, // - [63:0] A3:A2:Y3:0:Cr0:0:Y2:0:A1:A0:Y1:0:Cb0:0:Y0:0 1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
+	WAYLAND_SHM_FORMAT_X0L0                 = 0x304c3058, // - [63:0] X3:X2:Y3:0:Cr0:0:Y2:0:X1:X0:Y1:0:Cb0:0:Y0:0 1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
+	WAYLAND_SHM_FORMAT_Y0L2                 = 0x324c3059, // - [63:0] A3:A2:Y3:Cr0:Y2:A1:A0:Y1:Cb0:Y0 1:1:10:10:10:1:1:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_X0L2                 = 0x324c3058, // - [63:0] X3:X2:Y3:Cr0:Y2:X1:X0:Y1:Cb0:Y0 1:1:10:10:10:1:1:10:10:10 little endian
+	WAYLAND_SHM_FORMAT_YUV420_8BIT          = 0x38305559, //
+	WAYLAND_SHM_FORMAT_YUV420_10BIT         = 0x30315559, //
+	WAYLAND_SHM_FORMAT_XRGB8888_A8          = 0x38415258, //
+	WAYLAND_SHM_FORMAT_XBGR8888_A8          = 0x38414258, //
+	WAYLAND_SHM_FORMAT_RGBX8888_A8          = 0x38415852, //
+	WAYLAND_SHM_FORMAT_BGRX8888_A8          = 0x38415842, //
+	WAYLAND_SHM_FORMAT_RGB888_A8            = 0x38413852, //
+	WAYLAND_SHM_FORMAT_BGR888_A8            = 0x38413842, //
+	WAYLAND_SHM_FORMAT_RGB565_A8            = 0x38413552, //
+	WAYLAND_SHM_FORMAT_BGR565_A8            = 0x38413542, //
+	WAYLAND_SHM_FORMAT_NV24                 = 0x3432564e, // - non-subsampled Cr:Cb plane
+	WAYLAND_SHM_FORMAT_NV42                 = 0x3234564e, // - non-subsampled Cb:Cr plane
+	WAYLAND_SHM_FORMAT_P210                 = 0x30313250, // - 2x1 subsampled Cr:Cb plane, 10 bit per channel
+	WAYLAND_SHM_FORMAT_P010                 = 0x30313050, // - 2x2 subsampled Cr:Cb plane 10 bits per channel
+	WAYLAND_SHM_FORMAT_P012                 = 0x32313050, // - 2x2 subsampled Cr:Cb plane 12 bits per channel
+	WAYLAND_SHM_FORMAT_P016                 = 0x36313050, // - 2x2 subsampled Cr:Cb plane 16 bits per channel
+	WAYLAND_SHM_FORMAT_AXBXGXRX106106106106 = 0x30314241, // - [63:0] A:x:B:x:G:x:R:x 10:6:10:6:10:6:10:6 little endian
+	WAYLAND_SHM_FORMAT_NV15                 = 0x3531564e, // - 2x2 subsampled Cr:Cb plane
+	WAYLAND_SHM_FORMAT_Q410                 = 0x30313451, //
+	WAYLAND_SHM_FORMAT_Q401                 = 0x31303451, //
+	WAYLAND_SHM_FORMAT_XRGB16161616         = 0x38345258, // - [63:0] x:R:G:B 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_XBGR16161616         = 0x38344258, // - [63:0] x:B:G:R 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_ARGB16161616         = 0x38345241, // - [63:0] A:R:G:B 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_ABGR16161616         = 0x38344241, // - [63:0] A:B:G:R 16:16:16:16 little endian
+	WAYLAND_SHM_FORMAT_C1                   = 0x20203143, // - [7:0] C0:C1:C2:C3:C4:C5:C6:C7 1:1:1:1:1:1:1:1 eight pixels/byte
+	WAYLAND_SHM_FORMAT_C2                   = 0x20203243, // - [7:0] C0:C1:C2:C3 2:2:2:2 four pixels/byte
+	WAYLAND_SHM_FORMAT_C4                   = 0x20203443, // - [7:0] C0:C1 4:4 two pixels/byte
+	WAYLAND_SHM_FORMAT_D1                   = 0x20203144, // - [7:0] D0:D1:D2:D3:D4:D5:D6:D7 1:1:1:1:1:1:1:1 eight pixels/byte
+	WAYLAND_SHM_FORMAT_D2                   = 0x20203244, // - [7:0] D0:D1:D2:D3 2:2:2:2 four pixels/byte
+	WAYLAND_SHM_FORMAT_D4                   = 0x20203444, // - [7:0] D0:D1 4:4 two pixels/byte
+	WAYLAND_SHM_FORMAT_D8                   = 0x20203844, // - [7:0] D
+	WAYLAND_SHM_FORMAT_R1                   = 0x20203152, // - [7:0] R0:R1:R2:R3:R4:R5:R6:R7 1:1:1:1:1:1:1:1 eight pixels/byte
+	WAYLAND_SHM_FORMAT_R2                   = 0x20203252, // - [7:0] R0:R1:R2:R3 2:2:2:2 four pixels/byte
+	WAYLAND_SHM_FORMAT_R4                   = 0x20203452, // - [7:0] R0:R1 4:4 two pixels/byte
+	WAYLAND_SHM_FORMAT_R10                  = 0x20303152, // - [15:0] x:R 6:10 little endian
+	WAYLAND_SHM_FORMAT_R12                  = 0x20323152, // - [15:0] x:R 4:12 little endian
+	WAYLAND_SHM_FORMAT_AVUY8888             = 0x59555641, // - [31:0] A:Cr:Cb:Y 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_XVUY8888             = 0x59555658, // - [31:0] X:Cr:Cb:Y 8:8:8:8 little endian
+	WAYLAND_SHM_FORMAT_P030                 = 0x30333050, // - 2x2 subsampled Cr:Cb plane 10 bits per channel packed
 	// clang-format on
 };
 
@@ -461,35 +484,29 @@ struct wayland_compositor {
 	wayland_region *(*CreateRegion)(wayland_compositor *This);
 };
 
-struct wayland_shared_memory_pool {
+struct wayland_shm_pool {
 	wayland_interface Header;
 
 	wayland_buffer *(*CreateBuffer)(
-		wayland_shared_memory_pool	*This,
-		s32							 Offset,
-		s32							 Width,
-		s32							 Height,
-		s32							 Stride,
-		wayland_shared_memory_format Format
+		wayland_shm_pool  *This,
+		s32				   Offset,
+		s32				   Width,
+		s32				   Height,
+		s32				   Stride,
+		wayland_shm_format Format
 	);
-	b08 (*Destroy)(wayland_shared_memory_pool *This);
-	b08 (*Resize)(wayland_shared_memory_pool *This, s32 Size);
+	b08 (*Destroy)(wayland_shm_pool *This);
+	b08 (*Resize)(wayland_shm_pool *This, s32 Size);
 };
 
-struct wayland_shared_memory {
+struct wayland_shm {
 	wayland_interface Header;
 
-	wayland_shared_memory_pool *(*CreatePool)(
-		wayland_shared_memory *This,
-		s32					   FileDescriptor,
-		s32					   Size
-	);
-	b08 (*Release)(wayland_shared_memory *This);
+	wayland_shm_pool
+		*(*CreatePool)(wayland_shm *This, s32 FileDescriptor, s32 Size);
+	b08 (*Release)(wayland_shm *This);
 
-	void (*HandleFormat)(
-		wayland_shared_memory		*This,
-		wayland_shared_memory_format Format
-	);
+	void (*HandleFormat)(wayland_shm *This, wayland_shm_format Format);
 };
 
 struct wayland_buffer {
@@ -914,10 +931,255 @@ struct wayland_fixes {
 	b08 (*DestroyRegistry)(wayland_fixes *This, wayland_registry *Registry);
 };
 
-typedef struct wayland_api_state {
-	heap Heap;
+/* ====== XDG Shell ======= */
 
-	file_handle Socket;
+enum wayland_xdg_wm_base_error {
+	WAYLAND_XDG_WM_BASE_ERROR_ROLE					= 0,
+	WAYLAND_XDG_WM_BASE_ERROR_DEFUNCT_SURFACES		= 1,
+	WAYLAND_XDG_WM_BASE_ERROR_NOT_THE_TOPMOST_POPUP = 2,
+	WAYLAND_XDG_WM_BASE_ERROR_INVALID_POPUP_PARENT	= 3,
+	WAYLAND_XDG_WM_BASE_ERROR_INVALID_SURFACE_STATE = 4,
+	WAYLAND_XDG_WM_BASE_ERROR_INVALID_POSITIONER	= 5,
+	WAYLAND_XDG_WM_BASE_ERROR_UNRESPONSIVE			= 6,
+};
+
+struct wayland_xdg_wm_base {
+	wayland_interface Header;
+
+	b08 (*Destroy)(wayland_xdg_wm_base *This);
+	wayland_xdg_positioner *(*CreatePositioner)(wayland_xdg_wm_base *This);
+	wayland_xdg_surface
+		*(*GetXdgSurface)(wayland_xdg_wm_base *This, wayland_surface *Surface);
+	b08 (*Pong)(wayland_xdg_wm_base *This, u32 Serial);
+
+	void (*HandlePing)(wayland_xdg_wm_base *This, u32 Serial);
+};
+
+enum wayland_xdg_positioner_error {
+	WAYLAND_XDG_POSITIONER_ERROR_INVALID_INPUT = 0
+};
+
+enum wayland_xdg_positioner_anchor {
+	WAYLAND_XDG_POSITIONER_ANCHOR_NONE		   = 0,
+	WAYLAND_XDG_POSITIONER_ANCHOR_TOP		   = 1,
+	WAYLAND_XDG_POSITIONER_ANCHOR_BOTTOM	   = 2,
+	WAYLAND_XDG_POSITIONER_ANCHOR_LEFT		   = 3,
+	WAYLAND_XDG_POSITIONER_ANCHOR_RIGHT		   = 4,
+	WAYLAND_XDG_POSITIONER_ANCHOR_TOP_LEFT	   = 5,
+	WAYLAND_XDG_POSITIONER_ANCHOR_BOTTOM_LEFT  = 6,
+	WAYLAND_XDG_POSITIONER_ANCHOR_TOP_RIGHT	   = 7,
+	WAYLAND_XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT = 8,
+};
+
+enum wayland_xdg_positioner_gravity {
+	WAYLAND_XDG_POSITIONER_GRAVITY_NONE			= 0,
+	WAYLAND_XDG_POSITIONER_GRAVITY_TOP			= 1,
+	WAYLAND_XDG_POSITIONER_GRAVITY_BOTTOM		= 2,
+	WAYLAND_XDG_POSITIONER_GRAVITY_LEFT			= 3,
+	WAYLAND_XDG_POSITIONER_GRAVITY_RIGHT		= 4,
+	WAYLAND_XDG_POSITIONER_GRAVITY_TOP_LEFT		= 5,
+	WAYLAND_XDG_POSITIONER_GRAVITY_BOTTOM_LEFT	= 6,
+	WAYLAND_XDG_POSITIONER_GRAVITY_TOP_RIGHT	= 7,
+	WAYLAND_XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT = 8,
+};
+
+enum wayland_xdg_positioner_constraint_adjustment {
+	WAYLAND_XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_NONE	  = 0,
+	WAYLAND_XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X  = 1,
+	WAYLAND_XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y  = 2,
+	WAYLAND_XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_X	  = 4,
+	WAYLAND_XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y	  = 8,
+	WAYLAND_XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_RESIZE_X = 16,
+	WAYLAND_XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_RESIZE_Y = 32,
+};
+
+struct wayland_xdg_positioner {
+	wayland_interface Header;
+
+	b08 (*Destroy)(wayland_xdg_positioner *This);
+	b08 (*SetSize)(wayland_xdg_positioner *This, s32 Width, s32 Height);
+	b08 (*SetAnchorRect)(
+		wayland_xdg_positioner *This,
+		s32						X,
+		s32						Y,
+		s32						Width,
+		s32						Height
+	);
+	b08 (*SetAnchor)(
+		wayland_xdg_positioner		 *This,
+		wayland_xdg_positioner_anchor Anchor
+	);
+	b08 (*SetGravity)(
+		wayland_xdg_positioner		  *This,
+		wayland_xdg_positioner_gravity Gravity
+	);
+	b08 (*SetConstraintAdjustment)(
+		wayland_xdg_positioner						*This,
+		wayland_xdg_positioner_constraint_adjustment ConstraintAdjustment
+	);
+	b08 (*SetOffset)(wayland_xdg_positioner *This, s32 X, s32 Y);
+	b08 (*SetReactive)(wayland_xdg_positioner *This);
+	b08 (*SetParentSize)(
+		wayland_xdg_positioner *This,
+		s32						ParentWidth,
+		s32						ParentHeight
+	);
+	b08 (*SetParentConfigure)(wayland_xdg_positioner *This, u32 Serial);
+};
+
+enum wayland_xdg_surface_error {
+	WAYLAND_XDG_SURFACE_ERROR_NOT_CONSTRUCTED	  = 1,
+	WAYLAND_XDG_SURFACE_ERROR_ALREADY_CONSTRUCTED = 2,
+	WAYLAND_XDG_SURFACE_ERROR_UNCONFIGURED_BUFFER = 3,
+	WAYLAND_XDG_SURFACE_ERROR_INVALID_SERIAL	  = 4,
+	WAYLAND_XDG_SURFACE_ERROR_INVALID_SIZE		  = 5,
+	WAYLAND_XDG_SURFACE_ERROR_DEFUNCT_ROLE_OBJECT = 6,
+};
+
+struct wayland_xdg_surface {
+	wayland_interface Header;
+
+	b08 (*Destroy)(wayland_xdg_surface *This);
+	wayland_xdg_toplevel *(*GetToplevel)(wayland_xdg_surface *This);
+	wayland_xdg_popup *(*GetPopup)(
+		wayland_xdg_surface	   *This,
+		wayland_xdg_surface	   *Parent,
+		wayland_xdg_positioner *Positioner
+	);
+	b08 (*SetWindowGeometry)(
+		wayland_xdg_surface *This,
+		s32					 X,
+		s32					 Y,
+		s32					 Width,
+		s32					 Height
+	);
+	b08 (*AckConfigure)(wayland_xdg_surface *This, u32 Serial);
+
+	void (*HandleConfigure)(wayland_xdg_surface *This, u32 Serial);
+};
+
+enum wayland_xdg_toplevel_error {
+	WAYLAND_XDG_TOPLEVEL_ERROR_INVALID_RESIZE_EDGE = 0,
+	WAYLAND_XDG_TOPLEVEL_ERROR_INVALID_PARENT	   = 1,
+	WAYLAND_XDG_TOPLEVEL_ERROR_INVALID_SIZE		   = 2,
+};
+
+enum wayland_xdg_toplevel_resize_edge {
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_NONE		  = 0,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_TOP		  = 1,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM		  = 2,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_LEFT		  = 4,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT	  = 5,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT  = 6,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_RIGHT		  = 8,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT	  = 9,
+	WAYLAND_XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT = 10,
+};
+
+enum wayland_xdg_toplevel_state {
+	WAYLAND_XDG_TOPLEVEL_STATE_MAXIMIZED			   = 1,
+	WAYLAND_XDG_TOPLEVEL_STATE_FULLSCREEN			   = 2,
+	WAYLAND_XDG_TOPLEVEL_STATE_RESIZING				   = 3,
+	WAYLAND_XDG_TOPLEVEL_STATE_ACTIVATED			   = 4,
+	WAYLAND_XDG_TOPLEVEL_STATE_TILED_LEFTSINCE		   = 5,	  // version 2
+	WAYLAND_XDG_TOPLEVEL_STATE_TILED_RIGHTSINCE		   = 6,	  // version 2
+	WAYLAND_XDG_TOPLEVEL_STATE_TILED_TOPSINCE		   = 7,	  // version 2
+	WAYLAND_XDG_TOPLEVEL_STATE_TILED_BOTTOMSINCE	   = 8,	  // version 2
+	WAYLAND_XDG_TOPLEVEL_STATE_SUSPENDEDSINCE		   = 9,	  // version 6
+	WAYLAND_XDG_TOPLEVEL_STATE_CONSTRAINED_LEFTSINCE   = 10,  // version 7
+	WAYLAND_XDG_TOPLEVEL_STATE_CONSTRAINED_RIGHTSINCE  = 11,  // version 7
+	WAYLAND_XDG_TOPLEVEL_STATE_CONSTRAINED_TOPSINCE	   = 12,  // version 7
+	WAYLAND_XDG_TOPLEVEL_STATE_CONSTRAINED_BOTTOMSINCE = 13,  // version 7
+};
+
+enum wayland_xdg_toplevel_wm_capabilities {
+	WAYLAND_XDG_TOPLEVEL_WM_CAPABILITIES_WINDOW_MENU = 1,
+	WAYLAND_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE	 = 2,
+	WAYLAND_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN	 = 3,
+	WAYLAND_XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE	 = 4,
+};
+
+struct wayland_xdg_toplevel {
+	wayland_interface Header;
+
+	b08 (*Destroy)(wayland_xdg_toplevel *This);
+	b08 (*SetParent)(wayland_xdg_toplevel *This, wayland_xdg_toplevel *Parent);
+	b08 (*SetTitle)(wayland_xdg_toplevel *This, string Title);
+	b08 (*SetAppId)(wayland_xdg_toplevel *This, string AppId);
+	b08 (*ShowWindowMenu)(
+		wayland_xdg_toplevel *This,
+		wayland_seat		 *Seat,
+		u32					  Serial,
+		s32					  X,
+		s32					  Y
+	);
+	b08 (*Move)(wayland_xdg_toplevel *This, wayland_seat *Seat, u32 Serial);
+	b08 (*Resize)(
+		wayland_xdg_toplevel			*This,
+		wayland_seat					*Seat,
+		u32								 Serial,
+		wayland_xdg_toplevel_resize_edge Edges
+	);
+	b08 (*SetMaxSize)(wayland_xdg_toplevel *This, s32 Width, s32 Height);
+	b08 (*SetMinSize)(wayland_xdg_toplevel *This, s32 Width, s32 Height);
+	b08 (*SetMaximized)(wayland_xdg_toplevel *This);
+	b08 (*UnsetMaximized)(wayland_xdg_toplevel *This);
+	b08 (*SetFullscreen)(wayland_xdg_toplevel *This);
+	b08 (*UnsetFullscreen)(wayland_xdg_toplevel *This);
+	b08 (*SetMinimized)(wayland_xdg_toplevel *This);
+
+	void (*HandleConfigure)(
+		wayland_xdg_toplevel *This,
+		s32					  Width,
+		s32					  Height,
+		wayland_array		  Array
+	);
+	void (*HandleClose)(wayland_xdg_toplevel *This);
+	void (*HandleConfigureBounds)(
+		wayland_xdg_toplevel *This,
+		s32					  Width,
+		s32					  Height
+	);
+	void (*HandleWmCapabilities)(
+		wayland_xdg_toplevel *This,
+		wayland_array		  Capabilities
+	);
+};
+
+enum wayland_xdg_popup_error { WAYLAND_XDG_POPUP_ERROR_INVALID_GRAB = 0 };
+
+struct wayland_xdg_popup {
+	wayland_interface Header;
+
+	b08 (*Destroy)(wayland_xdg_popup *This);
+	b08 (*Grab)(wayland_xdg_popup *This, wayland_seat *Seat, u32 Serial);
+	b08 (*Reposition)(
+		wayland_xdg_popup	   *This,
+		wayland_xdg_positioner *Positioner,
+		u32						Token
+	);
+
+	void (*HandleConfigure)(
+		wayland_xdg_popup *This,
+		s32				   X,
+		s32				   Y,
+		s32				   Width,
+		s32				   Height
+	);
+	void (*HandlePopupDone)(wayland_xdg_popup *This);
+	void (*HandleRepositioned)(wayland_xdg_popup *This, u32 Token);
+};
+
+/* ====== API State & Functions ====== */
+
+typedef struct wayland_api_state {
+	heap *Heap;
+	usize HeapSize;
+
+	s32 Socket;
+
+	b08 Attempted;
+	b08 Connected;
 
 	// TODO Re-use deleted object ids
 	u32		NextObjectId;
@@ -928,7 +1190,7 @@ typedef struct wayland_api_state {
 	INTERN(b08,  Wayland_IsObjectValid,     vptr Object) \
 	INTERN(vptr, Wayland_CreateObject,      wayland_object_type Type, u32 Version) \
 	INTERN(vptr, Wayland_CreateChildObject, vptr Parent, wayland_object_type Type) \
-	INTERN(void, Wayland_DeleteObject,      vptr Object) \
+	INTERN(void, Wayland_DestroyObject,      vptr Object) \
 	\
 	INTERN(wayland_display*,  Wayland_GetDisplay,          void) \
 	INTERN(void,              Wayland_Display_HandleEvent, wayland_display *This, wayland_message *Message) \
@@ -943,6 +1205,17 @@ typedef struct wayland_api_state {
 	INTERN(void,             Wayland_Compositor_HandleEvent,   wayland_compositor *This, wayland_message *Message) \
 	INTERN(wayland_surface*, Wayland_Compositor_CreateSurface, wayland_compositor *This) \
 	INTERN(wayland_region*,  Wayland_Compositor_CreateRegion,  wayland_compositor *This) \
+	\
+	INTERN(wayland_buffer*, Wayland_ShmPool_CreateBuffer, wayland_shm_pool *This, s32 Offset, s32 Width, s32 Height, s32 Stride, wayland_shm_format Format) \
+	INTERN(b08,             Wayland_ShmPool_Destroy,      wayland_shm_pool *This) \
+	INTERN(b08,             Wayland_ShmPool_Resize,       wayland_shm_pool *This, s32 Size) \
+	\
+	INTERN(void,              Wayland_Shm_HandleEvents, wayland_shm *This, wayland_message *Message) \
+	INTERN(wayland_shm_pool*, Wayland_Shm_CreatePool,   wayland_shm *This, s32 FileDescriptor, s32 Size) \
+	INTERN(b08,               Wayland_Shm_Release,      wayland_shm *This) \
+	\
+	INTERN(void, Wayland_Buffer_HandleEvents, wayland_buffer *This, wayland_message *Message) \
+	INTERN(b08,  Wayland_Buffer_Destroy,      wayland_buffer *This) \
 	\
 	INTERN(wayland_shell_surface*, Wayland_Shell_GetShellSurface, wayland_shell *This, wayland_surface *Surface) \
 	\
@@ -974,6 +1247,51 @@ typedef struct wayland_api_state {
 	INTERN(void, Wayland_Fixes_HandleEvent,     wayland_fixes *This, wayland_message *Message) \
 	INTERN(b08,  Wayland_Fixes_Destroy,         wayland_fixes *This) \
 	INTERN(b08,  Wayland_Fixes_DestroyRegistry, wayland_fixes *This, wayland_registry *Registry) \
+	\
+	INTERN(void,                    Wayland_XdgWmBase_HandleEvents,     wayland_xdg_wm_base *This, wayland_message *Message) \
+	INTERN(b08,                     Wayland_XdgWmBase_Destroy,          wayland_xdg_wm_base *This) \
+	INTERN(wayland_xdg_positioner*, Wayland_XdgWmBase_CreatePositioner, wayland_xdg_wm_base *This) \
+	INTERN(wayland_xdg_surface*,    Wayland_XdgWmBase_GetXdgSurface,    wayland_xdg_wm_base *This, wayland_surface *Surface) \
+	INTERN(b08,                     Wayland_XdgWmBase_Pong,             wayland_xdg_wm_base *This, u32 Serial) \
+	\
+	INTERN(b08, Wayland_XdgPositioner_Destroy,                 wayland_xdg_positioner *This) \
+	INTERN(b08, Wayland_XdgPositioner_SetSize,                 wayland_xdg_positioner *This, s32 Width, s32 Height) \
+	INTERN(b08, Wayland_XdgPositioner_SetAnchorRect,           wayland_xdg_positioner *This, s32 X, s32 Y, s32 Width, s32 Height) \
+	INTERN(b08, Wayland_XdgPositioner_SetAnchor,               wayland_xdg_positioner *This, wayland_xdg_positioner_anchor Anchor) \
+	INTERN(b08, Wayland_XdgPositioner_SetGravity,              wayland_xdg_positioner *This, wayland_xdg_positioner_gravity Gravity) \
+	INTERN(b08, Wayland_XdgPositioner_SetConstraintAdjustment, wayland_xdg_positioner *This, wayland_xdg_positioner_constraint_adjustment ConstraintAdjustment) \
+	INTERN(b08, Wayland_XdgPositioner_SetOffset,               wayland_xdg_positioner *This, s32 X, s32 Y) \
+	INTERN(b08, Wayland_XdgPositioner_SetReactive,             wayland_xdg_positioner *This) \
+	INTERN(b08, Wayland_XdgPositioner_SetParentSize,           wayland_xdg_positioner *This, s32 ParentWidth, s32 ParentHeight) \
+	INTERN(b08, Wayland_XdgPositioner_SetParentConfigure,      wayland_xdg_positioner *This, u32 Serial) \
+	\
+	INTERN(void,                  Wayland_XdgSurface_HandleEvents,      wayland_xdg_surface *This, wayland_message *Message) \
+	INTERN(b08,                   Wayland_XdgSurface_Destroy,           wayland_xdg_surface *This) \
+	INTERN(wayland_xdg_toplevel*, Wayland_XdgSurface_GetToplevel,       wayland_xdg_surface *This) \
+	INTERN(wayland_xdg_popup*,    Wayland_XdgSurface_GetPopup,          wayland_xdg_surface *This, wayland_xdg_surface *Parent, wayland_xdg_positioner *Positioner) \
+	INTERN(b08,                   Wayland_XdgSurface_SetWindowGeometry, wayland_xdg_surface *This, s32 X, s32 Y, s32 Width, s32 Height) \
+	INTERN(b08,                   Wayland_XdgSurface_AckConfigure,      wayland_xdg_surface *This, u32 Serial) \
+	\
+	INTERN(void, Wayland_XdgPopup_HandleEvents, wayland_xdg_popup *This, wayland_message *Message) \
+	INTERN(b08,  Wayland_XdgPopup_Destroy,      wayland_xdg_popup *This) \
+	INTERN(b08,  Wayland_XdgPopup_Grab,         wayland_xdg_popup *This, wayland_seat *Seat, u32 Serial) \
+	INTERN(b08,  Wayland_XdgPopup_Reposition,   wayland_xdg_popup *This, wayland_xdg_positioner *Positioner, u32 Token) \
+	\
+	INTERN(void, Wayland_XdgToplevel_HandleEvents,    wayland_xdg_toplevel *This, wayland_message *Message) \
+	INTERN(b08,  Wayland_XdgToplevel_Destroy,         wayland_xdg_toplevel *This) \
+	INTERN(b08,  Wayland_XdgToplevel_SetParent,       wayland_xdg_toplevel *This, wayland_xdg_toplevel *Parent) \
+	INTERN(b08,  Wayland_XdgToplevel_SetTitle,        wayland_xdg_toplevel *This, string Title) \
+	INTERN(b08,  Wayland_XdgToplevel_SetAppId,        wayland_xdg_toplevel *This, string AppId) \
+	INTERN(b08,  Wayland_XdgToplevel_ShowWindowMenu,  wayland_xdg_toplevel *This, wayland_seat *Seat, u32 Serial, s32 X, s32 Y) \
+	INTERN(b08,  Wayland_XdgToplevel_Move,            wayland_xdg_toplevel *This, wayland_seat *Seat, u32 Serial) \
+	INTERN(b08,  Wayland_XdgToplevel_Resize,          wayland_xdg_toplevel *This, wayland_seat *Seat, u32 Serial, wayland_xdg_toplevel_resize_edge Edges) \
+	INTERN(b08,  Wayland_XdgToplevel_SetMaxSize,      wayland_xdg_toplevel *This, s32 Width, s32 Height) \
+	INTERN(b08,  Wayland_XdgToplevel_SetMinSize,      wayland_xdg_toplevel *This, s32 Width, s32 Height) \
+	INTERN(b08,  Wayland_XdgToplevel_SetMaximized,    wayland_xdg_toplevel *This) \
+	INTERN(b08,  Wayland_XdgToplevel_UnsetMaximized,  wayland_xdg_toplevel *This) \
+	INTERN(b08,  Wayland_XdgToplevel_SetFullscreen,   wayland_xdg_toplevel *This) \
+	INTERN(b08,  Wayland_XdgToplevel_UnsetFullscreen, wayland_xdg_toplevel *This) \
+	INTERN(b08,  Wayland_XdgToplevel_SetMinimized,    wayland_xdg_toplevel *This) \
 	//
 
 #endif
@@ -1009,30 +1327,27 @@ static wayland_compositor WaylandCompositorPrototype = {
 	.CreateRegion  = Wayland_Compositor_CreateRegion,
 };
 
-static wayland_shared_memory_pool WaylandSharedMemoryPoolPrototype = {
-	.Header		  = { .Type		   = WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL,
-					  .Size		   = sizeof(wayland_shared_memory_pool),
-					  .Id		   = 0,
-					  .HandleEvent = NULL },
-	.CreateBuffer = NULL,
-	.Destroy	  = NULL,
-	.Resize		  = NULL,
+static wayland_shm_pool WaylandShmPoolPrototype = {
+	.Header		  = { .Type = WAYLAND_OBJECT_TYPE_SHM_POOL,
+					  .Size = sizeof(wayland_shm_pool) },
+	.CreateBuffer = Wayland_ShmPool_CreateBuffer,
+	.Destroy	  = Wayland_ShmPool_Destroy,
+	.Resize		  = Wayland_ShmPool_Resize,
 };
 
-static wayland_shared_memory WaylandSharedMemoryPrototype = {
-	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_SHARED_MEMORY,
-					.Size		 = sizeof(wayland_shared_memory),
-					.HandleEvent = NULL },
-	.CreatePool = NULL,
-	.Release	= NULL,
+static wayland_shm WaylandShmPrototype = {
+	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_SHM,
+					.Size		 = sizeof(wayland_shm),
+					.HandleEvent = (vptr) Wayland_Shm_HandleEvents },
+	.CreatePool = Wayland_Shm_CreatePool,
+	.Release	= Wayland_Shm_Release,
 };
 
 static wayland_buffer WaylandBufferPrototype = {
-	.Header		   = { .Type		= WAYLAND_OBJECT_TYPE_BUFFER,
-					   .Size		= sizeof(wayland_buffer),
-					   .HandleEvent = NULL },
-	.Destroy	   = NULL,
-	.HandleRelease = NULL,
+	.Header	 = { .Type		  = WAYLAND_OBJECT_TYPE_BUFFER,
+				 .Size		  = sizeof(wayland_buffer),
+				 .HandleEvent = (vptr) Wayland_Buffer_HandleEvents },
+	.Destroy = Wayland_Buffer_Destroy,
 };
 
 static wayland_data_offer WaylandDataOfferPrototype = {
@@ -1188,75 +1503,101 @@ static wayland_fixes WaylandFixesPrototype = {
 	.DestroyRegistry = Wayland_Fixes_DestroyRegistry,
 };
 
-static string WaylandNames[WAYLAND_OBJECT_TYPE_COUNT] = {
-	[WAYLAND_OBJECT_TYPE_DISPLAY]	 = CStringL("wl_display"),
-	[WAYLAND_OBJECT_TYPE_REGISTRY]	 = CStringL("wl_registry"),
-	[WAYLAND_OBJECT_TYPE_CALLBACK]	 = CStringL("wl_callback"),
-	[WAYLAND_OBJECT_TYPE_COMPOSITOR] = CStringL("wl_compositor"),
-	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL] =
-		CStringL("wl_shared_memory_pool"),
-	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY] = CStringL("wl_shared_memory"),
-	[WAYLAND_OBJECT_TYPE_BUFFER]		= CStringL("wl_buffer"),
-	[WAYLAND_OBJECT_TYPE_DATA_OFFER]	= CStringL("wl_data_offer"),
-	[WAYLAND_OBJECT_TYPE_DATA_SOURCE]	= CStringL("wl_data_source"),
-	[WAYLAND_OBJECT_TYPE_DATA_DEVICE]	= CStringL("wl_data_device"),
-	[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] =
-		CStringL("wl_data_device_manager"),
-	[WAYLAND_OBJECT_TYPE_SHELL]			= CStringL("wl_shell"),
-	[WAYLAND_OBJECT_TYPE_SHELL_SURFACE] = CStringL("wl_shell_surface"),
-	[WAYLAND_OBJECT_TYPE_SURFACE]		= CStringL("wl_surface"),
-	[WAYLAND_OBJECT_TYPE_SEAT]			= CStringL("wl_seat"),
-	[WAYLAND_OBJECT_TYPE_POINTER]		= CStringL("wl_pointer"),
-	[WAYLAND_OBJECT_TYPE_KEYBOARD]		= CStringL("wl_keyboard"),
-	[WAYLAND_OBJECT_TYPE_TOUCH]			= CStringL("wl_touch"),
-	[WAYLAND_OBJECT_TYPE_OUTPUT]		= CStringL("wl_output"),
-	[WAYLAND_OBJECT_TYPE_REGION]		= CStringL("wl_region"),
-	[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR] = CStringL("wl_subcompositor"),
-	[WAYLAND_OBJECT_TYPE_SUBSURFACE]	= CStringL("wl_subsurface"),
-	[WAYLAND_OBJECT_TYPE_FIXES]			= CStringL("wl_fixes"),
+static wayland_xdg_wm_base WaylandXdgWmBasePrototype = {
+	.Header			  = { .Type		   = WAYLAND_OBJECT_TYPE_XDG_WM_BASE,
+						  .Size		   = sizeof(wayland_xdg_wm_base),
+						  .HandleEvent = (vptr) Wayland_XdgWmBase_HandleEvents },
+	.Destroy		  = Wayland_XdgWmBase_Destroy,
+	.CreatePositioner = Wayland_XdgWmBase_CreatePositioner,
+	.GetXdgSurface	  = Wayland_XdgWmBase_GetXdgSurface,
+	.Pong			  = Wayland_XdgWmBase_Pong,
 };
 
-static u08 WaylandVersionMap[WAYLAND_OBJECT_TYPE_COUNT]
-							[WAYLAND_MAX_OBJECT_VERSION + 1] = {
-								[WAYLAND_OBJECT_TYPE_DISPLAY]	 = { [1] = 1 },
-								[WAYLAND_OBJECT_TYPE_REGISTRY]	 = { [1] = 1 },
-								[WAYLAND_OBJECT_TYPE_CALLBACK]	 = { [1] = 1,
-																	 [2] = 1,
-																	 [3] = 1,
-																	 [4] = 1,
-																	 [5] = 1,
-																	 [6] = 1 },
-								[WAYLAND_OBJECT_TYPE_COMPOSITOR] = { [1] = 6 },
-								[WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL]  = {},
-								[WAYLAND_OBJECT_TYPE_SHARED_MEMORY]		  = {},
-								[WAYLAND_OBJECT_TYPE_BUFFER]			  = {},
-								[WAYLAND_OBJECT_TYPE_DATA_OFFER]		  = {},
-								[WAYLAND_OBJECT_TYPE_DATA_SOURCE]		  = {},
-								[WAYLAND_OBJECT_TYPE_DATA_DEVICE]		  = {},
-								[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] = {},
-								[WAYLAND_OBJECT_TYPE_SHELL] = { [1] = 1 },
-								[WAYLAND_OBJECT_TYPE_SHELL_SURFACE] = { [1] =
-																			1 },
-								[WAYLAND_OBJECT_TYPE_SURFACE]		= { [1] = 1,
-																	[2] = 2,
-																	[3] = 3,
-																	[4] = 4,
-																	[5] = 5,
-																	[6] = 6 },
-								[WAYLAND_OBJECT_TYPE_SEAT]			= {},
-								[WAYLAND_OBJECT_TYPE_POINTER]		= {},
-								[WAYLAND_OBJECT_TYPE_KEYBOARD]		= {},
-								[WAYLAND_OBJECT_TYPE_TOUCH]			= {},
-								[WAYLAND_OBJECT_TYPE_OUTPUT]		= {},
-								[WAYLAND_OBJECT_TYPE_REGION]		= { [1] = 1,
-																	[2] = 1,
-																	[3] = 1,
-																	[4] = 1,
-																	[5] = 1,
-																	[6] = 1 },
-								[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR] = {},
-								[WAYLAND_OBJECT_TYPE_SUBSURFACE]	= {},
-								[WAYLAND_OBJECT_TYPE_FIXES]			= {},
+static wayland_xdg_positioner WaylandXdgPositionerPrototype = {
+	.Header					 = { .Type = WAYLAND_OBJECT_TYPE_XDG_POSITIONER,
+								 .Size = sizeof(wayland_xdg_positioner) },
+	.Destroy				 = Wayland_XdgPositioner_Destroy,
+	.SetSize				 = Wayland_XdgPositioner_SetSize,
+	.SetAnchorRect			 = Wayland_XdgPositioner_SetAnchorRect,
+	.SetAnchor				 = Wayland_XdgPositioner_SetAnchor,
+	.SetGravity				 = Wayland_XdgPositioner_SetGravity,
+	.SetConstraintAdjustment = Wayland_XdgPositioner_SetConstraintAdjustment,
+	.SetOffset				 = Wayland_XdgPositioner_SetOffset,
+	.SetReactive			 = Wayland_XdgPositioner_SetReactive,
+	.SetParentSize			 = Wayland_XdgPositioner_SetParentSize,
+	.SetParentConfigure		 = Wayland_XdgPositioner_SetParentConfigure,
+};
+
+static wayland_xdg_surface WaylandXdgSurfacePrototype = {
+	.Header			   = { .Type		= WAYLAND_OBJECT_TYPE_XDG_SURFACE,
+						   .Size		= sizeof(wayland_xdg_surface),
+						   .HandleEvent = (vptr) Wayland_XdgSurface_HandleEvents },
+	.Destroy		   = Wayland_XdgSurface_Destroy,
+	.GetToplevel	   = Wayland_XdgSurface_GetToplevel,
+	.GetPopup		   = Wayland_XdgSurface_GetPopup,
+	.SetWindowGeometry = Wayland_XdgSurface_SetWindowGeometry,
+	.AckConfigure	   = Wayland_XdgSurface_AckConfigure,
+};
+
+static wayland_xdg_toplevel WaylandXdgToplevelPrototype = {
+	.Header			 = { .Type		  = WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL,
+						 .Size		  = sizeof(wayland_xdg_toplevel),
+						 .HandleEvent = (vptr) Wayland_XdgToplevel_HandleEvents },
+	.Destroy		 = Wayland_XdgToplevel_Destroy,
+	.SetParent		 = Wayland_XdgToplevel_SetParent,
+	.SetTitle		 = Wayland_XdgToplevel_SetTitle,
+	.SetAppId		 = Wayland_XdgToplevel_SetAppId,
+	.ShowWindowMenu	 = Wayland_XdgToplevel_ShowWindowMenu,
+	.Move			 = Wayland_XdgToplevel_Move,
+	.Resize			 = Wayland_XdgToplevel_Resize,
+	.SetMaxSize		 = Wayland_XdgToplevel_SetMaxSize,
+	.SetMinSize		 = Wayland_XdgToplevel_SetMinSize,
+	.SetMaximized	 = Wayland_XdgToplevel_SetMaximized,
+	.UnsetMaximized	 = Wayland_XdgToplevel_UnsetMaximized,
+	.SetFullscreen	 = Wayland_XdgToplevel_SetFullscreen,
+	.UnsetFullscreen = Wayland_XdgToplevel_UnsetFullscreen,
+	.SetMinimized	 = Wayland_XdgToplevel_SetMinimized,
+};
+
+static wayland_xdg_popup WaylandXdgPopupPrototype = {
+	.Header		= { .Type		 = WAYLAND_OBJECT_TYPE_XDG_POPUP,
+					.Size		 = sizeof(wayland_xdg_popup),
+					.HandleEvent = (vptr) Wayland_XdgPopup_HandleEvents },
+	.Destroy	= Wayland_XdgPopup_Destroy,
+	.Grab		= Wayland_XdgPopup_Grab,
+	.Reposition = Wayland_XdgPopup_Reposition,
+};
+
+static string WaylandNames[WAYLAND_OBJECT_TYPE_COUNT] = {
+	[WAYLAND_OBJECT_TYPE_DISPLAY]	  = CStringL("wl_display"),
+	[WAYLAND_OBJECT_TYPE_REGISTRY]	  = CStringL("wl_registry"),
+	[WAYLAND_OBJECT_TYPE_CALLBACK]	  = CStringL("wl_callback"),
+	[WAYLAND_OBJECT_TYPE_COMPOSITOR]  = CStringL("wl_compositor"),
+	[WAYLAND_OBJECT_TYPE_SHM_POOL]	  = CStringL("wl_shm_pool"),
+	[WAYLAND_OBJECT_TYPE_SHM]		  = CStringL("wl_shm"),
+	[WAYLAND_OBJECT_TYPE_BUFFER]	  = CStringL("wl_buffer"),
+	[WAYLAND_OBJECT_TYPE_DATA_OFFER]  = CStringL("wl_data_offer"),
+	[WAYLAND_OBJECT_TYPE_DATA_SOURCE] = CStringL("wl_data_source"),
+	[WAYLAND_OBJECT_TYPE_DATA_DEVICE] = CStringL("wl_data_device"),
+	[WAYLAND_OBJECT_TYPE_DATA_DEVICE_MANAGER] =
+		CStringL("wl_data_device_manager"),
+	[WAYLAND_OBJECT_TYPE_SHELL]			 = CStringL("wl_shell"),
+	[WAYLAND_OBJECT_TYPE_SHELL_SURFACE]	 = CStringL("wl_shell_surface"),
+	[WAYLAND_OBJECT_TYPE_SURFACE]		 = CStringL("wl_surface"),
+	[WAYLAND_OBJECT_TYPE_SEAT]			 = CStringL("wl_seat"),
+	[WAYLAND_OBJECT_TYPE_POINTER]		 = CStringL("wl_pointer"),
+	[WAYLAND_OBJECT_TYPE_KEYBOARD]		 = CStringL("wl_keyboard"),
+	[WAYLAND_OBJECT_TYPE_TOUCH]			 = CStringL("wl_touch"),
+	[WAYLAND_OBJECT_TYPE_OUTPUT]		 = CStringL("wl_output"),
+	[WAYLAND_OBJECT_TYPE_REGION]		 = CStringL("wl_region"),
+	[WAYLAND_OBJECT_TYPE_SUBCOMPOSITOR]	 = CStringL("wl_subcompositor"),
+	[WAYLAND_OBJECT_TYPE_SUBSURFACE]	 = CStringL("wl_subsurface"),
+	[WAYLAND_OBJECT_TYPE_FIXES]			 = CStringL("wl_fixes"),
+	[WAYLAND_OBJECT_TYPE_XDG_WM_BASE]	 = CStringL("xdg_wm_base"),
+	[WAYLAND_OBJECT_TYPE_XDG_POSITIONER] = CStringL("xdg_positioner"),
+	[WAYLAND_OBJECT_TYPE_XDG_SURFACE]	 = CStringL("xdg_surface"),
+	[WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL]	 = CStringL("xdg_toplevel"),
+	[WAYLAND_OBJECT_TYPE_XDG_POPUP]		 = CStringL("xdg_popup"),
 };
 
 static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
@@ -1268,10 +1609,9 @@ static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
 		(wayland_interface *) &WaylandCallbackPrototype,
 	[WAYLAND_OBJECT_TYPE_COMPOSITOR] =
 		(wayland_interface *) &WaylandCompositorPrototype,
-	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY_POOL] =
-		(wayland_interface *) &WaylandSharedMemoryPoolPrototype,
-	[WAYLAND_OBJECT_TYPE_SHARED_MEMORY] =
-		(wayland_interface *) &WaylandSharedMemoryPrototype,
+	[WAYLAND_OBJECT_TYPE_SHM_POOL] =
+		(wayland_interface *) &WaylandShmPoolPrototype,
+	[WAYLAND_OBJECT_TYPE_SHM] = (wayland_interface *) &WaylandShmPrototype,
 	[WAYLAND_OBJECT_TYPE_BUFFER] =
 		(wayland_interface *) &WaylandBufferPrototype,
 	[WAYLAND_OBJECT_TYPE_DATA_OFFER] =
@@ -1302,6 +1642,12 @@ static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
 	[WAYLAND_OBJECT_TYPE_SUBSURFACE] =
 		(wayland_interface *) &WaylandSubsurfacePrototype,
 	[WAYLAND_OBJECT_TYPE_FIXES] = (wayland_interface *) &WaylandFixesPrototype,
+	[WAYLAND_OBJECT_TYPE_XDG_WM_BASE] = (vptr) &WaylandXdgWmBasePrototype,
+	[WAYLAND_OBJECT_TYPE_XDG_POSITIONER] =
+		(vptr) &WaylandXdgPositionerPrototype,
+	[WAYLAND_OBJECT_TYPE_XDG_SURFACE]  = (vptr) &WaylandXdgSurfacePrototype,
+	[WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL] = (vptr) &WaylandXdgToplevelPrototype,
+	[WAYLAND_OBJECT_TYPE_XDG_POPUP]	   = (vptr) &WaylandXdgPopupPrototype,
 };
 
 internal u32
@@ -1317,8 +1663,7 @@ Wayland_IsObjectValid(vptr Object)
 	return Interface
 		&& Interface->Type > WAYLAND_OBJECT_TYPE_UNKNOWN
 		&& Interface->Type < WAYLAND_OBJECT_TYPE_COUNT
-		&& Interface->Version > 0
-		&& Interface->Version <= WAYLAND_MAX_OBJECT_VERSION;
+		&& Interface->Version > 0;
 }
 
 internal vptr
@@ -1344,15 +1689,12 @@ internal vptr
 Wayland_CreateChildObject(vptr Parent, wayland_object_type Type)
 {
 	if (!Wayland_IsObjectValid(Parent)) return NULL;
-
-	u32 ParentVersion = ((wayland_interface *) Parent)->Version;
-	u32 Version		  = WaylandVersionMap[Type][ParentVersion];
-
-	return Wayland_CreateObject(Type, Version);
+	wayland_interface *ParentInterface = Parent;
+	return Wayland_CreateObject(Type, ParentInterface->Version);
 }
 
 internal void
-Wayland_DeleteObject(vptr Object)
+Wayland_DestroyObject(vptr Object)
 {
 	if (!Wayland_IsObjectValid(Object)) return;
 
@@ -1363,9 +1705,62 @@ Wayland_DeleteObject(vptr Object)
 }
 
 internal b08
-Wayland_InitApi(heap *Heap)
+Wayland_ConnectToSocket(string Name)
 {
-	_G.WaylandApi.Heap = Heap;
+	if (_G.WaylandApi.Connected) return TRUE;
+	if (Name.Length >= sizeof((sys_sockaddr_unix) {}.Data)) return FALSE;
+
+	s32 FileDescriptor =
+		Sys_Socket(SYS_ADDRESS_FAMILY_UNIX, SYS_SOCKET_STREAM, 0);
+	if (FileDescriptor < 0) return FALSE;
+
+	sys_sockaddr_unix Address;
+	Address.Family = SYS_ADDRESS_FAMILY_UNIX;
+	Mem_Cpy(Address.Data, Name.Text, Name.Length);
+	Address.Data[Name.Length] = 0;
+
+	s32 Result = Sys_Connect(
+		FileDescriptor,
+		(sys_sockaddr *) &Address,
+		sizeof(sys_sockaddr_unix)
+	);
+	if (Result < 0) {
+		Sys_Close(FileDescriptor);
+		return FALSE;
+	}
+
+	_G.WaylandApi.Socket	= FileDescriptor;
+	_G.WaylandApi.Connected = TRUE;
+	return TRUE;
+}
+
+internal void
+Wayland_Disconnect(void)
+{
+	if (_G.WaylandApi.Connected) {
+		Sys_Close(_G.WaylandApi.Socket);
+		_G.WaylandApi.Connected = FALSE;
+	}
+}
+
+internal b08
+Wayland_IsConnected(void)
+{
+	return _G.WaylandApi.Connected;
+}
+
+internal b08
+Wayland_Connect()
+{
+	if (_G.WaylandApi.Attempted) return FALSE;
+	_G.WaylandApi.Attempted = TRUE;
+
+	usize HeapSize		   = 16 * 1024 * 1024;
+	vptr  HeapBase		   = Platform_AllocateMemory(HeapSize);
+	heap *Heap			   = Heap_Init(HeapBase, HeapSize);
+	_G.WaylandApi.HeapSize = HeapSize;
+	_G.WaylandApi.Heap	   = Heap;
+
 	_G.WaylandApi.IdTable =
 		HashMap_Init(Heap, sizeof(u32), sizeof(wayland_interface *));
 
@@ -1373,8 +1768,9 @@ Wayland_InitApi(heap *Heap)
 	string WaylandSocket = Platform_GetEnvParam(CStringL("WAYLAND_SOCKET"));
 	if (String_TryParseS32(WaylandSocket, &FileDescriptor)) {
 #ifdef _LINUX
-		_G.WaylandApi.Socket.FileDescriptor = FileDescriptor;
+		_G.WaylandApi.Socket = FileDescriptor;
 #endif
+		_G.WaylandApi.Connected = TRUE;
 		return TRUE;
 	}
 
@@ -1382,23 +1778,56 @@ Wayland_InitApi(heap *Heap)
 	string WaylandDisplay = Platform_GetEnvParam(CStringL("WAYLAND_DISPLAY"));
 
 	Stack_Push();
-	b08 Connected = TRUE;
 
 	if (WaylandDisplay.Length) {
 		string SocketPath = FStringL("%s/%s", XdgRuntimeDir, WaylandDisplay);
 
-		if (!Platform_ConnectToLocalSocket(SocketPath, &_G.WaylandApi.Socket)) {
+		if (!Wayland_ConnectToSocket(SocketPath)) {
 			SocketPath = FStringL("%s/wayland-0", XdgRuntimeDir);
-			if (!Platform_ConnectToLocalSocket(
-					SocketPath,
-					&_G.WaylandApi.Socket
-				))
-				Connected = FALSE;
+			Wayland_ConnectToSocket(SocketPath);
 		}
 	}
 
 	Stack_Pop();
-	return Connected;
+	return _G.WaylandApi.Connected;
+}
+
+internal b08
+Wayland_WaitForNextMessage(void)
+{
+	if (!_G.WaylandApi.Connected) return FALSE;
+
+	sys_pollfd PollFd = { .FileDescriptor  = _G.WaylandApi.Socket,
+						  .RequestedEvents = SYS_POLLIN,
+						  .ReturnedEvents  = 0 };
+
+	while (_G.WaylandApi.Connected) {
+		s32 Result = Sys_Poll(&PollFd, 1, 20);
+		if (Result == 1 && (PollFd.ReturnedEvents & SYS_POLLIN)) return TRUE;
+		if (Result != 0) break;
+	}
+
+	Wayland_Disconnect();
+	return FALSE;
+}
+
+internal b08
+Wayland_WaitUntilCanSend(void)
+{
+	if (!_G.WaylandApi.Connected) return FALSE;
+
+	sys_pollfd PollFd = { .FileDescriptor  = _G.WaylandApi.Socket,
+						  .RequestedEvents = SYS_POLLOUT,
+						  .ReturnedEvents  = 0 };
+
+	while (_G.WaylandApi.Connected) {
+		s32 Result = Sys_Poll(&PollFd, 1, 20);
+		if (Result == 1 && (PollFd.ReturnedEvents & SYS_POLLOUT)) return TRUE;
+		if (Result != 0) break;
+	}
+
+	Wayland_Disconnect();
+	return FALSE;
 }
 
 /// @brief Sends a formatted message based on a template, object id, opcode, and
@@ -1415,6 +1844,8 @@ Wayland_InitApi(heap *Heap)
 internal void
 Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 {
+	if (!_G.WaylandApi.Connected) return;
+
 	u16 ParamCount = 0;
 	for (c08 *C = Format; *C; C++) ParamCount++;
 
@@ -1440,8 +1871,8 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 				break;
 
 			case 'a':
-				string *Arr	 = VA_Next(Args, string *);
-				WordCount	+= Arr ? (Arr->Length + 7) / 4 : 1;
+				wayland_array *Arr	= VA_Next(Args, wayland_array *);
+				WordCount		   += Arr ? (Arr->Size + 7) / 4 : 1;
 				break;
 
 			case 'f':
@@ -1484,14 +1915,14 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 				break;
 
 			case 'a':
-				string *Arr	 = VA_Next(Args, string *);
-				Message[W++] = Arr ? Arr->Length : 0;
+				wayland_array *Arr = VA_Next(Args, wayland_array *);
+				Message[W++]	   = Arr ? Arr->Size : 0;
 				if (Arr) {
 					c08 *Dest	= (c08 *) &Message[W];
 					char Pad[3] = { 0 };
-					Mem_Cpy(Dest, Arr->Text, Arr->Length);
-					Mem_Cpy(Dest + Arr->Length, Pad, (4 - Arr->Length % 4) % 4);
-					W += (Arr->Length + 3) / 4;
+					Mem_Cpy(Dest, Arr->Data, Arr->Size);
+					Mem_Cpy(Dest + Arr->Size, Pad, (4 - Arr->Size % 4) % 4);
+					W += (Arr->Size + 3) / 4;
 				}
 				break;
 
@@ -1504,13 +1935,20 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 
 	VA_End(Args);
 
-	usize BytesWritten = Platform_WriteFile(
-		_G.WaylandApi.Socket,
-		Message,
-		MessageSize,
-		(usize) -1
-	);
-	Assert(BytesWritten == MessageSize);
+	if (Wayland_WaitUntilCanSend()) {
+		sys_send_flags Flags = SYS_MSG_NOSIGNAL;
+
+		ssize BytesWritten = Sys_SendTo(
+			_G.WaylandApi.Socket,
+			Message,
+			MessageSize,
+			Flags,
+			NULL,
+			0
+		);
+		if (BytesWritten < 0) Wayland_Disconnect();
+		else Assert(BytesWritten == MessageSize);
+	}
 
 	Stack_Pop();
 }
@@ -1518,9 +1956,12 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 internal wayland_message *
 Wayland_ReadMessage(void)
 {
+	file_handle Handle =
+		(file_handle) { .FileDescriptor = _G.WaylandApi.Socket };
+
 	u32	  Header[2];
 	usize BytesRead = Platform_ReadFile(
-		_G.WaylandApi.Socket,
+		Handle,
 		(vptr) Header,
 		sizeof(wayland_message),
 		(usize) -1
@@ -1531,32 +1972,44 @@ Wayland_ReadMessage(void)
 	u16 Size	 = Header[1] >> 16;
 	u16 Opcode	 = Header[1] & 0xFFFF;
 
-	wayland_message *Message  = Stack_Allocate(Size);
-	Message->ObjectId		  = ObjectId;
-	Message->Opcode			  = Opcode;
-	Message->Size			  = Size;
-	BytesRead				 += Platform_ReadFile(
-		   _G.WaylandApi.Socket,
-		   Message->Data,
-		   Size - sizeof(wayland_message),
-		   (usize) -1
-	   );
+	wayland_message *Message = Stack_Allocate(Size);
+	Message->ObjectId		 = ObjectId;
+	Message->Opcode			 = Opcode;
+	Message->Size			 = Size;
+
+	BytesRead += Platform_ReadFile(
+		Handle,
+		Message->Data,
+		Size - sizeof(wayland_message),
+		(usize) -1
+	);
 	Assert(BytesRead == Size);
 
 	return Message;
 }
 
 internal vptr
+Wayland_GetObject(u32 ObjectId)
+{
+	wayland_interface *Object = NULL;
+	HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Object);
+	return Object;
+}
+
+internal vptr
 Wayland_HandleNextEvent(void)
 {
+	if (!Wayland_WaitForNextMessage()) return NULL;
+
 	Stack_Push();
-	wayland_message *Message = Wayland_ReadMessage();
+	wayland_message	  *Message = Wayland_ReadMessage();
+	wayland_interface *Object  = NULL;
 
-	wayland_interface *Object;
-	HashMap_Get(&_G.WaylandApi.IdTable, &Message->ObjectId, &Object);
+	if (Message) {
+		Object = Wayland_GetObject(Message->ObjectId);
 
-	if (!Wayland_IsObjectValid(Object)) return NULL;
-	if (Object->HandleEvent) Object->HandleEvent(Object, Message);
+		if (Object && Object->HandleEvent) Object->HandleEvent(Object, Message);
+	}
 
 	Stack_Pop();
 	return Object;
@@ -1566,7 +2019,7 @@ Wayland_HandleNextEvent(void)
 	MAC_CONCAT(Arg, ITER) = MAC_CONCAT(Wayland_Parse, ARG)(NAME, &I)
 #define MAC_FOR_FUNC_MAKE_PARSE_ARG(NAME, ARG, ITER) \
 	MAC_CONCAT(Arg, ITER).ARG
-#define TRYCALL(OBJECT, VERSION, NAME, MESSAGE, ...)                                                                          \
+#define TRYCALL(OBJECT, MESSAGE, VERSION, NAME, ...)                                                                          \
 	if (OBJECT->NAME && OBJECT->Header.Version >= VERSION) {                                                                  \
 		usize I = 0;                                                                                                          \
 		__VA_OPT__(wayland_primitive MAC_FOREACH(MESSAGE, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_MAKE_PARSE_PRIM, __VA_ARGS__);)        \
@@ -1615,19 +2068,19 @@ Wayland_ParseString(wayland_message *Message, usize *I)
 	return Prim;
 }
 
-// internal wayland_primitive
-// Wayland_ParseArray(wayland_message *Message, usize *I)
-// {
-// 	wayland_primitive Prim;
-//
-// 	Prim.Array.Size	 = Message->Data[*I];
-// 	*I				+= 1;
-//
-// 	Prim.Array.Data	 = &Message->Data[*I];
-// 	*I				+= (Prim.Array.Size + 3) / 4;
-//
-// 	return Prim;
-// }
+internal wayland_primitive
+Wayland_ParseArray(wayland_message *Message, usize *I)
+{
+	wayland_primitive Prim;
+
+	Prim.Array.Size	 = Message->Data[*I];
+	*I				+= 1;
+
+	Prim.Array.Data	 = &Message->Data[*I];
+	*I				+= (Prim.Array.Size + 3) / 4;
+
+	return Prim;
+}
 
 internal wayland_primitive
 Wayland_ParseObject(wayland_message *Message, usize *I)
@@ -1646,18 +2099,11 @@ Wayland_ParseObject(wayland_message *Message, usize *I)
 internal wayland_display *
 Wayland_GetDisplay()
 {
-	if (_G.WaylandApi.IdTable.EntryCount) {
-		wayland_display *Display;
-		u32				 Id = WAYLAND_DISPLAY_ID;
-		HashMap_Get(&_G.WaylandApi.IdTable, &Id, &Display);
-		if (!Wayland_IsObjectValid(Display)
-			|| Display->Header.Type != WAYLAND_OBJECT_TYPE_DISPLAY)
-			return NULL;
-		return Display;
-	} else {
-		_G.WaylandApi.NextObjectId = WAYLAND_DISPLAY_ID;
-		return Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY, 1);
-	}
+	wayland_display *Display = Wayland_GetObject(WAYLAND_DISPLAY_ID);
+	if (Display) return Display;
+
+	_G.WaylandApi.NextObjectId = WAYLAND_DISPLAY_ID;
+	return Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY, 1);
 }
 
 #define DEPRECATED FPrintL("Warning: %s is deprecated", CString((c08*) __func__));
@@ -1668,9 +2114,9 @@ Wayland_Display_HandleEvent(wayland_display *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
 		case 0:
-			TRYCALL(This, 1, HandleError, Message, Object, Uint, String);
+			TRYCALL(This, Message, 1, HandleError, Object, Uint, String);
 			break;
-		case 1: TRYCALL(This, 1, HandleDeleteId, Message, Uint); break;
+		case 1: TRYCALL(This, Message, 1, HandleDeleteId, Uint); break;
 	}
 }
 
@@ -1699,9 +2145,9 @@ Wayland_Registry_HandleEvent(wayland_registry *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
 		case 0:
-			TRYCALL(This, 1, HandleGlobal, Message, Uint, String, Uint);
+			TRYCALL(This, Message, 1, HandleGlobal, Uint, String, Uint);
 			break;
-		case 1: TRYCALL(This, 1, HandleGlobalRemove, Message, Uint); break;
+		case 1: TRYCALL(This, Message, 1, HandleGlobalRemove, Uint); break;
 	}
 }
 
@@ -1732,7 +2178,10 @@ internal void
 Wayland_Callback_HandleEvent(wayland_callback *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
-		case 0: TRYCALL(This, 1, HandleDone, Message, Uint); break;
+		case 0:
+			TRYCALL(This, Message, 1, HandleDone, Uint);
+			Wayland_DestroyObject(This);
+			break;
 	}
 }
 
@@ -1756,6 +2205,96 @@ Wayland_Compositor_CreateRegion(wayland_compositor *This)
 	return Region;
 }
 
+internal wayland_buffer *
+Wayland_ShmPool_CreateBuffer(
+	wayland_shm_pool  *This,
+	s32				   Offset,
+	s32				   Width,
+	s32				   Height,
+	s32				   Stride,
+	wayland_shm_format Format
+)
+{
+	VERSION(1);
+	wayland_buffer *Buffer =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_BUFFER);
+	if (Buffer)
+		Wayland_SendMessage(
+			This,
+			0,
+			"oiiiii",
+			Buffer,
+			Offset,
+			Width,
+			Height,
+			Stride,
+			Format
+		);
+	return Buffer;
+}
+
+internal b08
+Wayland_ShmPool_Destroy(wayland_shm_pool *This)
+{
+	VERSION(1);
+	Wayland_SendMessage(This, 1, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
+internal b08
+Wayland_ShmPool_Resize(wayland_shm_pool *This, s32 Size)
+{
+	VERSION(1);
+	Wayland_SendMessage(This, 2, "i", Size);
+	return 1;
+}
+
+internal void
+Wayland_Shm_HandleEvents(wayland_shm *This, wayland_message *Message)
+{
+	switch (Message->Opcode) {
+		case 0: TRYCALL(This, Message, 1, HandleFormat, Uint); break;
+	}
+}
+
+internal wayland_shm_pool *
+Wayland_Shm_CreatePool(wayland_shm *This, s32 FileDescriptor, s32 Size)
+{
+	VERSION(1)
+	wayland_shm_pool *ShmPool =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_SHM_POOL);
+	if (ShmPool)
+		Wayland_SendMessage(This, 0, "ofi", ShmPool, FileDescriptor, Size);
+	return ShmPool;
+}
+
+internal b08
+Wayland_Shm_Release(wayland_shm *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 1, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
+internal void
+Wayland_Buffer_HandleEvents(wayland_buffer *This, wayland_message *Message)
+{
+	switch (Message->Opcode) {
+		case 0: TRYCALL(This, Message, 1, HandleRelease); break;
+	}
+}
+
+internal b08
+Wayland_Buffer_Destroy(wayland_buffer *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
 internal wayland_shell_surface *
 Wayland_Shell_GetShellSurface(wayland_shell *This, wayland_surface *Surface)
 {
@@ -1773,11 +2312,11 @@ Wayland_ShellSurface_HandleEvent(
 )
 {
 	switch (Message->Opcode) {
-		case 0: TRYCALL(This, 1, HandlePing, Message, Uint); break;
+		case 0: TRYCALL(This, Message, 1, HandlePing, Uint); break;
 		case 1:
-			TRYCALL(This, 1, HandleConfigure, Message, Uint, Sint, Sint);
+			TRYCALL(This, Message, 1, HandleConfigure, Uint, Sint, Sint);
 			break;
-		case 2: TRYCALL(This, 1, HandlePopupDone, Message); break;
+		case 2: TRYCALL(This, Message, 1, HandlePopupDone); break;
 	}
 }
 
@@ -1906,13 +2445,13 @@ internal void
 Wayland_Surface_HandleEvent(wayland_surface *This, wayland_message *Message)
 {
 	switch (Message->Opcode) {
-		case 0: TRYCALL(This, 1, HandleEnter, Message, Object); break;
-		case 1: TRYCALL(This, 1, HandleLeave, Message, Object); break;
+		case 0: TRYCALL(This, Message, 1, HandleEnter, Object); break;
+		case 1: TRYCALL(This, Message, 1, HandleLeave, Object); break;
 		case 2:
-			TRYCALL(This, 6, HandlePreferredBufferScale, Message, Sint);
+			TRYCALL(This, Message, 6, HandlePreferredBufferScale, Sint);
 			break;
 		case 3:
-			TRYCALL(This, 6, HandlePreferredBufferTransform, Message, Uint);
+			TRYCALL(This, Message, 6, HandlePreferredBufferTransform, Uint);
 			break;
 	}
 }
@@ -1922,7 +2461,7 @@ Wayland_Surface_Destroy(wayland_surface *This)
 {
 	VERSION(1)
 	Wayland_SendMessage(This, 0, "");
-	Wayland_DeleteObject(This);
+	Wayland_DestroyObject(This);
 	return 1;
 }
 
@@ -2033,7 +2572,7 @@ Wayland_Fixes_Destroy(wayland_fixes *This)
 {
 	VERSION(1)
 	Wayland_SendMessage(This, 0, "");
-	Wayland_DeleteObject(This);
+	Wayland_DestroyObject(This);
 	return 1;
 }
 
@@ -2042,7 +2581,430 @@ Wayland_Fixes_DestroyRegistry(wayland_fixes *This, wayland_registry *Registry)
 {
 	VERSION(1)
 	Wayland_SendMessage(This, 1, "o", Registry);
-	Wayland_DeleteObject(Registry);
+	Wayland_DestroyObject(Registry);
+	return 1;
+}
+
+internal void
+Wayland_XdgWmBase_HandleEvents(
+	wayland_xdg_wm_base *This,
+	wayland_message		*Message
+)
+{
+	switch (Message->Opcode) {
+		case 0: TRYCALL(This, Message, 1, HandlePing, Uint); break;
+	}
+}
+
+internal b08
+Wayland_XdgWmBase_Destroy(wayland_xdg_wm_base *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
+internal wayland_xdg_positioner *
+Wayland_XdgWmBase_CreatePositioner(wayland_xdg_wm_base *This)
+{
+	VERSION(1)
+	wayland_xdg_positioner *XdgPositioner =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_XDG_POSITIONER);
+	if (XdgPositioner) Wayland_SendMessage(This, 1, "o", XdgPositioner);
+	return XdgPositioner;
+}
+
+internal wayland_xdg_surface *
+Wayland_XdgWmBase_GetXdgSurface(
+	wayland_xdg_wm_base *This,
+	wayland_surface		*Surface
+)
+{
+	VERSION(1)
+	wayland_xdg_surface *XdgSurface =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_XDG_SURFACE);
+	if (XdgSurface) Wayland_SendMessage(This, 2, "oo", XdgSurface, Surface);
+	return XdgSurface;
+}
+
+internal b08
+Wayland_XdgWmBase_Pong(wayland_xdg_wm_base *This, u32 Serial)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 3, "i", Serial);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_Destroy(wayland_xdg_positioner *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetSize(
+	wayland_xdg_positioner *This,
+	s32						Width,
+	s32						Height
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 1, "ii", Width, Height);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetAnchorRect(
+	wayland_xdg_positioner *This,
+	s32						X,
+	s32						Y,
+	s32						Width,
+	s32						Height
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 2, "iiii", X, Y, Width, Height);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetAnchor(
+	wayland_xdg_positioner		 *This,
+	wayland_xdg_positioner_anchor Anchor
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 3, "i", Anchor);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetGravity(
+	wayland_xdg_positioner		  *This,
+	wayland_xdg_positioner_gravity Gravity
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 4, "i", Gravity);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetConstraintAdjustment(
+	wayland_xdg_positioner						*This,
+	wayland_xdg_positioner_constraint_adjustment ConstraintAdjustment
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 5, "i", ConstraintAdjustment);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetOffset(wayland_xdg_positioner *This, s32 X, s32 Y)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 6, "ii", X, Y);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetReactive(wayland_xdg_positioner *This)
+{
+	VERSION(3)
+	Wayland_SendMessage(This, 7, "");
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetParentSize(
+	wayland_xdg_positioner *This,
+	s32						ParentWidth,
+	s32						ParentHeight
+)
+{
+	VERSION(3)
+	Wayland_SendMessage(This, 8, "ii", ParentWidth, ParentHeight);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPositioner_SetParentConfigure(
+	wayland_xdg_positioner *This,
+	u32						Serial
+)
+{
+	VERSION(3)
+	Wayland_SendMessage(This, 9, "i", Serial);
+	return 1;
+}
+
+internal void
+Wayland_XdgSurface_HandleEvents(
+	wayland_xdg_surface *This,
+	wayland_message		*Message
+)
+{
+	switch (Message->Opcode) {
+		case 0: TRYCALL(This, Message, 1, HandleConfigure, Uint); break;
+	}
+}
+
+internal b08
+Wayland_XdgSurface_Destroy(wayland_xdg_surface *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
+internal wayland_xdg_toplevel *
+Wayland_XdgSurface_GetToplevel(wayland_xdg_surface *This)
+{
+	VERSION(1)
+	wayland_xdg_toplevel *XdgToplevel =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL);
+	if (XdgToplevel) Wayland_SendMessage(This, 1, "o", XdgToplevel);
+	return XdgToplevel;
+}
+
+internal wayland_xdg_popup *
+Wayland_XdgSurface_GetPopup(
+	wayland_xdg_surface	   *This,
+	wayland_xdg_surface	   *Parent,
+	wayland_xdg_positioner *Positioner
+)
+{
+	VERSION(1)
+	wayland_xdg_popup *XdgPopup =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_XDG_POPUP);
+	if (XdgPopup)
+		Wayland_SendMessage(This, 2, "ooo", XdgPopup, Parent, Positioner);
+	return XdgPopup;
+}
+
+internal void
+Wayland_XdgToplevel_HandleEvents(
+	wayland_xdg_toplevel *This,
+	wayland_message		 *Message
+)
+{
+	switch (Message->Opcode) {
+		case 0:
+			TRYCALL(This, Message, 1, HandleConfigure, Sint, Sint, Array);
+			break;
+		case 1: TRYCALL(This, Message, 1, HandleClose); break;
+		case 2:
+			TRYCALL(This, Message, 4, HandleConfigureBounds, Sint, Sint);
+			break;
+		case 3: TRYCALL(This, Message, 5, HandleWmCapabilities, Array); break;
+	}
+}
+
+internal b08
+Wayland_XdgToplevel_Destroy(wayland_xdg_toplevel *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetParent(
+	wayland_xdg_toplevel *This,
+	wayland_xdg_toplevel *Parent
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 1, "o", Parent);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetTitle(wayland_xdg_toplevel *This, string Title)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 2, "s", Title);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetAppId(wayland_xdg_toplevel *This, string AppId)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 3, "s", AppId);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_ShowWindowMenu(
+	wayland_xdg_toplevel *This,
+	wayland_seat		 *Seat,
+	u32					  Serial,
+	s32					  X,
+	s32					  Y
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 4, "oiii", Seat, Serial, X, Y);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_Move(
+	wayland_xdg_toplevel *This,
+	wayland_seat		 *Seat,
+	u32					  Serial
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 5, "oi", Seat, Serial);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_Resize(
+	wayland_xdg_toplevel			*This,
+	wayland_seat					*Seat,
+	u32								 Serial,
+	wayland_xdg_toplevel_resize_edge Edges
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 6, "oii", Seat, Serial, Edges);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetMaxSize(
+	wayland_xdg_toplevel *This,
+	s32					  Width,
+	s32					  Height
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 7, "ii", Width, Height);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetMinSize(
+	wayland_xdg_toplevel *This,
+	s32					  Width,
+	s32					  Height
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 8, "ii", Width, Height);
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetMaximized(wayland_xdg_toplevel *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 9, "");
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_UnsetMaximized(wayland_xdg_toplevel *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 10, "");
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetFullscreen(wayland_xdg_toplevel *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 11, "");
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_UnsetFullscreen(wayland_xdg_toplevel *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 12, "");
+	return 1;
+}
+
+internal b08
+Wayland_XdgToplevel_SetMinimized(wayland_xdg_toplevel *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 13, "");
+	return 1;
+}
+
+internal b08
+Wayland_XdgSurface_SetWindowGeometry(
+	wayland_xdg_surface *This,
+	s32					 X,
+	s32					 Y,
+	s32					 Width,
+	s32					 Height
+)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 3, "iiii", X, Y, Width, Height);
+	return 1;
+}
+
+internal b08
+Wayland_XdgSurface_AckConfigure(wayland_xdg_surface *This, u32 Serial)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 4, "i", Serial);
+	return 1;
+}
+
+internal void
+Wayland_XdgPopup_HandleEvents(wayland_xdg_popup *This, wayland_message *Message)
+{
+	switch (Message->Opcode) {
+		case 0:
+			TRYCALL(This, Message, 1, HandleConfigure, Sint, Sint, Sint, Sint);
+			break;
+		case 1: TRYCALL(This, Message, 1, HandlePopupDone); break;
+		case 2: TRYCALL(This, Message, 3, HandleRepositioned, Uint); break;
+	}
+}
+
+internal b08
+Wayland_XdgPopup_Destroy(wayland_xdg_popup *This)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "");
+	Wayland_DestroyObject(This);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPopup_Grab(wayland_xdg_popup *This, wayland_seat *Seat, u32 Serial)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 1, "oi", Seat, Serial);
+	return 1;
+}
+
+internal b08
+Wayland_XdgPopup_Reposition(
+	wayland_xdg_popup	   *This,
+	wayland_xdg_positioner *Positioner,
+	u32						Token
+)
+{
+	VERSION(3)
+	Wayland_SendMessage(This, 2, "oi", Positioner, Token);
 	return 1;
 }
 

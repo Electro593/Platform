@@ -537,7 +537,17 @@ Platform_CmpFileTime(datetime A, datetime B)
 }
 
 internal b08
-Platform_ConnectToLocalSocket(string Name, file_handle *FileHandleOut)
+Platform_CreateThread(
+	thread_handle *ThreadHandle,
+	s32 (*Callback)(vptr UserData),
+	vptr UserData
+)
+{
+	return FALSE;
+}
+
+internal b08
+Platform_JoinThread(thread_handle ThreadHandle)
 {
 	return FALSE;
 }

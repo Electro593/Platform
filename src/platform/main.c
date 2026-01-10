@@ -28,10 +28,12 @@ global platform_state _G;
 global platform_funcs _F;
 #endif
 
-#include <platform/platform.c>
-
 #if defined(_WIN32)
+#include <platform/win32/win32.c>
+#include <platform/platform.c>
 #elif defined(_LINUX)
+#include <platform/linux/linux.c>
+#include <platform/platform.c>
 #include <platform/linux/wayland/api.c>
 #include <platform/linux/wayland/wayland.c>
 #endif

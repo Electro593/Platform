@@ -149,6 +149,17 @@ typedef __builtin_va_list va_list;
 #define VA_Copy(Dest, Src) __builtin_va_copy(Dest, Src)
 #define VA_End(Args) __builtin_va_end(Args)
 
+intrin usize
+Intrin_CompareExchange(usize *Mutex, usize Target, usize NewValue)
+{
+	usize OldValue = Target;
+	__asm__("lock cmpxchg %1, %2"
+			: "+a"(Target)
+			: "r"(NewValue), "m"(Mutex)
+			: "a");
+	return OldValue;
+}
+
 #endif
 
 #endif

@@ -18,31 +18,27 @@ __asm__(
 	"	lea 16(%rsp,%rdi,8), %rdx  \n"
 	"	call Platform_CEntry       \n"
 	"	ud2                        \n"
+	"	                           \n"
+	".globl Platform_ThreadThunk   \n"
+	"Platform_ThreadThunk:         \n"
+	"	pop %rsi                   \n"
+	"	pop %rdi                   \n"
+	"	pop %rax                   \n"
+	"	sub $16, %rsp              \n"
+	"	mov %rsp, %rbp             \n"
+	"	call *%rax                 \n"
+	"	mov %rax, %rdi             \n"
+	"	call Sys_Exit              \n"
+	"	ud2                        \n"
 );
 
 #endif
 
-#define CHECK(Status) ((ssize)(Status) >= 0 || (ssize)(Status) < -4096)
-
 #include <platform/main.c>
 
-#ifdef _X64
+extern s32 Platform_ThreadThunk(void);
 
-// rdi, rsi, rdx, rcx, r8, r9 -> rdi, rsi, rdx, r10, r8, r9
-#define SYSCALL(ID, Name, ReturnType, ...)     \
-	internal ReturnType __attribute__((naked)) \
-	Sys_##Name(__VA_ARGS__) {                  \
-		__asm__ (                              \
-			"mov $"#ID", %eax  \n"             \
-			"mov %rcx, %r10    \n"             \
-			"syscall           \n"             \
-			"ret               \n"             \
-		);                                     \
-	}
-LINUX_SYSCALLS
-#undef SYSCALL
-
-#endif
+#define CHECK(Status) ((ssize)(Status) >= 0 || (ssize)(Status) < -4096)
 
 #define VALIDATE(Result, ErrorMessage) \
 	do { \
@@ -104,32 +100,47 @@ Platform_GetFileLength(file_handle FileHandle)
 }
 
 internal b08
-Platform_ConnectToLocalSocket(string Name, file_handle *FileHandleOut)
+Platform_CreateThread(
+	thread_handle *ThreadHandle,
+	s32 (*Callback)(vptr UserData),
+	vptr UserData
+)
 {
-	Assert(FileHandleOut);
-	if (Name.Length >= sizeof((sys_sockaddr_unix) {}.Data)) return FALSE;
+	usize StackSize = 8 * 1024 * 1024;
+	vptr  Stack		= Platform_AllocateMemory(StackSize);
 
-	s32 FileDescriptor =
-		Sys_Socket(SYS_ADDRESS_FAMILY_UNIX, SYS_SOCKET_STREAM, 0);
-	if (FileDescriptor < 0) return FALSE;
+	sys_clone_flags Flags = SYS_CLONE_FILES
+						  | SYS_CLONE_FS
+						  | SYS_CLONE_IO
+						  | SYS_CLONE_SIGHAND
+						  | SYS_CLONE_THREAD
+						  | SYS_CLONE_VM;
 
-	sys_sockaddr_unix Address;
-	Address.Family = SYS_ADDRESS_FAMILY_UNIX;
-	Mem_Cpy(Address.Data, Name.Text, Name.Length);
-	Address.Data[Name.Length] = 0;
+#ifdef _X64
+	vptr  StackTop = Stack + StackSize - 4 * sizeof(vptr);
+	vptr *Words	   = StackTop;
+	Words[3]	   = Callback;
+	Words[2]	   = UserData;
+	Words[1]	   = 0;
+	Words[0]	   = Platform_ThreadThunk;
+#endif
 
-	s32 Result = Sys_Connect(
-		FileDescriptor,
-		(sys_sockaddr *) &Address,
-		sizeof(sys_sockaddr_unix)
-	);
-	if (Result < 0) {
-		Sys_Close(FileDescriptor);
-		return FALSE;
-	}
+	sys_pid ProcessId = Sys_Clone(Flags, StackTop, NULL, 0, NULL);
+	if (ProcessId < 0) return FALSE;
 
-	FileHandleOut->FileDescriptor = FileDescriptor;
+	*ThreadHandle = (thread_handle) { .ThreadId	 = ProcessId,
+									  .Stack	 = Stack,
+									  .StackSize = StackSize };
 	return TRUE;
+}
+
+internal b08
+Platform_JoinThread(thread_handle ThreadHandle)
+{
+	s32 Status;
+	s32 Result = Sys_Wait4(ThreadHandle.ThreadId, &Status, 0, NULL);
+	if (Result) Platform_FreeMemory(ThreadHandle.Stack, ThreadHandle.StackSize);
+	return !Result;
 }
 
 internal b08

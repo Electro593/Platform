@@ -7,6 +7,8 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
 #define INVALID_HANDLE_VALUE ((vptr)(s64)-1)
 
 #define BRUSH_BLACK 4
@@ -1188,13 +1190,25 @@ typedef struct win32_find_data_a {
     IMPORT(b08,                         SwapIntervalEXT,         s32 Num)
 
 #define IMPORT(Module, ReturnType, Name, ...) \
-    typedef ReturnType func_Win32_##Name(__VA_ARGS__); \
-    global func_Win32_##Name *Win32_##Name;
+    typedef ReturnType func_Win32_##Name(__VA_ARGS__);
 #define X WIN32_FUNCS
 #include <x.h>
 
 #define IMPORT(ReturnType, Name, ...) \
-    typedef ReturnType func_WGL_##Name(__VA_ARGS__); \
-    global func_WGL_##Name *WGL_##Name;
+    typedef ReturnType func_WGL_##Name(__VA_ARGS__);
 #define X WGL_FUNCS_TYPE_1 WGL_FUNCS_TYPE_2
 #include <x.h>
+
+#endif
+
+#ifdef INCLUDE_SOURCE
+
+#define IMPORT(Module, ReturnType, Name, ...) global func_Win32_##Name *Win32_##Name;
+#define X WIN32_FUNCS
+#include <x.h>
+
+#define IMPORT(ReturnType, Name, ...) global func_WGL_##Name *WGL_##Name;
+#define X WGL_FUNCS_TYPE_1 WGL_FUNCS_TYPE_2
+#include <x.h>
+
+#endif
