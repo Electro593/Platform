@@ -90,6 +90,39 @@ typedef enum sys_send_flags {
 	SYS_MSG_NOSIGNAL = 0x4000,
 } sys_send_flags;
 
+typedef struct sys_iovec {
+	vptr  Base;
+	usize Length;
+} sys_iovec;
+
+typedef struct sys_msghdr {
+	vptr	   Name;
+	usize	   NameSize;
+	sys_iovec *IOVectors;
+	usize	   IOVectorCount;
+	vptr	   Control;
+	usize	   ControlSize;
+	s32		   Flags;
+} sys_msghdr;
+
+typedef enum sys_cmsg_level {
+	SYS_SOL_SOCKET = 1,
+} sys_cmsg_level;
+
+typedef enum sys_cmsg_type {
+	SYS_SCM_RIGHTS		= 1,
+	SYS_SCM_CREDENTIALS = 2,
+	SYS_SCM_SECURITY	= 3,
+	SYS_SCM_PIDFD		= 4,
+} sys_cmsg_type;
+
+typedef struct sys_cmsghdr {
+	usize		   Length;
+	sys_cmsg_level Level;
+	sys_cmsg_type  Type;
+	u08			   Data[];
+} sys_cmsghdr;
+
 typedef struct sys_stat {
 	u64 DeviceID;
 	u64 Inode;
@@ -174,6 +207,13 @@ typedef enum sys_clone_flags {
 	SYS_CLONE_IO	  = 0x80000000,
 } sys_clone_flags;
 
+typedef enum sys_futex_op {
+	SYS_FUTEX_WAIT = 0,
+	SYS_FUTEX_WAKE = 1,
+
+	SYS_FUTEX_PRIVATE_FLAG = 0x80,
+} sys_futex_op;
+
 #ifndef _USE_LOADER
 extern vptr dlopen(c08 *Path, s32 Flags);
 extern vptr dlsym(vptr Handle, c08 *Symbol);
@@ -194,17 +234,23 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(41,  Socket,       s32,     s32 Domain, s32 Type, s32 Protocol) \
 	SYSCALL(42,  Connect,      s32,     s32 SocketFileDescriptor, sys_sockaddr *Address, u32 AddressLength) \
 	SYSCALL(44,  SendTo,       ssize,   s32 SocketFileDescriptor, vptr Buffer, usize Size, sys_send_flags Flags, sys_sockaddr *Address, u32 AddressLength) \
+	SYSCALL(46,  SendMsg,      ssize,   s32 SocketFileDescriptor, sys_msghdr *Message, sys_send_flags Flags) \
 	SYSCALL(56,  Clone,        sys_pid, sys_clone_flags Flags, vptr Stack, s32 *ParentTidOut, usize TLS, s32 *ChildTidOut) \
 	SYSCALL(57,  Fork,         sys_pid, void) \
 	SYSCALL(60,  Exit,         void,    s32 ErrorCode) \
 	SYSCALL(61,  Wait4,        sys_pid, sys_pid ProcessId, s32 *StatusOut, s32 Options, sys_rusage *ResourceUsageOut) \
+	SYSCALL(76,  Truncate,     s32,     c08 *Path, usize Length) \
+	SYSCALL(77,  FTruncate,    s32,     s32 FileDescriptor, usize Length) \
+	SYSCALL(186, GetTid,       s32,     void) \
+	SYSCALL(202, Futex,        s32,     u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
 	SYSCALL(228, GetClockTime, s32,     s32 ClockID, sys_timespec *Timespec) \
 	SYSCALL(229, GetClockRes,  s32,     s32 ClockID, sys_timespec *Timespec) \
+	SYSCALL(319, MemfdCreate,  s32,     c08 *Name, u32 Flags) \
 	//
 
-#endif // defined(_X64)
+#endif	// defined(_X64)
 
-#endif // defined(INCLUDE_HEADER)
+#endif	// defined(INCLUDE_HEADER)
 
 #ifdef INCLUDE_SOURCE
 
@@ -224,6 +270,6 @@ extern s32	dlclose(vptr Handle);
 LINUX_SYSCALLS
 #undef SYSCALL
 
-#endif // defined(_X64)
+#endif	// defined(_X64)
 
-#endif // defined(INCLUDE_SOURCE)
+#endif	// defined(INCLUDE_SOURCE)

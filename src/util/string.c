@@ -430,7 +430,6 @@ typedef struct fstring_format_list {
 internal string
 CLEString(vptr Text, usize Length, string_encoding Encoding)
 {
-
 	Assert(Encoding < STRING_ENCODING_COUNT);
 
 	string String;
@@ -1595,7 +1594,6 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 
 	// First, we need to order the params by collecting them into a temporary
 	// list
-	Stack_Push();
 	fstring_param *Params =
 		Stack_Allocate(FormatList->ParamCount * sizeof(fstring_param));
 	Mem_Set(Params, 0, FormatList->ParamCount * sizeof(fstring_param));
@@ -1630,7 +1628,6 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 		continue;
 
 	redefined:
-		Stack_Pop();
 		FormatList->FormatString = Format->SpecifierString;
 		FormatList->FormatCount	 = I;
 		return FSTRING_FORMAT_PARAM_REDEFINED;
@@ -1701,7 +1698,7 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 
 			// We can't allow skipping any, sadly, similarly because C varargs
 			// suck
-			default: Stack_Pop(); return FSTRING_FORMAT_INDEX_NOT_PRESENT;
+			default: return FSTRING_FORMAT_INDEX_NOT_PRESENT;
 		}
 	}
 
@@ -1717,7 +1714,6 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 			// If width is negative, it means the format is left justified
 			if (Format->Width < 0) {
 				if (Format->Width == 0x80000000) {
-					Stack_Pop();
 					FormatList->FormatString = Format->SpecifierString;
 					FormatList->FormatCount	 = I;
 					return FSTRING_FORMAT_INT_OVERFLOW;
@@ -1730,7 +1726,6 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 		if (Format->Type & FSTRING_FORMAT_FLAG_PARAM_PRECISION)
 			Format->Precision = Params[Format->PrecisionIndex - 1].Signed;
 	}
-	Stack_Pop();
 	return FSTRING_FORMAT_VALID;
 }
 
@@ -2351,8 +2346,6 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 
 	if (IsHex) return FString_WriteHexFloat(Format, Buffer);
 
-	Stack_Push();
-
 	u32	  PadCodepoint = PadZero && !IsLeft ? '0' : ' ';
 	usize PadCharLen = String_GetCodepointLength(PadCodepoint, Buffer.Encoding);
 
@@ -2647,7 +2640,6 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 	Format->ActualWidth = PadCount * PadCharLen + ContentLength;
 
 	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) {
-		Stack_Pop();
 		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
 	}
 
@@ -2705,7 +2697,6 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 	if (IsLeft)
 		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));
 
-	Stack_Pop();
 	return FSTRING_FORMAT_VALID;
 }
 
@@ -2931,7 +2922,6 @@ FVString(string Format, va_list Args)
 // The parsing failed, so we'll return a copy of the original format string
 // and log an error
 failed:
-	Stack_Push();
 	string ErrorPointer = LString(OriginalFormat.Length + 1);
 	Mem_Set(ErrorPointer.Text, ' ', ErrorPointer.Length);
 	Mem_Set(
@@ -2958,7 +2948,6 @@ failed:
 		),
 		FALSE
 	);
-	Stack_Pop();
 
 	string Result = OriginalFormat;
 	Result.Text	  = Stack_Allocate(Result.Length);
@@ -3127,8 +3116,6 @@ FString(string Format, ...)
 internal void
 FPrint(string Format, ...)
 {
-	Stack_Push();
-
 	va_list Args;
 	VA_Start(Args, Format);
 
@@ -3137,7 +3124,6 @@ FPrint(string Format, ...)
 	VA_End(Args);
 
 	Platform_WriteConsole(Result);
-	Stack_Pop();
 }
 
 #endif	// SECTION_STRING_FORMATTING
@@ -3598,7 +3584,6 @@ FPrint(string Format, ...)
 		Assert(FormatList.Formats[0].ValueIndex == 1);                                                      \
 		Assert(FormatList.Formats[1].Type == FSTRING_FORMAT_TYPE_STR);                                      \
 		Assert(FormatList.Formats[1].ValueIndex == 2);                                                      \
-		Assert((usize) Stack_GetCursor() == StackCursor + 2 * sizeof(fstring_format) + sizeof(string));     \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, NoAllocationIfNoFormats, (                                              \
 		usize StackCursor = (usize) Stack_GetCursor();                                                      \
@@ -3614,7 +3599,6 @@ FPrint(string Format, ...)
 		Assert(FormatList.Formats == NULL);                                                                 \
 		Assert(FormatList.ExtraDataSize == 0);                                                              \
 		Assert(FormatList.ExtraData == NULL);                                                               \
-		Assert((usize) Stack_GetCursor() == StackCursor);                                                   \
 	))                                                                                                      \
 	TEST(FString_ParseFormatString, ExplicitParamIndexesAreCorrect, (                                       \
 		string Cursor = CStringL("%2$d%1$s%4$*3$.*3$f");                                                    \
@@ -3688,7 +3672,6 @@ FPrint(string Format, ...)
 		Assert(Result == FSTRING_FORMAT_PARAM_REDEFINED);                                                   \
 		Assert(String_Cmp(FormatList.FormatString, CStringL("%1$.*1$f")) == 0);                             \
 		Assert(FormatList.FormatCount == 1);                                                                \
-		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsRedefinedParamsBetweenSpecifiers, (                          \
 		string FormatStr = CStringL("%2$d %2$.*1$f %%");                                                    \
@@ -3710,7 +3693,6 @@ FPrint(string Format, ...)
 		Assert(Result == FSTRING_FORMAT_INDEX_NOT_PRESENT);                                                 \
 		Assert(String_Cmp(FormatList.FormatString, FormatStr) == 0);                                        \
 		Assert(FormatList.FormatCount == 2);                                                                \
-		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, UpdatesValuesAndReturnsValid, (                                     \
 		string FormatStr = CStringL("%*d %s");                                                              \
@@ -3727,7 +3709,6 @@ FPrint(string Format, ...)
 		Assert(FormatList.ExtraData = FormatList.Formats[1].Value.String + 1);                              \
 		Assert(String_Cmp(*FormatList.Formats[1].Value.String, CStringL("Hi!")) == 0);                      \
 		Assert(FormatList.FormatCount == 2);                                                                \
-		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_UpdateParamReferences, ReportsOverflowedWidthParam, (                                      \
 		string FormatStr = CStringL("%*d %s");                                                              \
@@ -3741,7 +3722,6 @@ FPrint(string Format, ...)
 		Assert(FormatList.Formats[0].Value.Signed == 23);                                                   \
 		Assert(FormatList.Formats[0].Width == S32_MIN);                                                     \
 		Assert(FormatList.FormatCount == 0);                                                                \
-		Assert((usize) Stack_GetCursor() == Cursor);                                                        \
 	))                                                                                                      \
 	TEST(FString_WriteString, UpdatesLengthAndReturnsWithEmptyBuffer, (                                     \
 		string String = CStringL("Hello!");                                                                 \

@@ -306,6 +306,8 @@ typedef enum file_mode {
 	INTERN(void,             Platform_CloseModuleBackend,    platform_module *Module) \
 	EXPORT(b08,              Platform_CreateThread,          thread_handle *ThreadHandle, s32 (*Callback)(vptr UserParam), vptr UserParam) \
 	EXPORT(b08,              Platform_JoinThread,            thread_handle ThreadHandle) \
+	EXPORT(void,             Platform_LockMutex,             u32 *Mutex) \
+	EXPORT(void,             Platform_UnlockMutex,           u32 *Mutex) \
 	EXPORT(string,           Platform_GetEnvParam,           string Name) \
 	EXPORT(s08,              Platform_CmpFileTime,           datetime A, datetime B) \
 	EXPORT(b08,              Platform_OpenFile,              file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \

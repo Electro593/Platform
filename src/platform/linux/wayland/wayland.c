@@ -12,6 +12,8 @@
 typedef struct wayland_state {
 	thread_handle EventThread;
 
+	u32 SyncLock;
+
 	wayland_display		*Display;
 	wayland_registry	*Registry;
 	wayland_compositor	*Compositor;
@@ -40,6 +42,23 @@ typedef struct wayland_state {
 #define CALL(Object, Func, ...) (Object)->Func((Object) __VA_OPT__(,) __VA_ARGS__)
 
 internal void
+Wayland_DebugLog(vptr Object, c08 *Format, ...)
+{
+	va_list Args;
+	VA_Start(Args, Format);
+	string Message = FVString(CString(Format), Args);
+	VA_End(Args);
+
+	wayland_interface *Interface = Object;
+	FPrintL(
+		"[Wayland][%s#%d] %s",
+		WaylandNames[Interface->Type],
+		Interface->Id,
+		Message
+	);
+}
+
+internal void
 Wayland_Display_HandleError(
 	wayland_display	  *This,
 	wayland_interface *Object,
@@ -47,19 +66,14 @@ Wayland_Display_HandleError(
 	string			   Message
 )
 {
-	STOP;
-	Platform_WriteError(
-		FStringL(
-			"[Wayland][Display] An error occurred in a %s v%d with id %d: "
-			"Error %d: "
-			"%s\n",
-			WaylandNames[Object->Type],
-			Object->Version,
-			Object->Id,
-			Code,
-			Message
-		),
-		0
+	Wayland_DebugLog(
+		This,
+		"An error occurred in a %s v%d with id %d: Error %d: %s\n",
+		WaylandNames[Object->Type],
+		Object->Version,
+		Object->Id,
+		Code,
+		Message
 	);
 	Wayland_Disconnect();
 }
@@ -67,20 +81,27 @@ Wayland_Display_HandleError(
 internal void
 Wayland_Display_HandleDeleteId(wayland_display *This, u32 Id)
 {
-	FPrintL("[Wayland][Display] Requested to delete id %u\n", Id);
+	Wayland_DebugLog(This, "Requested to delete id %u\n", Id);
 }
 
 internal void
 Wayland_Shm_HandleFormat(wayland_shm *This, wayland_shm_format Format)
 {
-	FPrintL("[Wayland][Shm] Offered pixel format %d\n", Format);
+	Wayland_DebugLog(This, "Offered pixel format %d\n", Format);
+}
+
+internal void
+Wayland_Buffer_HandleRelease(wayland_buffer *This)
+{
+	Wayland_DebugLog(This, "Released by compositor\n");
 }
 
 internal void
 Wayland_Surface_HandleEnter(wayland_surface *This, wayland_output *Output)
 {
-	FPrintL(
-		"[Wayland][Surface] Entering output object with id %d\n",
+	Wayland_DebugLog(
+		This,
+		"Entering output object with id %d\n",
 		Output->Header.Id
 	);
 }
@@ -88,8 +109,9 @@ Wayland_Surface_HandleEnter(wayland_surface *This, wayland_output *Output)
 internal void
 Wayland_Surface_HandleLeave(wayland_surface *This, wayland_output *Output)
 {
-	FPrintL(
-		"[Wayland][Surface] Leaving output object with id %d\n",
+	Wayland_DebugLog(
+		This,
+		"Leaving output object with id %d\n",
 		Output->Header.Id
 	);
 }
@@ -97,7 +119,7 @@ Wayland_Surface_HandleLeave(wayland_surface *This, wayland_output *Output)
 internal void
 Wayland_Surface_HandlePreferredBufferScale(wayland_surface *This, s32 Factor)
 {
-	FPrintL("[Wayland][Surface] Requested scaling factor of %d\n", Factor);
+	Wayland_DebugLog(This, "Requested scaling factor of %d\n", Factor);
 	_G.Wayland.PreferredBufferScale = Factor;
 }
 
@@ -107,22 +129,23 @@ Wayland_Surface_HandlePreferredBufferTransform(
 	u32				 Transform
 )
 {
-	FPrintL("[Wayland][Surface] Requested buffer transform of %u\n", Transform);
+	Wayland_DebugLog(This, "Requested buffer transform of %u\n", Transform);
 	_G.Wayland.PreferredBufferTransform = Transform;
 }
 
 internal void
 Wayland_XdgWmBase_HandlePing(wayland_xdg_wm_base *This, u32 Serial)
 {
-	FPrintL("[Wayland][XdgWmBase] Pinged! Ponging with %u\n", Serial);
+	Wayland_DebugLog(This, "Pinged! Ponging with %u\n", Serial);
 	CALL(This, Pong, Serial);
 }
 
 internal void
 Wayland_XdgSurface_HandleConfigure(wayland_xdg_surface *This, u32 Serial)
 {
-	FPrintL(
-		"[Wayland][XdgSurface] Requested configure. Acknowledging with serial "
+	Wayland_DebugLog(
+		This,
+		"Requested configure. Acknowledging with serial "
 		"%u\n",
 		Serial
 	);
@@ -137,8 +160,9 @@ Wayland_XdgToplevel_HandleConfigure(
 	wayland_array		  States
 )
 {
-	FPrintL(
-		"[Wayland][XdgToplevel] Requested configure with dimensions %dx%d and "
+	Wayland_DebugLog(
+		This,
+		"Requested configure with dimensions %dx%d and "
 		"states:",
 		Width,
 		Height
@@ -151,7 +175,7 @@ Wayland_XdgToplevel_HandleConfigure(
 internal void
 Wayland_XdgToplevel_HandleClose(wayland_xdg_toplevel *This)
 {
-	FPrintL("[Wayland][XdgToplevel] Requested to close\n");
+	Wayland_DebugLog(This, "Requested to close\n");
 	Wayland_Disconnect();
 }
 
@@ -162,8 +186,9 @@ Wayland_XdgToplevel_HandleConfigureBounds(
 	s32					  Height
 )
 {
-	FPrintL(
-		"[Wayland][XdgToplevel] Requested to constrain bounds to %dx%d\n",
+	Wayland_DebugLog(
+		This,
+		"Requested to constrain bounds to %dx%d\n",
 		Width,
 		Height
 	);
@@ -180,7 +205,7 @@ Wayland_XdgToplevel_HandleWmCapabilities(
 	wayland_array		  Capabilities
 )
 {
-	FPrintL("[Wayland][XdgToplevel] Advertized window manager capabilities:");
+	Wayland_DebugLog(This, "Advertized window manager capabilities:");
 	for (usize I = 0; I < Capabilities.Size / 4; I++)
 		FPrintL("%s %d", CString(I ? "," : ""), Capabilities.Data[I]);
 	FPrintL("\n");
@@ -194,8 +219,9 @@ Wayland_Registry_HandleGlobal(
 	u32				  Version
 )
 {
-	FPrintL(
-		"[Wayland][Registry] Handling global %d, named %s v%d\n",
+	Wayland_DebugLog(
+		This,
+		"Handling global %d, named %s v%d\n",
 		Name,
 		Interface,
 		Version
@@ -222,7 +248,7 @@ Wayland_Registry_HandleGlobal(
 internal void
 Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)
 {
-	FPrintL("[Wayland][Registry] Requested to remove global %d\n", Name);
+	Wayland_DebugLog(This, "Requested to remove global %d\n", Name);
 
 	if (_G.Wayland.Compositor && _G.Wayland.Compositor->Header.Name == Name)
 		Wayland_DestroyObject(_G.Wayland.Compositor);
@@ -235,19 +261,31 @@ Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)
 internal s32
 Wayland_EventHandlerThread(vptr Data)
 {
-	while (Wayland_HandleNextEvent());
+	while (Wayland_IsConnected()) {
+		Platform_LockMutex(&_G.Wayland.SyncLock);
+		wayland_message *Message = Wayland_ReadMessage(20);
+		Wayland_HandleMessage(Message);
+		Platform_UnlockMutex(&_G.Wayland.SyncLock);
+	}
 	return 0;
 }
 
 internal void
 Wayland_SyncAndHandleEvents(void)
 {
-	wayland_callback *SyncCallback = CALL(_G.Wayland.Display, Sync);
+	s32 Tid = Sys_GetTid();
+	FPrintL("[%d] Main thread\n", Tid);
 
-	while (TRUE) {
-		vptr Object = Wayland_HandleNextEvent();
+	Platform_LockMutex(&_G.Wayland.SyncLock);
+
+	wayland_callback *SyncCallback = CALL(_G.Wayland.Display, Sync);
+	while (Wayland_IsConnected()) {
+		wayland_message *Message = Wayland_ReadMessage(20);
+		vptr			 Object	 = Wayland_HandleMessage(Message);
 		if (Object == SyncCallback) break;
 	}
+
+	Platform_UnlockMutex(&_G.Wayland.SyncLock);
 }
 
 internal b08
@@ -264,8 +302,6 @@ Wayland_TryInit(void)
 		Registry->HandleGlobalRemove = Wayland_Registry_HandleGlobalRemove;
 		_G.Wayland.Registry			 = Registry;
 
-		Wayland_SyncAndHandleEvents();
-
 		b08 Success = Platform_CreateThread(
 			&_G.Wayland.EventThread,
 			Wayland_EventHandlerThread,
@@ -275,6 +311,8 @@ Wayland_TryInit(void)
 			Wayland_Disconnect();
 			return FALSE;
 		}
+
+		Wayland_SyncAndHandleEvents();
 	}
 
 	return Wayland_IsConnected();
@@ -285,8 +323,14 @@ Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 {
 	if (!Wayland_IsConnected()) return NULL;
 
-	wayland_surface *Surface = CALL(_G.Wayland.Compositor, CreateSurface);
-	if (!Surface) return NULL;
+	wayland_shm_pool	 *ShmPool	  = NULL;
+	wayland_buffer		 *Buffer	  = NULL;
+	wayland_surface		 *Surface	  = NULL;
+	wayland_xdg_surface	 *XdgSurface  = NULL;
+	wayland_xdg_toplevel *XdgToplevel = NULL;
+
+	Surface = CALL(_G.Wayland.Compositor, CreateSurface);
+	if (!Surface) goto failed;
 	Surface->HandleEnter = Wayland_Surface_HandleEnter;
 	Surface->HandleLeave = Wayland_Surface_HandleLeave;
 	Surface->HandlePreferredBufferScale =
@@ -294,20 +338,12 @@ Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 	Surface->HandlePreferredBufferTransform =
 		Wayland_Surface_HandlePreferredBufferTransform;
 
-	wayland_xdg_surface *XdgSurface =
-		CALL(_G.Wayland.XdgWmBase, GetXdgSurface, Surface);
-	if (!XdgSurface) {
-		CALL(Surface, Destroy);
-		return NULL;
-	}
+	XdgSurface = CALL(_G.Wayland.XdgWmBase, GetXdgSurface, Surface);
+	if (!XdgSurface) goto failed;
 	XdgSurface->HandleConfigure = Wayland_XdgSurface_HandleConfigure;
 
-	wayland_xdg_toplevel *XdgToplevel = CALL(XdgSurface, GetToplevel);
-	if (!XdgToplevel) {
-		CALL(XdgSurface, Destroy);
-		CALL(Surface, Destroy);
-		return NULL;
-	}
+	XdgToplevel = CALL(XdgSurface, GetToplevel);
+	if (!XdgToplevel) goto failed;
 	XdgToplevel->HandleConfigure = Wayland_XdgToplevel_HandleConfigure;
 	XdgToplevel->HandleClose	 = Wayland_XdgToplevel_HandleClose;
 	XdgToplevel->HandleConfigureBounds =
@@ -315,13 +351,44 @@ Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 	XdgToplevel->HandleWmCapabilities =
 		Wayland_XdgToplevel_HandleWmCapabilities;
 
+	s32 ShmSize = 2 * 4 * Width * Height;
+	s32 ShmFd	= Sys_MemfdCreate("wayland-shm", 0);
+	if (ShmFd < 0) goto failed;
+	if (Sys_FTruncate(ShmFd, ShmSize) < 0) goto failed;
+
+	ShmPool = CALL(_G.Wayland.Shm, CreatePool, ShmFd, ShmSize);
+	if (!ShmPool) goto failed;
+
+	Buffer = CALL(
+		ShmPool,
+		CreateBuffer,
+		0,
+		Width,
+		Height,
+		Width * 4,
+		WAYLAND_SHM_FORMAT_ARGB8888
+	);
+	if (!Buffer) goto failed;
+	Buffer->HandleRelease = Wayland_Buffer_HandleRelease;
+
 	CALL(XdgToplevel, SetTitle, CStringL("Voxarc"));
+	CALL(XdgToplevel, SetAppId, CStringL("voxarc"));
+	if (!CALL(Surface, Commit)) goto failed;
+
+	Wayland_SyncAndHandleEvents();
 
 	while (1);
-	CALL(XdgToplevel, SetAppId, CStringL("voxarc"));
-	CALL(Surface, Commit);
 
 	return Surface;
+
+failed:
+	if (Buffer->Header.Id) CALL(Buffer, Destroy);
+	if (ShmPool->Header.Id) CALL(ShmPool, Destroy);
+	if (XdgToplevel->Header.Id) CALL(XdgToplevel, Destroy);
+	if (XdgSurface->Header.Id) CALL(XdgSurface, Destroy);
+	if (Surface->Header.Id) CALL(Surface, Destroy);
+	Sys_Close(ShmFd);
+	return NULL;
 }
 
 #undef CALL

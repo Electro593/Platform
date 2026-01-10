@@ -143,6 +143,33 @@ Platform_JoinThread(thread_handle ThreadHandle)
 	return !Result;
 }
 
+internal void
+Platform_LockMutex(u32 *Mutex)
+{
+	s32 Tid = Sys_GetTid();
+
+	Assert(Mutex);
+	while (1) {
+		s32 OldValue = Intrin_CompareExchange32(Mutex, 0, 1);
+		if (OldValue == 0) break;
+
+		s32 Result = Sys_Futex(Mutex, SYS_FUTEX_WAIT, 0, NULL, NULL, 0);
+		if (Result < 0) Assert(Result == -11);
+	}
+}
+
+internal void
+Platform_UnlockMutex(u32 *Mutex)
+{
+	s32 Tid = Sys_GetTid();
+
+	Assert(Mutex);
+	s32 OldValue = Intrin_CompareExchange32(Mutex, 1, 0);
+	if (OldValue == 0) return;
+
+	Sys_Futex(Mutex, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
+}
+
 internal b08
 Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 {

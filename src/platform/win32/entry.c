@@ -553,6 +553,14 @@ Platform_JoinThread(thread_handle ThreadHandle)
 }
 
 internal void
+Platform_LockMutex(u32 *Mutex)
+{ }
+
+internal void
+Platform_UnlockMutex(u32 *Mutex)
+{ }
+
+internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 {
 	vptr Proc = (vptr) Win32_GetProcAddress(Module->DLL, Name);

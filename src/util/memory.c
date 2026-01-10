@@ -30,6 +30,7 @@ typedef struct heap_handle {
 } heap_handle;
 
 typedef struct stack {
+	u32	  Mutex;
 	usize Size;
 	u08	 *Cursor;
 	vptr *FirstMarker;
@@ -642,7 +643,9 @@ Heap_Dump(heap *Heap)
 internal stack *
 Stack_Init(vptr Mem, usize Size)
 {
-	stack *Result		= Mem;
+	stack *Result = Mem;
+	*Result		  = (stack) { 0 };
+
 	Result->Size		= Size - sizeof(stack);
 	Result->FirstMarker = NULL;
 	Result->Cursor		= (u08 *) Mem + sizeof(stack);
@@ -688,9 +691,13 @@ Stack_Set(stack Stack)
 internal vptr
 Stack_Allocate(usize Size)
 {
+	Platform_LockMutex(&_G.Stack->Mutex);
+
 	vptr Result		  = _G.Stack->Cursor;
 	_G.Stack->Cursor += Size;
 	Assert(_G.Stack->Cursor <= (u08 *) (_G.Stack + 1) + _G.Stack->Size);
+
+	Platform_UnlockMutex(&_G.Stack->Mutex);
 	return Result;
 }
 

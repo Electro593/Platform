@@ -1178,6 +1178,9 @@ typedef struct wayland_api_state {
 
 	s32 Socket;
 
+	u32 ReadLock;
+	u32 WriteLock;
+
 	b08 Attempted;
 	b08 Connected;
 
@@ -1777,8 +1780,6 @@ Wayland_Connect()
 	string XdgRuntimeDir  = Platform_GetEnvParam(CStringL("XDG_RUNTIME_DIR"));
 	string WaylandDisplay = Platform_GetEnvParam(CStringL("WAYLAND_DISPLAY"));
 
-	Stack_Push();
-
 	if (WaylandDisplay.Length) {
 		string SocketPath = FStringL("%s/%s", XdgRuntimeDir, WaylandDisplay);
 
@@ -1788,27 +1789,15 @@ Wayland_Connect()
 		}
 	}
 
-	Stack_Pop();
 	return _G.WaylandApi.Connected;
 }
 
-internal b08
-Wayland_WaitForNextMessage(void)
+internal vptr
+Wayland_GetObject(u32 ObjectId)
 {
-	if (!_G.WaylandApi.Connected) return FALSE;
-
-	sys_pollfd PollFd = { .FileDescriptor  = _G.WaylandApi.Socket,
-						  .RequestedEvents = SYS_POLLIN,
-						  .ReturnedEvents  = 0 };
-
-	while (_G.WaylandApi.Connected) {
-		s32 Result = Sys_Poll(&PollFd, 1, 20);
-		if (Result == 1 && (PollFd.ReturnedEvents & SYS_POLLIN)) return TRUE;
-		if (Result != 0) break;
-	}
-
-	Wayland_Disconnect();
-	return FALSE;
+	wayland_interface *Object = NULL;
+	HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Object);
+	return Object;
 }
 
 internal b08
@@ -1852,7 +1841,8 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 	va_list Args;
 	VA_Start(Args, Format);
 
-	u16 WordCount = 0;
+	u16	  WordCount			  = 0;
+	usize FileDescriptorCount = 0;
 	for (usize I = 0; I < ParamCount; I++) {
 		switch (Format[I]) {
 			case 'i':
@@ -1876,8 +1866,8 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 				break;
 
 			case 'f':
-				// TODO: Handle file descriptor
 				VA_Next(Args, u32);
+				FileDescriptorCount++;
 				break;
 		}
 	}
@@ -1885,28 +1875,40 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 	VA_End(Args);
 	VA_Start(Args, Format);
 
-	Stack_Push();
-	usize MessageSize = (2 + WordCount) * sizeof(u32);
-	u32	 *Message	  = Stack_Allocate(MessageSize);
+	usize MessageDataSize = (2 + WordCount) * sizeof(u32);
+	u32	 *MessageData	  = Stack_Allocate(MessageDataSize);
+	MessageData[0]		  = ((wayland_interface *) Object)->Id;
+	MessageData[1]		  = (MessageDataSize << 16) | Opcode;
 
-	Message[0] = ((wayland_interface *) Object)->Id;
-	Message[1] = (MessageSize << 16) | Opcode;
+	usize		 ControlMessageSize = 0;
+	sys_cmsghdr *ControlMessage		= NULL;
+	s32			*FileDescriptors	= NULL;
+	if (FileDescriptorCount) {
+		ControlMessageSize =
+			sizeof(sys_cmsghdr) + FileDescriptorCount * sizeof(s32);
+		ControlMessage		   = Stack_Allocate(ControlMessageSize);
+		ControlMessage->Length = ControlMessageSize;
+		ControlMessage->Level  = SYS_SOL_SOCKET;
+		ControlMessage->Type   = SYS_SCM_RIGHTS;
+		FileDescriptors		   = (s32 *) ControlMessage->Data;
+	}
 
-	usize W = 2;
+	usize W		  = 2;
+	usize FDIndex = 0;
 	for (usize I = 0; I < ParamCount; I++) {
 		switch (Format[I]) {
-			case 'i': Message[W++] = VA_Next(Args, u32); break;
+			case 'i': MessageData[W++] = VA_Next(Args, u32); break;
 
 			case 'o':
 				wayland_interface *Object = VA_Next(Args, wayland_interface *);
-				Message[W++]			  = Object ? Object->Id : 0;
+				MessageData[W++]		  = Object ? Object->Id : 0;
 				break;
 
 			case 's':
-				string *Str	 = VA_Next(Args, string *);
-				Message[W++] = Str ? Str->Length + 1 : 0;
+				string *Str		 = VA_Next(Args, string *);
+				MessageData[W++] = Str ? Str->Length + 1 : 0;
 				if (Str) {
-					c08 *Dest	= (c08 *) &Message[W];
+					c08 *Dest	= (c08 *) &MessageData[W];
 					char Pad[4] = { 0 };
 					Mem_Cpy(Dest, Str->Text, Str->Length);
 					Mem_Cpy(Dest + Str->Length, Pad, 4 - Str->Length % 4);
@@ -1916,9 +1918,9 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 
 			case 'a':
 				wayland_array *Arr = VA_Next(Args, wayland_array *);
-				Message[W++]	   = Arr ? Arr->Size : 0;
+				MessageData[W++]   = Arr ? Arr->Size : 0;
 				if (Arr) {
-					c08 *Dest	= (c08 *) &Message[W];
+					c08 *Dest	= (c08 *) &MessageData[W];
 					char Pad[3] = { 0 };
 					Mem_Cpy(Dest, Arr->Data, Arr->Size);
 					Mem_Cpy(Dest + Arr->Size, Pad, (4 - Arr->Size % 4) % 4);
@@ -1926,92 +1928,92 @@ Wayland_SendMessage(vptr Object, u16 Opcode, c08 *Format, ...)
 				}
 				break;
 
-			case 'd':
-				// TODO: Handle file descriptor
-				VA_Next(Args, u32);
-				break;
+			case 'f': FileDescriptors[FDIndex++] = VA_Next(Args, s32); break;
 		}
 	}
 
 	VA_End(Args);
 
+	sys_iovec IOVector = { 0 };
+	IOVector.Base	   = MessageData;
+	IOVector.Length	   = MessageDataSize;
+
+	sys_msghdr Message	  = { 0 };
+	Message.IOVectors	  = &IOVector;
+	Message.IOVectorCount = 1;
+	Message.Control		  = ControlMessage;
+	Message.ControlSize	  = ControlMessageSize;
+
+	Platform_LockMutex(&_G.WaylandApi.WriteLock);
 	if (Wayland_WaitUntilCanSend()) {
-		sys_send_flags Flags = SYS_MSG_NOSIGNAL;
-
-		ssize BytesWritten = Sys_SendTo(
-			_G.WaylandApi.Socket,
-			Message,
-			MessageSize,
-			Flags,
-			NULL,
-			0
-		);
+		ssize BytesWritten =
+			Sys_SendMsg(_G.WaylandApi.Socket, &Message, SYS_MSG_NOSIGNAL);
 		if (BytesWritten < 0) Wayland_Disconnect();
-		else Assert(BytesWritten == MessageSize);
+		else Assert(BytesWritten == MessageDataSize);
 	}
+	Platform_UnlockMutex(&_G.WaylandApi.WriteLock);
+}
 
-	Stack_Pop();
+internal b08
+Wayland_WaitForNextMessage(s32 Timeout)
+{
+	if (!_G.WaylandApi.Connected) return FALSE;
+
+	sys_pollfd PollFd = { .FileDescriptor  = _G.WaylandApi.Socket,
+						  .RequestedEvents = SYS_POLLIN,
+						  .ReturnedEvents  = 0 };
+
+	s32 Result = Sys_Poll(&PollFd, 1, Timeout);
+	return Result == 1 && (PollFd.ReturnedEvents & SYS_POLLIN);
 }
 
 internal wayland_message *
-Wayland_ReadMessage(void)
+Wayland_ReadMessage(s32 Timeout)
 {
-	file_handle Handle =
-		(file_handle) { .FileDescriptor = _G.WaylandApi.Socket };
+	wayland_message *Message = NULL;
 
-	u32	  Header[2];
-	usize BytesRead = Platform_ReadFile(
-		Handle,
-		(vptr) Header,
-		sizeof(wayland_message),
-		(usize) -1
-	);
-	Assert(BytesRead == sizeof(wayland_message));
+	Platform_LockMutex(&_G.WaylandApi.ReadLock);
+	if (Wayland_WaitForNextMessage(Timeout)) {
+		file_handle Handle =
+			(file_handle) { .FileDescriptor = _G.WaylandApi.Socket };
 
-	u32 ObjectId = Header[0];
-	u16 Size	 = Header[1] >> 16;
-	u16 Opcode	 = Header[1] & 0xFFFF;
+		u32	  Header[2];
+		usize BytesRead = Platform_ReadFile(
+			Handle,
+			(vptr) Header,
+			sizeof(wayland_message),
+			(usize) -1
+		);
+		Assert(BytesRead == sizeof(wayland_message));
 
-	wayland_message *Message = Stack_Allocate(Size);
-	Message->ObjectId		 = ObjectId;
-	Message->Opcode			 = Opcode;
-	Message->Size			 = Size;
+		u32 ObjectId = Header[0];
+		u16 Size	 = Header[1] >> 16;
+		u16 Opcode	 = Header[1] & 0xFFFF;
 
-	BytesRead += Platform_ReadFile(
-		Handle,
-		Message->Data,
-		Size - sizeof(wayland_message),
-		(usize) -1
-	);
-	Assert(BytesRead == Size);
+		Message			  = Stack_Allocate(Size);
+		Message->ObjectId = ObjectId;
+		Message->Opcode	  = Opcode;
+		Message->Size	  = Size;
+
+		BytesRead += Platform_ReadFile(
+			Handle,
+			Message->Data,
+			Size - sizeof(wayland_message),
+			(usize) -1
+		);
+		Assert(BytesRead == Size);
+	}
+	Platform_UnlockMutex(&_G.WaylandApi.ReadLock);
 
 	return Message;
 }
 
 internal vptr
-Wayland_GetObject(u32 ObjectId)
+Wayland_HandleMessage(wayland_message *Message)
 {
-	wayland_interface *Object = NULL;
-	HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Object);
-	return Object;
-}
-
-internal vptr
-Wayland_HandleNextEvent(void)
-{
-	if (!Wayland_WaitForNextMessage()) return NULL;
-
-	Stack_Push();
-	wayland_message	  *Message = Wayland_ReadMessage();
-	wayland_interface *Object  = NULL;
-
-	if (Message) {
-		Object = Wayland_GetObject(Message->ObjectId);
-
-		if (Object && Object->HandleEvent) Object->HandleEvent(Object, Message);
-	}
-
-	Stack_Pop();
+	if (!Message) return NULL;
+	wayland_interface *Object = Wayland_GetObject(Message->ObjectId);
+	if (Object && Object->HandleEvent) Object->HandleEvent(Object, Message);
 	return Object;
 }
 
@@ -2272,7 +2274,7 @@ Wayland_Shm_CreatePool(wayland_shm *This, s32 FileDescriptor, s32 Size)
 internal b08
 Wayland_Shm_Release(wayland_shm *This)
 {
-	VERSION(1)
+	VERSION(2)
 	Wayland_SendMessage(This, 1, "");
 	Wayland_DestroyObject(This);
 	return 1;
