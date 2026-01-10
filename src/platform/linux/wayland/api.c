@@ -1172,6 +1172,13 @@ struct wayland_xdg_popup {
 
 /* ====== API State & Functions ====== */
 
+typedef struct wayland_api_id_entry {
+	u32 BaseId;
+	u32 Count;
+
+	struct wayland_api_id_entry *Next;
+} wayland_api_id_entry;
+
 typedef struct wayland_api_state {
 	heap *Heap;
 	usize HeapSize;
@@ -1184,8 +1191,10 @@ typedef struct wayland_api_state {
 	b08 Attempted;
 	b08 Connected;
 
-	// TODO Re-use deleted object ids
-	u32		NextObjectId;
+	u32					  IdLock;
+	wayland_api_id_entry *NextIdEntry;
+
+	u32		IdTableLock;
 	hashmap IdTable;
 } wayland_api_state;
 
@@ -1656,7 +1665,79 @@ static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
 internal u32
 Wayland_AllocateObjectId(void)
 {
-	return _G.WaylandApi.NextObjectId++;
+	Platform_LockMutex(&_G.WaylandApi.IdLock);
+
+	wayland_api_id_entry *Entry = _G.WaylandApi.NextIdEntry;
+	if (!Entry || !Entry->Count) return 0;
+
+	u32 Id		   = Entry->BaseId;
+	Entry->BaseId += 1;
+	Entry->Count  -= 1;
+
+	if (Entry->Count == 0) {
+		_G.WaylandApi.NextIdEntry = Entry->Next;
+		Heap_FreeA(Entry);
+	}
+
+	Platform_UnlockMutex(&_G.WaylandApi.IdLock);
+	return Id;
+}
+
+internal void
+Wayland_FreeObjectId(u32 ObjectId)
+{
+	Platform_LockMutex(&_G.WaylandApi.IdLock);
+
+	// Store a pointer to the entry pointer to allow inserting a new record
+	// after the previous.
+	wayland_api_id_entry **Entry = &_G.WaylandApi.NextIdEntry;
+
+	// Find the appropriate location to insert
+	while (*Entry && (*Entry)->BaseId + (*Entry)->Count < ObjectId)
+		Entry = &(*Entry)->Next;
+
+	// Add a new record after prev
+	if (!*Entry || ObjectId < (*Entry)->BaseId - 1) {
+		wayland_api_id_entry *NewEntry =
+			Heap_AllocateA(_G.WaylandApi.Heap, sizeof(wayland_api_id_entry));
+
+		NewEntry->BaseId = ObjectId;
+		NewEntry->Count	 = 1;
+		NewEntry->Next	 = *Entry;
+
+		*Entry = NewEntry;
+
+		Platform_UnlockMutex(&_G.WaylandApi.IdLock);
+		return;
+	}
+
+	// Expand this record right and potentially merge the next
+	if ((*Entry)->BaseId + (*Entry)->Count == ObjectId) {
+		(*Entry)->Count += 1;
+
+		wayland_api_id_entry *Next = (*Entry)->Next;
+		if (Next && Next->BaseId == ObjectId + 1) {
+			(*Entry)->Count += Next->Count;
+			(*Entry)->Next	 = Next->Next;
+			Heap_FreeA(Next);
+		}
+
+		Platform_UnlockMutex(&_G.WaylandApi.IdLock);
+		return;
+	}
+
+	// Expand this record left. We don't need to try to merge, since if it was
+	// possible, we already would've above.
+	if ((*Entry)->BaseId == ObjectId + 1) {
+		(*Entry)->BaseId -= 1;
+		(*Entry)->Count	 += 1;
+
+		Platform_UnlockMutex(&_G.WaylandApi.IdLock);
+		return;
+	}
+
+	// Shouldn't get here
+	Assert(FALSE);
 }
 
 internal b08
@@ -1672,19 +1753,26 @@ Wayland_IsObjectValid(vptr Object)
 internal vptr
 Wayland_CreateObject(wayland_object_type Type, u32 Version)
 {
-	if (!_G.WaylandApi.NextObjectId
-		|| Type == WAYLAND_OBJECT_TYPE_UNKNOWN
-		|| Type >= WAYLAND_OBJECT_TYPE_COUNT)
+	if (Type <= WAYLAND_OBJECT_TYPE_UNKNOWN
+		|| Type >= WAYLAND_OBJECT_TYPE_COUNT
+		|| Version == 0)
 		return NULL;
 
 	wayland_interface *Proto = WaylandPrototypes[Type];
 	if (!Proto) return NULL;
 
+	u32 ObjectId = Wayland_AllocateObjectId();
+	if (!ObjectId) return NULL;
+
 	wayland_interface *Object = Heap_AllocateA(_G.WaylandApi.Heap, Proto->Size);
 	Mem_Cpy(Object, Proto, Proto->Size);
-	Object->Id = Wayland_AllocateObjectId();
-	HashMap_Add(&_G.WaylandApi.IdTable, &Object->Id, &Object);
+	Object->Id		= ObjectId;
 	Object->Version = Version ? Version : 1;
+
+	Platform_LockMutex(&_G.WaylandApi.IdTableLock);
+	HashMap_Add(&_G.WaylandApi.IdTable, &Object->Id, &Object);
+	Platform_UnlockMutex(&_G.WaylandApi.IdTableLock);
+
 	return Object;
 }
 
@@ -1702,7 +1790,11 @@ Wayland_DestroyObject(vptr Object)
 	if (!Wayland_IsObjectValid(Object)) return;
 
 	wayland_interface *Interface = Object;
+
+	Platform_LockMutex(&_G.WaylandApi.IdTableLock);
 	HashMap_Remove(&_G.WaylandApi.IdTable, &Interface->Id, NULL, NULL);
+	Platform_UnlockMutex(&_G.WaylandApi.IdTableLock);
+
 	Mem_Set(Object, 0, Interface->Size);
 	Heap_FreeA(Object);
 }
@@ -1774,19 +1866,29 @@ Wayland_Connect()
 		_G.WaylandApi.Socket = FileDescriptor;
 #endif
 		_G.WaylandApi.Connected = TRUE;
-		return TRUE;
+	} else {
+		string XdgRuntimeDir =
+			Platform_GetEnvParam(CStringL("XDG_RUNTIME_DIR"));
+		string WaylandDisplay =
+			Platform_GetEnvParam(CStringL("WAYLAND_DISPLAY"));
+
+		if (WaylandDisplay.Length) {
+			string SocketPath =
+				FStringL("%s/%s", XdgRuntimeDir, WaylandDisplay);
+
+			if (!Wayland_ConnectToSocket(SocketPath)) {
+				SocketPath = FStringL("%s/wayland-0", XdgRuntimeDir);
+				Wayland_ConnectToSocket(SocketPath);
+			}
+		}
 	}
 
-	string XdgRuntimeDir  = Platform_GetEnvParam(CStringL("XDG_RUNTIME_DIR"));
-	string WaylandDisplay = Platform_GetEnvParam(CStringL("WAYLAND_DISPLAY"));
-
-	if (WaylandDisplay.Length) {
-		string SocketPath = FStringL("%s/%s", XdgRuntimeDir, WaylandDisplay);
-
-		if (!Wayland_ConnectToSocket(SocketPath)) {
-			SocketPath = FStringL("%s/wayland-0", XdgRuntimeDir);
-			Wayland_ConnectToSocket(SocketPath);
-		}
+	if (_G.WaylandApi.Connected) {
+		_G.WaylandApi.NextIdEntry =
+			Heap_AllocateA(Heap, sizeof(wayland_api_id_entry));
+		_G.WaylandApi.NextIdEntry->BaseId = 1;
+		_G.WaylandApi.NextIdEntry->Count  = 0xFEFFFFFF;
+		_G.WaylandApi.NextIdEntry->Next	  = NULL;
 	}
 
 	return _G.WaylandApi.Connected;
@@ -1796,7 +1898,11 @@ internal vptr
 Wayland_GetObject(u32 ObjectId)
 {
 	wayland_interface *Object = NULL;
+
+	Platform_LockMutex(&_G.WaylandApi.IdTableLock);
 	HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Object);
+	Platform_UnlockMutex(&_G.WaylandApi.IdTableLock);
+
 	return Object;
 }
 
@@ -2092,8 +2198,7 @@ Wayland_ParseObject(wayland_message *Message, usize *I)
 	u32 ObjectId  = Message->Data[*I];
 	*I			 += 1;
 
-	if (!HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Prim.Object))
-		Prim.Object = NULL;
+	Prim.Object = Wayland_GetObject(ObjectId);
 
 	return Prim;
 }
@@ -2104,7 +2209,6 @@ Wayland_GetDisplay()
 	wayland_display *Display = Wayland_GetObject(WAYLAND_DISPLAY_ID);
 	if (Display) return Display;
 
-	_G.WaylandApi.NextObjectId = WAYLAND_DISPLAY_ID;
 	return Wayland_CreateObject(WAYLAND_OBJECT_TYPE_DISPLAY, 1);
 }
 

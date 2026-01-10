@@ -16,30 +16,33 @@
 #define SYS_FILE_OUT  (u32)( 1)
 #define SYS_FILE_ERR  (u32)( 2)
 
-#define SYS_PROT_NONE  0x0
-#define SYS_PROT_READ  0x1
-#define SYS_PROT_WRITE 0x2
-#define SYS_PROT_EXEC  0x4
+typedef enum sys_prot {
+	SYS_PROT_NONE  = 0x0,
+	SYS_PROT_READ  = 0x1,
+	SYS_PROT_WRITE = 0x2,
+	SYS_PROT_EXEC  = 0x4,
+} sys_prot;
 
 #define SYS_SEEK_BEGINNING 0
 #define SYS_SEEK_CURRENT   1
 #define SYS_SEEK_END       2
 
-#define SYS_MAP_FAILED        ((void*) -1)
-#define SYS_MAP_SHARED        0x0000001
-#define SYS_MAP_PRIVATE       0x0000002
-#define SYS_MAP_FIXED         0x0000010
-#define SYS_MAP_ANONYMOUS     0x0000020
-#define SYS_MAP_32BIT         0x0000040
-#define SYS_MAP_GROWSDOWN     0x0000100
-#define SYS_MAP_DENYWRITE     0x0000800
-#define SYS_MAP_EXECUTABLE    0x0001000
-#define SYS_MAP_LOCKED        0x0002000
-#define SYS_MAP_NORESERVE     0x0004000
-#define SYS_MAP_POPULATE      0x0008000
-#define SYS_MAP_NONBLOCK      0x0010000
-#define SYS_MAP_STACK         0x0020000
-#define SYS_MAP_UNINITIALIZED 0x4000000
+typedef enum sys_map {
+	SYS_MAP_SHARED		  = 0x0000001,
+	SYS_MAP_PRIVATE		  = 0x0000002,
+	SYS_MAP_FIXED		  = 0x0000010,
+	SYS_MAP_ANONYMOUS	  = 0x0000020,
+	SYS_MAP_32BIT		  = 0x0000040,
+	SYS_MAP_GROWSDOWN	  = 0x0000100,
+	SYS_MAP_DENYWRITE	  = 0x0000800,
+	SYS_MAP_EXECUTABLE	  = 0x0001000,
+	SYS_MAP_LOCKED		  = 0x0002000,
+	SYS_MAP_NORESERVE	  = 0x0004000,
+	SYS_MAP_POPULATE	  = 0x0008000,
+	SYS_MAP_NONBLOCK	  = 0x0010000,
+	SYS_MAP_STACK		  = 0x0020000,
+	SYS_MAP_UNINITIALIZED = 0x4000000,
+} sys_map;
 
 #define SYS_OPEN_READONLY  0x0000
 #define SYS_OPEN_WRITEONLY 0x0001
@@ -228,7 +231,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(5,   FileStat,     s32,     u32 FileDescriptor, sys_stat *Stat) \
 	SYSCALL(7,   Poll,         s32,     sys_pollfd *FileDescriptors, s32 FileDescriptorCount, s32 Timeout) \
 	SYSCALL(8,   Seek,         ssize,   u32 FileDescriptor, ssize Offset, s32 Whence) \
-	SYSCALL(9,   MemMap,       vptr,    vptr Address, usize Length, s32 Protection, s32 Flags, u32 FileDescriptor, s64 Offset) \
+	SYSCALL(9,   MemMap,       vptr,    vptr Address, usize Length, sys_prot Protection, sys_map Flags, s32 FileDescriptor, s64 Offset) \
 	SYSCALL(10,  MemProtect,   s32,     vptr Address, usize Length, s32 Protection) \
 	SYSCALL(11,  MemUnmap,     s32,     vptr Address, usize Length) \
 	SYSCALL(41,  Socket,       s32,     s32 Domain, s32 Type, s32 Protocol) \

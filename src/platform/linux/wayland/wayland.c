@@ -9,6 +9,26 @@
 
 #ifdef INCLUDE_HEADER
 
+typedef struct wayland_window_state {
+	b08 Initialized;
+
+	wayland_surface		 *Surface;
+	wayland_xdg_surface	 *XdgSurface;
+	wayland_xdg_toplevel *XdgToplevel;
+
+	s32 Width;
+	s32 Height;
+
+	s32	  ShmFd;
+	usize BufferSize;
+	vptr  BufferData[2];
+
+	wayland_shm_pool *ShmPool;
+	wayland_buffer	 *Buffers[2];
+
+	wayland_callback *FrameCallback;
+} wayland_window_state;
+
 typedef struct wayland_state {
 	thread_handle EventThread;
 
@@ -19,6 +39,8 @@ typedef struct wayland_state {
 	wayland_compositor	*Compositor;
 	wayland_shm			*Shm;
 	wayland_xdg_wm_base *XdgWmBase;
+
+	wayland_window_state Window;
 
 	s32						 PreferredBufferScale;
 	wayland_output_transform PreferredBufferTransform;
@@ -51,7 +73,8 @@ Wayland_DebugLog(vptr Object, c08 *Format, ...)
 
 	wayland_interface *Interface = Object;
 	FPrintL(
-		"[Wayland][%s#%d] %s",
+		"[%d] [Wayland] [%s#%d] %s",
+		Sys_GetTid(),
 		WaylandNames[Interface->Type],
 		Interface->Id,
 		Message
@@ -82,6 +105,8 @@ internal void
 Wayland_Display_HandleDeleteId(wayland_display *This, u32 Id)
 {
 	Wayland_DebugLog(This, "Requested to delete id %u\n", Id);
+
+	Wayland_FreeObjectId(Id);
 }
 
 internal void
@@ -94,6 +119,17 @@ internal void
 Wayland_Buffer_HandleRelease(wayland_buffer *This)
 {
 	Wayland_DebugLog(This, "Released by compositor\n");
+
+	wayland_window_state *Window = &_G.Wayland.Window;
+
+	if (Window->Buffers[1] == This) {
+		Window->Buffers[1] = Window->Buffers[0];
+		Window->Buffers[0] = This;
+
+		vptr BufferData		  = Window->BufferData[1];
+		Window->BufferData[1] = Window->BufferData[0];
+		Window->BufferData[0] = BufferData;
+	}
 }
 
 internal void
@@ -258,6 +294,79 @@ Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DestroyObject(_G.Wayland.XdgWmBase);
 }
 
+internal void
+Wayland_HandleFrame(wayland_callback *This, u32 CallbackData)
+{
+	Wayland_DebugLog(This, "Notified of frame at time %d\n", CallbackData);
+
+	wayland_window_state *Window = &_G.Wayland.Window;
+
+	wayland_callback *FrameCallback = CALL(Window->Surface, Frame);
+	FrameCallback->HandleDone		= Wayland_HandleFrame;
+	Window->FrameCallback			= FrameCallback;
+
+	u32 Stage = (CallbackData >> 12) & 7;
+
+	u32 Value	 = (CallbackData >> 4) & 0xFF;
+	u32 InvValue = 255 - Value;
+	u32 Red = 0, Green = 0, Blue = 0;
+
+	switch (Stage) {
+		case 0:
+			Red	  = Value;
+			Green = 0;
+			Blue  = 0;
+			break;
+		case 1:
+			Red	  = 255;
+			Green = Value;
+			Blue  = 0;
+			break;
+		case 2:
+			Red	  = InvValue;
+			Green = 255;
+			Blue  = 0;
+			break;
+		case 3:
+			Red	  = 0;
+			Green = 255;
+			Blue  = Value;
+			break;
+		case 4:
+			Red	  = 0;
+			Green = InvValue;
+			Blue  = 255;
+			break;
+		case 5:
+			Red	  = Value;
+			Green = 0;
+			Blue  = 255;
+			break;
+		case 6:
+			Red	  = 255;
+			Green = Value;
+			Blue  = 255;
+			break;
+		case 7:
+			Red	  = InvValue;
+			Green = InvValue;
+			Blue  = InvValue;
+			break;
+	}
+
+	u32 Color = (255 << 24) | (Red << 16) | (Green << 8) | Blue;
+
+	u32 *Colors = Window->BufferData[0];
+	for (usize Y = 0; Y < Window->Height; Y++)
+		for (usize X = 0; X < Window->Width; X++)
+			Colors[X + Y * Window->Width] = Color;
+
+	CALL(Window->Surface, Attach, Window->Buffers[0], 0, 0);
+	CALL(Window->Surface, DamageBuffer, 0, 0, Window->Width, Window->Height);
+
+	CALL(Window->Surface, Commit);
+}
+
 internal s32
 Wayland_EventHandlerThread(vptr Data)
 {
@@ -273,9 +382,6 @@ Wayland_EventHandlerThread(vptr Data)
 internal void
 Wayland_SyncAndHandleEvents(void)
 {
-	s32 Tid = Sys_GetTid();
-	FPrintL("[%d] Main thread\n", Tid);
-
 	Platform_LockMutex(&_G.Wayland.SyncLock);
 
 	wayland_callback *SyncCallback = CALL(_G.Wayland.Display, Sync);
@@ -323,8 +429,13 @@ Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 {
 	if (!Wayland_IsConnected()) return NULL;
 
+	s32	  ShmFd		 = 0;
+	usize BufferSize = 4 * Width * Height;
+	vptr  BufferData = NULL;
+
 	wayland_shm_pool	 *ShmPool	  = NULL;
-	wayland_buffer		 *Buffer	  = NULL;
+	wayland_buffer		 *Buffer1	  = NULL;
+	wayland_buffer		 *Buffer2	  = NULL;
 	wayland_surface		 *Surface	  = NULL;
 	wayland_xdg_surface	 *XdgSurface  = NULL;
 	wayland_xdg_toplevel *XdgToplevel = NULL;
@@ -351,15 +462,24 @@ Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 	XdgToplevel->HandleWmCapabilities =
 		Wayland_XdgToplevel_HandleWmCapabilities;
 
-	s32 ShmSize = 2 * 4 * Width * Height;
-	s32 ShmFd	= Sys_MemfdCreate("wayland-shm", 0);
+	s32 ShmSize = 2 * BufferSize;
+	ShmFd		= Sys_MemfdCreate("wayland-shm", 0);
 	if (ShmFd < 0) goto failed;
 	if (Sys_FTruncate(ShmFd, ShmSize) < 0) goto failed;
+	BufferData = Sys_MemMap(
+		NULL,
+		ShmSize,
+		SYS_PROT_READ | SYS_PROT_WRITE,
+		SYS_MAP_SHARED | SYS_MAP_POPULATE,
+		ShmFd,
+		0
+	);
+	if ((ssize) BufferData < 0 && (ssize) BufferData > -4096) goto failed;
 
 	ShmPool = CALL(_G.Wayland.Shm, CreatePool, ShmFd, ShmSize);
 	if (!ShmPool) goto failed;
 
-	Buffer = CALL(
+	Buffer1 = CALL(
 		ShmPool,
 		CreateBuffer,
 		0,
@@ -368,26 +488,68 @@ Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 		Width * 4,
 		WAYLAND_SHM_FORMAT_ARGB8888
 	);
-	if (!Buffer) goto failed;
-	Buffer->HandleRelease = Wayland_Buffer_HandleRelease;
+	if (!Buffer1) goto failed;
+	Buffer1->HandleRelease = Wayland_Buffer_HandleRelease;
+
+	Buffer2 = CALL(
+		ShmPool,
+		CreateBuffer,
+		BufferSize,
+		Width,
+		Height,
+		Width * 4,
+		WAYLAND_SHM_FORMAT_ARGB8888
+	);
+	if (!Buffer2) goto failed;
+	Buffer2->HandleRelease = Wayland_Buffer_HandleRelease;
 
 	CALL(XdgToplevel, SetTitle, CStringL("Voxarc"));
 	CALL(XdgToplevel, SetAppId, CStringL("voxarc"));
-	if (!CALL(Surface, Commit)) goto failed;
+	CALL(Surface, Commit);
 
+	Mem_Set(BufferData, -1, ShmSize);
+
+	wayland_window_state *Window = &_G.Wayland.Window;
+
+	Window->Initialized	  = TRUE;
+	Window->Surface		  = Surface;
+	Window->XdgSurface	  = XdgSurface;
+	Window->XdgToplevel	  = XdgToplevel;
+	Window->ShmPool		  = ShmPool;
+	Window->ShmFd		  = ShmFd;
+	Window->Width		  = Width;
+	Window->Height		  = Height;
+	Window->BufferSize	  = BufferSize;
+	Window->BufferData[0] = BufferData;
+	Window->BufferData[1] = BufferData + BufferSize;
+	Window->Buffers[0]	  = Buffer1;
+	Window->Buffers[1]	  = Buffer2;
+
+	// Wait for the configure events to pass
 	Wayland_SyncAndHandleEvents();
+
+	CALL(Surface, Attach, Buffer2, 0, 0);
+	CALL(Surface, DamageBuffer, 0, 0, Width, Height);
+
+	wayland_callback *FrameCallback = CALL(Surface, Frame);
+	FrameCallback->HandleDone		= Wayland_HandleFrame;
+	Window->FrameCallback			= FrameCallback;
+
+	CALL(Surface, Commit);
 
 	while (1);
 
 	return Surface;
 
 failed:
-	if (Buffer->Header.Id) CALL(Buffer, Destroy);
+	if (Buffer1->Header.Id) CALL(Buffer1, Destroy);
+	if (Buffer2->Header.Id) CALL(Buffer2, Destroy);
 	if (ShmPool->Header.Id) CALL(ShmPool, Destroy);
 	if (XdgToplevel->Header.Id) CALL(XdgToplevel, Destroy);
 	if (XdgSurface->Header.Id) CALL(XdgSurface, Destroy);
 	if (Surface->Header.Id) CALL(Surface, Destroy);
-	Sys_Close(ShmFd);
+	if (BufferData) Sys_MemUnmap(BufferData, ShmSize);
+	if (ShmFd) Sys_Close(ShmFd);
 	return NULL;
 }
 

@@ -13,7 +13,6 @@
 
 #define HEAP(Type) heap_handle *
 
-typedef vptr heap;
 typedef struct heap_handle {
 	vptr Data;
 	u64	 Index	  : 16;
@@ -28,6 +27,12 @@ typedef struct heap_handle {
 	u16	 PrevBlock;
 	u16	 NextBlock;
 } heap_handle;
+
+typedef struct {
+	u32 Mutex;
+
+	heap_handle Handles[];
+} heap;
 
 typedef struct stack {
 	u32	  Mutex;
@@ -171,7 +176,8 @@ Mem_BytesUntil(u08 *Data, u08 Byte)
 internal heap *
 Heap_GetHeap(heap_handle *Handle)
 {
-	return (heap *) (Handle - Handle->Index);
+	vptr Handles = Handle - Handle->Index;
+	return (heap *) (Handles - OFFSET_OF(heap, Handles));
 }
 
 // TODO Resizeable heap
@@ -185,14 +191,19 @@ Heap_GetHandleA(vptr Data)
 internal heap *
 Heap_Init(vptr MemBase, u64 Size)
 {
-	Assert(MemBase);
-	Assert(Size > sizeof(heap_handle));
-	Assert(Size - sizeof(heap_handle) < (1ULL << 46));
+	u32 HeaderSize = sizeof(heap) + sizeof(heap_handle);
 
-	heap_handle *NullUsedHandle = (heap_handle *) MemBase;
-	NullUsedHandle->Data		= (u08 *) MemBase;
+	Assert(MemBase);
+	Assert(Size > HeaderSize);
+	Assert(Size - HeaderSize < (1ULL << 46));
+
+	heap *Heap	= MemBase;
+	Heap->Mutex = 0;
+
+	heap_handle *NullUsedHandle = Heap->Handles;
+	NullUsedHandle->Data		= (u08 *) NullUsedHandle;
 	NullUsedHandle->Size		= sizeof(heap_handle);
-	NullUsedHandle->Offset		= Size - sizeof(heap_handle);
+	NullUsedHandle->Offset		= Size - HeaderSize;
 	NullUsedHandle->Index		= 0;
 	NullUsedHandle->PrevFree	= 0;
 	NullUsedHandle->NextFree	= 0;
@@ -203,7 +214,7 @@ Heap_Init(vptr MemBase, u64 Size)
 	NullUsedHandle->Anchored	= TRUE;
 	NullUsedHandle->Free		= FALSE;
 
-	return (heap *) MemBase;
+	return Heap;
 }
 
 internal void
@@ -213,7 +224,7 @@ Heap_Defragment(heap *Heap)
 
 	Assert(Heap);
 
-	heap_handle *Handles = (heap_handle *) Heap;
+	heap_handle *Handles = Heap->Handles;
 
 	u64			 Offset = 0;
 	heap_handle *Block	= Handles;
@@ -239,7 +250,7 @@ Heap_Defragment(heap *Heap)
 internal void
 Heap_AllocateBlock(heap *Heap, heap_handle *Handle, u32 Size)
 {
-	heap_handle *Handles   = (vptr) Heap;
+	heap_handle *Handles   = Heap->Handles;
 	heap_handle *PrevBlock = Handles + Handles[0].PrevBlock;
 	while (PrevBlock->Index && PrevBlock->Offset < Size)
 		PrevBlock = Handles + PrevBlock->PrevBlock;
@@ -264,7 +275,7 @@ Heap_AllocateBlock(heap *Heap, heap_handle *Handle, u32 Size)
 internal void
 Heap_FreeBlock(heap *Heap, heap_handle *Handle)
 {
-	heap_handle *Handles				  = (vptr) Heap;
+	heap_handle *Handles				  = Heap->Handles;
 	Handles[Handle->PrevBlock].Offset	 += Handle->Size + Handle->Offset;
 	Handles[Handle->PrevBlock].NextBlock  = Handle->NextBlock;
 	Handles[Handle->NextBlock].PrevBlock  = Handle->PrevBlock;
@@ -274,8 +285,9 @@ internal heap_handle *
 _Heap_Allocate(heap *Heap, u32 Size, b08 Anchored)
 {
 	Assert(Heap);
+	Platform_LockMutex(&Heap->Mutex);
 
-	heap_handle *Handles	  = (heap_handle *) Heap;
+	heap_handle *Handles	  = Heap->Handles;
 	heap_handle *Handle		  = NULL;
 	b08			 Defragmented = FALSE;
 
@@ -317,6 +329,7 @@ _Heap_Allocate(heap *Heap, u32 Size, b08 Anchored)
 
 	Heap_AllocateBlock(Heap, Handle, Size);
 
+	Platform_UnlockMutex(&Heap->Mutex);
 	return Handle;
 }
 
@@ -340,17 +353,21 @@ Heap_Resize(heap_handle *Handle, u32 NewSize)
 {
 	Assert(Handle);
 
+	heap *Heap = Heap_GetHeap(Handle);
+	Platform_LockMutex(&Heap->Mutex);
+
 	if (NewSize <= Handle->Size + Handle->Offset) {
 		Handle->Offset += (s64) Handle->Size - (s64) NewSize;
 		Handle->Size	= NewSize;
 	} else {
-		u08	 *PrevData = Handle->Data;
-		u32	  PrevSize = Handle->Size;
-		heap *Heap	   = (heap *) (Handle - Handle->Index);
+		u08 *PrevData = Handle->Data;
+		u32	 PrevSize = Handle->Size;
 		Heap_FreeBlock(Heap, Handle);
 		Heap_AllocateBlock(Heap, Handle, NewSize);
 		Mem_Cpy(Handle->Data, PrevData, PrevSize);
 	}
+
+	Platform_UnlockMutex(&Heap->Mutex);
 }
 
 internal void
@@ -365,8 +382,9 @@ internal void
 Heap_Free(heap_handle *Handle)
 {
 	Assert(Handle);
-	heap_handle *Handles = Handle - Handle->Index;
-	heap		*Heap	 = (vptr) Handles;
+	heap		*Heap	 = Heap_GetHeap(Handle);
+	heap_handle *Handles = Heap->Handles;
+	Platform_LockMutex(&Heap->Mutex);
 
 	Heap_FreeBlock(Heap, Handle);
 
@@ -403,6 +421,8 @@ Heap_Free(heap_handle *Handle)
 		Handles[Handle->NextFree].PrevFree = Handle->Index;
 		Handles[Handle->PrevFree].NextFree = Handle->Index;
 	}
+
+	Platform_UnlockMutex(&Heap->Mutex);
 }
 
 internal void
@@ -414,11 +434,13 @@ Heap_FreeA(vptr Data)
 internal void
 Heap_Dump(heap *Heap)
 {
+	Platform_LockMutex(&Heap->Mutex);
+
 	file_handle FileHandle;
 	Platform_OpenFile(&FileHandle, "heap_dump.txt", FILE_WRITE);
 	u32 FileOffset = 0;
 
-	heap_handle *Handles	 = (heap_handle *) Heap;
+	heap_handle *Handles	 = Heap->Handles;
 	u32			 HandleCount = Handles[0].Size / sizeof(heap_handle);
 
 	Stack_Push();
@@ -638,6 +660,8 @@ Heap_Dump(heap *Heap)
 		Platform_CloseFile(FileHandle);
 	}
 	Stack_Pop();
+
+	Platform_UnlockMutex(&Heap->Mutex);
 }
 
 internal stack *
