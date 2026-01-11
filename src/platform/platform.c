@@ -450,10 +450,15 @@ Platform_ReloadModule(platform_module *Module)
 	Platform_OpenModuleBackend(Module);
 
 	Platform_GetProcAddress(Module, "Load", (vptr *) &Module->Load);
+	if (!Module->Load) Module->Load = (vptr) Platform_Stub;
 	Platform_GetProcAddress(Module, "Init", (vptr *) &Module->Init);
+	if (!Module->Init) Module->Init = (vptr) Platform_Stub;
 	Platform_GetProcAddress(Module, "Update", (vptr *) &Module->Update);
+	if (!Module->Update) Module->Update = (vptr) Platform_Stub;
 	Platform_GetProcAddress(Module, "Deinit", (vptr *) &Module->Deinit);
+	if (!Module->Deinit) Module->Deinit = (vptr) Platform_Stub;
 	Platform_GetProcAddress(Module, "Unload", (vptr *) &Module->Unload);
+	if (!Module->Unload) Module->Unload = (vptr) Platform_Stub;
 
 	stack Stack;
 	if (_G.UtilIsLoaded) Stack = Stack_Get();

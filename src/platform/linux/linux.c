@@ -44,6 +44,11 @@ typedef enum sys_map {
 	SYS_MAP_UNINITIALIZED = 0x4000000,
 } sys_map;
 
+#define SYS_EINTR -4
+#define SYS_EAGAIN -11
+#define SYS_ENODEV -19
+#define SYS_EINVAL -22
+
 #define SYS_OPEN_READONLY  0x0000
 #define SYS_OPEN_WRITEONLY 0x0001
 #define SYS_OPEN_READWRITE 0x0002
@@ -68,11 +73,23 @@ typedef enum sys_map {
 #define SYS_RUNTIME_LOADER_GLOBAL   0x0100
 #define SYS_RUNTIME_LOADER_NODELETE 0x1000
 
+#define SYS_STAT_FILE_TYPE_MASK      017000
+#define SYS_STAT_FILE_TYPE_FIFO      0010000
+#define SYS_STAT_FILE_TYPE_CHARACTER 0020000
+#define SYS_STAT_FILE_TYPE_DIRECTORY 0040000
+#define SYS_STAT_FILE_TYPE_BLOCK     0060000
+#define SYS_STAT_FILE_TYPE_REGULAR   0100000
+#define SYS_STAT_FILE_TYPE_SYMLINK   0120000
+#define SYS_STAT_FILE_TYPE_SOCKET    0140000
+
 #define SYS_ADDRESS_FAMILY_UNIX 1
 
 #define SYS_SOCKET_STREAM 1
 
 #define SYS_CLOCK_REALTIME 0
+
+#define SYS_DEV_MAJOR(ID) (((ID & 0x00000000000FFF00ull) >> 8) | ((ID & 0xFFFFF00000000000ull) >> 32))
+#define SYS_DEV_MINOR(ID) (((ID & 0x00000000000000FFull) >> 0) | ((ID & 0x00000FFFFFF00000ull) >> 12))
 
 typedef s32 sys_pid;
 
@@ -127,7 +144,7 @@ typedef struct sys_cmsghdr {
 } sys_cmsghdr;
 
 typedef struct sys_stat {
-	u64 DeviceID;
+	u64 DeviceId;
 	u64 Inode;
 	u64 Protection;
 
@@ -136,7 +153,7 @@ typedef struct sys_stat {
 	u32 GroupID;
 	u32 _Padding0;
 
-	u64 SpecialDeviceID;
+	u64 SpecialDeviceId;
 	s64 Size;
 	s64 BlockSize;
 	s64 BlockCount;
@@ -234,6 +251,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(9,   MemMap,       vptr,    vptr Address, usize Length, sys_prot Protection, sys_map Flags, s32 FileDescriptor, s64 Offset) \
 	SYSCALL(10,  MemProtect,   s32,     vptr Address, usize Length, s32 Protection) \
 	SYSCALL(11,  MemUnmap,     s32,     vptr Address, usize Length) \
+	SYSCALL(16,  IoCtl,        s32,     s32 FileDescriptor, usize Op, vptr Data) \
 	SYSCALL(41,  Socket,       s32,     s32 Domain, s32 Type, s32 Protocol) \
 	SYSCALL(42,  Connect,      s32,     s32 SocketFileDescriptor, sys_sockaddr *Address, u32 AddressLength) \
 	SYSCALL(44,  SendTo,       ssize,   s32 SocketFileDescriptor, vptr Buffer, usize Size, sys_send_flags Flags, sys_sockaddr *Address, u32 AddressLength) \
@@ -242,6 +260,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(57,  Fork,         sys_pid, void) \
 	SYSCALL(60,  Exit,         void,    s32 ErrorCode) \
 	SYSCALL(61,  Wait4,        sys_pid, sys_pid ProcessId, s32 *StatusOut, s32 Options, sys_rusage *ResourceUsageOut) \
+	SYSCALL(72,  FileControl,  s32,     s32 FileDescriptor, s32 Op) \
 	SYSCALL(76,  Truncate,     s32,     c08 *Path, usize Length) \
 	SYSCALL(77,  FTruncate,    s32,     s32 FileDescriptor, usize Length) \
 	SYSCALL(186, GetTid,       s32,     void) \

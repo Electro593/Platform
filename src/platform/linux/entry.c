@@ -407,6 +407,24 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (_G.UtilIsLoaded) Stack_Set(Stack);
 	}
 
+	while (_G.ExecutionState == EXECUTION_RUNNING) {
+		HASHMAP_FOREACH (
+			I,
+			Hash,
+			string,
+			Key,
+			platform_module *,
+			Module,
+			&_G.ModuleTable
+		)
+		{
+			stack Stack;
+			if (_G.UtilIsLoaded) Stack = Stack_Get();
+			Module->Update(&_G);
+			if (_G.UtilIsLoaded) Stack_Set(Stack);
+		}
+	}
+
 	HASHMAP_FOREACH (
 		I,
 		Hash,

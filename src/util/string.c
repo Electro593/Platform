@@ -332,7 +332,7 @@ typedef struct fstring_format_list {
 /// terminator.
 /// @param[in] LITERAL The literal format string to use.
 /// @param[in] ... The arguments to pass into FPrint.
-#define FPrintL(LITERAL, ...) FPrint(CNStringL(LITERAL) __VA_OPT__(,) __VA_ARGS__)
+#define FPrintL(LITERAL, ...) FPrint(CStringL(LITERAL) __VA_OPT__(,) __VA_ARGS__)
 
 /// @brief Iterates through the codepoints of a string. Supports continue and
 /// break. Does not iterate by pointer.

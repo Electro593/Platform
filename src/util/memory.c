@@ -381,7 +381,8 @@ Heap_ResizeA(vptr *Data, u32 NewSize)
 internal void
 Heap_Free(heap_handle *Handle)
 {
-	Assert(Handle);
+	if (!Handle) return;
+
 	heap		*Heap	 = Heap_GetHeap(Handle);
 	heap_handle *Handles = Heap->Handles;
 	Platform_LockMutex(&Heap->Mutex);

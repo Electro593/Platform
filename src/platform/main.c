@@ -33,6 +33,7 @@ global platform_funcs _F;
 #include <platform/platform.c>
 #elif defined(_LINUX)
 #include <platform/linux/linux.c>
+// #include <platform/linux/drm.c>
 #include <platform/platform.c>
 #include <platform/linux/wayland/api.c>
 #include <platform/linux/wayland/wayland.c>

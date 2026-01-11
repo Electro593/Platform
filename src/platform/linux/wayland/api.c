@@ -88,6 +88,10 @@ typedef struct wayland_xdg_surface		   wayland_xdg_surface;
 typedef struct wayland_xdg_toplevel		   wayland_xdg_toplevel;
 typedef struct wayland_xdg_popup		   wayland_xdg_popup;
 
+typedef enum wayland_drm_error		wayland_drm_error;
+typedef enum wayland_drm_capability wayland_drm_capability;
+typedef struct wayland_drm			wayland_drm;
+
 #define WAYLAND_DISPLAY_ID 1
 
 typedef enum wayland_object_type : u16 {
@@ -121,6 +125,8 @@ typedef enum wayland_object_type : u16 {
 	WAYLAND_OBJECT_TYPE_XDG_SURFACE,
 	WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL,
 	WAYLAND_OBJECT_TYPE_XDG_POPUP,
+
+	WAYLAND_OBJECT_TYPE_DRM,
 
 	WAYLAND_OBJECT_TYPE_COUNT
 } wayland_object_type;
@@ -1170,6 +1176,62 @@ struct wayland_xdg_popup {
 	void (*HandleRepositioned)(wayland_xdg_popup *This, u32 Token);
 };
 
+enum wayland_drm_error {
+	WAYLAND_DRM_ERROR_AUTHENTICATE_FAIL = 0,
+	WAYLAND_DRM_ERROR_INVALID_FORMAT	= 1,
+	WAYLAND_DRM_ERROR_INVALID_NAME		= 2,
+};
+
+enum wayland_drm_capability { WAYLAND_DRM_CAPABILITY_PRIME = 1 };
+
+struct wayland_drm {
+	wayland_interface Header;
+
+	b08 (*Authenticate)(wayland_drm *This, u32 Id);
+	wayland_buffer *(*CreateBuffer)(
+		wayland_drm		  *This,
+		u32				   Name,
+		s32				   Width,
+		s32				   Height,
+		u32				   Stride,
+		wayland_shm_format Format
+	);
+	wayland_buffer *(*CreatePlanarBuffer)(
+		wayland_drm		  *This,
+		u32				   Name,
+		s32				   Width,
+		s32				   Height,
+		wayland_shm_format Format,
+		s32				   Offset0,
+		s32				   Stride0,
+		s32				   Offset1,
+		s32				   Stride1,
+		s32				   Offset2,
+		s32				   Stride2
+	);
+	wayland_buffer *(*CreatePrimeBuffer)(
+		wayland_drm		  *This,
+		u32				   Name,
+		s32				   Width,
+		s32				   Height,
+		wayland_shm_format Format,
+		s32				   Offset0,
+		s32				   Stride0,
+		s32				   Offset1,
+		s32				   Stride1,
+		s32				   Offset2,
+		s32				   Stride2
+	);
+
+	void (*HandleDevice)(wayland_drm *This, string Name);
+	void (*HandleFormat)(wayland_drm *This, u32 Format);
+	void (*HandleAuthenticated)(wayland_drm *This);
+	void (*HandleCapabilities)(
+		wayland_drm			  *This,
+		wayland_drm_capability Capabilities
+	);
+};
+
 /* ====== API State & Functions ====== */
 
 typedef struct wayland_api_id_entry {
@@ -1304,6 +1366,12 @@ typedef struct wayland_api_state {
 	INTERN(b08,  Wayland_XdgToplevel_SetFullscreen,   wayland_xdg_toplevel *This) \
 	INTERN(b08,  Wayland_XdgToplevel_UnsetFullscreen, wayland_xdg_toplevel *This) \
 	INTERN(b08,  Wayland_XdgToplevel_SetMinimized,    wayland_xdg_toplevel *This) \
+	\
+	INTERN(void,            Wayland_Drm_HandleEvents,       wayland_drm *This, wayland_message *Message) \
+	INTERN(b08,             Wayland_Drm_Authenticate,       wayland_drm *This, u32 Id) \
+	INTERN(wayland_buffer*, Wayland_Drm_CreateBuffer,       wayland_drm *This, u32 Name, s32 Width, s32 Height, u32 Stride, wayland_shm_format Format) \
+	INTERN(wayland_buffer*, Wayland_Drm_CreatePlanarBuffer, wayland_drm *This, u32 Name, s32 Width, s32 Height, wayland_shm_format Format, s32 Offset0, s32 Stride0, s32 Offset1, s32 Stride1, s32 Offset2, s32 Stride2) \
+	INTERN(wayland_buffer*, Wayland_Drm_CreatePrimeBuffer,  wayland_drm *This, u32 Name, s32 Width, s32 Height, wayland_shm_format Format, s32 Offset0, s32 Stride0, s32 Offset1, s32 Stride1, s32 Offset2, s32 Stride2) \
 	//
 
 #endif
@@ -1580,6 +1648,16 @@ static wayland_xdg_popup WaylandXdgPopupPrototype = {
 	.Reposition = Wayland_XdgPopup_Reposition,
 };
 
+static wayland_drm WaylandDrmPrototype = {
+	.Header				= { .Type		 = WAYLAND_OBJECT_TYPE_DRM,
+							.Size		 = sizeof(wayland_drm),
+							.HandleEvent = (vptr) Wayland_Drm_HandleEvents },
+	.Authenticate		= Wayland_Drm_Authenticate,
+	.CreateBuffer		= Wayland_Drm_CreateBuffer,
+	.CreatePlanarBuffer = Wayland_Drm_CreatePlanarBuffer,
+	.CreatePrimeBuffer	= Wayland_Drm_CreatePrimeBuffer,
+};
+
 static string WaylandNames[WAYLAND_OBJECT_TYPE_COUNT] = {
 	[WAYLAND_OBJECT_TYPE_DISPLAY]	  = CStringL("wl_display"),
 	[WAYLAND_OBJECT_TYPE_REGISTRY]	  = CStringL("wl_registry"),
@@ -1610,6 +1688,7 @@ static string WaylandNames[WAYLAND_OBJECT_TYPE_COUNT] = {
 	[WAYLAND_OBJECT_TYPE_XDG_SURFACE]	 = CStringL("xdg_surface"),
 	[WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL]	 = CStringL("xdg_toplevel"),
 	[WAYLAND_OBJECT_TYPE_XDG_POPUP]		 = CStringL("xdg_popup"),
+	[WAYLAND_OBJECT_TYPE_DRM]			 = CStringL("wl_drm"),
 };
 
 static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
@@ -1660,6 +1739,7 @@ static wayland_interface *WaylandPrototypes[WAYLAND_OBJECT_TYPE_COUNT] = {
 	[WAYLAND_OBJECT_TYPE_XDG_SURFACE]  = (vptr) &WaylandXdgSurfacePrototype,
 	[WAYLAND_OBJECT_TYPE_XDG_TOPLEVEL] = (vptr) &WaylandXdgToplevelPrototype,
 	[WAYLAND_OBJECT_TYPE_XDG_POPUP]	   = (vptr) &WaylandXdgPopupPrototype,
+	[WAYLAND_OBJECT_TYPE_DRM]		   = (vptr) &WaylandDrmPrototype,
 };
 
 internal u32
@@ -3112,6 +3192,129 @@ Wayland_XdgPopup_Reposition(
 	VERSION(3)
 	Wayland_SendMessage(This, 2, "oi", Positioner, Token);
 	return 1;
+}
+
+internal void
+Wayland_Drm_HandleEvents(wayland_drm *This, wayland_message *Message)
+{
+	switch (Message->Opcode) {
+		case 0: TRYCALL(This, Message, 1, HandleDevice, String); break;
+		case 1: TRYCALL(This, Message, 1, HandleFormat, Uint); break;
+		case 2: TRYCALL(This, Message, 1, HandleAuthenticated); break;
+		case 3: TRYCALL(This, Message, 1, HandleCapabilities, Uint); break;
+	}
+}
+
+internal b08
+Wayland_Drm_Authenticate(wayland_drm *This, u32 Id)
+{
+	VERSION(1)
+	Wayland_SendMessage(This, 0, "i", Id);
+	return 1;
+}
+
+internal wayland_buffer *
+Wayland_Drm_CreateBuffer(
+	wayland_drm		  *This,
+	u32				   Name,
+	s32				   Width,
+	s32				   Height,
+	u32				   Stride,
+	wayland_shm_format Format
+)
+{
+	VERSION(1)
+	wayland_buffer *Buffer =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_BUFFER);
+	if (Buffer)
+		Wayland_SendMessage(
+			This,
+			1,
+			"oiiiii",
+			Buffer,
+			Name,
+			Width,
+			Height,
+			Stride,
+			Format
+		);
+	return Buffer;
+}
+
+internal wayland_buffer *
+Wayland_Drm_CreatePlanarBuffer(
+	wayland_drm		  *This,
+	u32				   Name,
+	s32				   Width,
+	s32				   Height,
+	wayland_shm_format Format,
+	s32				   Offset0,
+	s32				   Stride0,
+	s32				   Offset1,
+	s32				   Stride1,
+	s32				   Offset2,
+	s32				   Stride2
+)
+{
+	VERSION(1)
+	wayland_buffer *Buffer =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_BUFFER);
+	if (Buffer)
+		Wayland_SendMessage(
+			This,
+			2,
+			"oiiiiiiiiii",
+			Buffer,
+			Name,
+			Width,
+			Height,
+			Format,
+			Offset0,
+			Stride0,
+			Offset1,
+			Stride1,
+			Offset2,
+			Stride2
+		);
+	return Buffer;
+}
+
+internal wayland_buffer *
+Wayland_Drm_CreatePrimeBuffer(
+	wayland_drm		  *This,
+	u32				   Name,
+	s32				   Width,
+	s32				   Height,
+	wayland_shm_format Format,
+	s32				   Offset0,
+	s32				   Stride0,
+	s32				   Offset1,
+	s32				   Stride1,
+	s32				   Offset2,
+	s32				   Stride2
+)
+{
+	VERSION(2)
+	wayland_buffer *Buffer =
+		Wayland_CreateChildObject(This, WAYLAND_OBJECT_TYPE_BUFFER);
+	if (Buffer)
+		Wayland_SendMessage(
+			This,
+			3,
+			"oiiiiiiiiii",
+			Buffer,
+			Name,
+			Width,
+			Height,
+			Format,
+			Offset0,
+			Stride0,
+			Offset1,
+			Stride1,
+			Offset2,
+			Stride2
+		);
+	return Buffer;
 }
 
 #undef TRYCALL

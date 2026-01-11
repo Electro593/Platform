@@ -30,6 +30,10 @@ typedef struct wayland_window_state {
 } wayland_window_state;
 
 typedef struct wayland_state {
+	// s32					   DrmFd;
+	// b08					   DrmAuthenticated;
+	// wayland_drm_capability DrmCapabilities;
+
 	thread_handle EventThread;
 
 	u32 SyncLock;
@@ -39,6 +43,7 @@ typedef struct wayland_state {
 	wayland_compositor	*Compositor;
 	wayland_shm			*Shm;
 	wayland_xdg_wm_base *XdgWmBase;
+	wayland_drm			*Drm;
 
 	wayland_window_state Window;
 
@@ -156,6 +161,7 @@ internal void
 Wayland_Surface_HandlePreferredBufferScale(wayland_surface *This, s32 Factor)
 {
 	Wayland_DebugLog(This, "Requested scaling factor of %d\n", Factor);
+
 	_G.Wayland.PreferredBufferScale = Factor;
 }
 
@@ -166,6 +172,7 @@ Wayland_Surface_HandlePreferredBufferTransform(
 )
 {
 	Wayland_DebugLog(This, "Requested buffer transform of %u\n", Transform);
+
 	_G.Wayland.PreferredBufferTransform = Transform;
 }
 
@@ -173,6 +180,7 @@ internal void
 Wayland_XdgWmBase_HandlePing(wayland_xdg_wm_base *This, u32 Serial)
 {
 	Wayland_DebugLog(This, "Pinged! Ponging with %u\n", Serial);
+
 	CALL(This, Pong, Serial);
 }
 
@@ -185,6 +193,7 @@ Wayland_XdgSurface_HandleConfigure(wayland_xdg_surface *This, u32 Serial)
 		"%u\n",
 		Serial
 	);
+
 	CALL(This, AckConfigure, Serial);
 }
 
@@ -203,6 +212,7 @@ Wayland_XdgToplevel_HandleConfigure(
 		Width,
 		Height
 	);
+
 	for (usize I = 0; I < States.Size / 4; I++)
 		FPrintL("%s %d", CString(I ? "," : ""), States.Data[I]);
 	FPrintL("\n");
@@ -212,6 +222,7 @@ internal void
 Wayland_XdgToplevel_HandleClose(wayland_xdg_toplevel *This)
 {
 	Wayland_DebugLog(This, "Requested to close\n");
+
 	Wayland_Disconnect();
 }
 
@@ -242,9 +253,62 @@ Wayland_XdgToplevel_HandleWmCapabilities(
 )
 {
 	Wayland_DebugLog(This, "Advertized window manager capabilities:");
+
 	for (usize I = 0; I < Capabilities.Size / 4; I++)
 		FPrintL("%s %d", CString(I ? "," : ""), Capabilities.Data[I]);
 	FPrintL("\n");
+}
+
+internal void
+Wayland_Drm_HandleDevice(wayland_drm *This, string Name)
+{
+	Wayland_DebugLog(This, "Using device name %s\n", Name);
+
+	s32 Fd = Drm_OpenDriver(Name);
+	if (Fd < 0) goto error;
+
+	s32 NodeType = Drm_GetNodeType(Fd);
+	if (NodeType < 0) goto error;
+
+	if (NodeType == DRM_NODE_TYPE_RENDER) {
+		_G.Wayland.DrmAuthenticated = TRUE;
+	} else {
+		u32 MagicNumber;
+		s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
+		if (Result < 0) goto error;
+		CALL(This, Authenticate, MagicNumber);
+	}
+
+	_G.Wayland.DrmFd = Fd;
+	return;
+
+error:
+	if (Fd >= 0) Drm_CloseDriver(Fd);
+}
+
+internal void
+Wayland_Drm_HandleFormat(wayland_drm *This, u32 Format)
+{
+	Wayland_DebugLog(This, "Can handle format %d\n", Format);
+}
+
+internal void
+Wayland_Drm_HandleAuthenticated(wayland_drm *This)
+{
+	Wayland_DebugLog(This, "Authenticated!\n");
+
+	_G.Wayland.DrmAuthenticated = TRUE;
+}
+
+internal void
+Wayland_Drm_HandleCapabilities(
+	wayland_drm			  *This,
+	wayland_drm_capability Capabilities
+)
+{
+	Wayland_DebugLog(This, "Capabilities: %d\n", Capabilities);
+
+	_G.Wayland.DrmCapabilities = Capabilities;
 }
 
 internal void
@@ -278,6 +342,13 @@ Wayland_Registry_HandleGlobal(
 		_G.Wayland.XdgWmBase =
 			CALL(This, Bind, Name, WAYLAND_OBJECT_TYPE_XDG_WM_BASE, Version);
 		_G.Wayland.XdgWmBase->HandlePing = Wayland_XdgWmBase_HandlePing;
+	// } else if (!String_Cmp(Interface, WaylandNames[WAYLAND_OBJECT_TYPE_DRM])) {
+	// 	_G.Wayland.Drm =
+	// 		CALL(This, Bind, Name, WAYLAND_OBJECT_TYPE_DRM, Version);
+	// 	_G.Wayland.Drm->HandleDevice		= Wayland_Drm_HandleDevice;
+	// 	_G.Wayland.Drm->HandleFormat		= Wayland_Drm_HandleFormat;
+	// 	_G.Wayland.Drm->HandleAuthenticated = Wayland_Drm_HandleAuthenticated;
+	// 	_G.Wayland.Drm->HandleCapabilities	= Wayland_Drm_HandleCapabilities;
 	}
 }
 
@@ -292,6 +363,8 @@ Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DestroyObject(_G.Wayland.Shm);
 	else if (_G.Wayland.XdgWmBase && _G.Wayland.XdgWmBase->Header.Name == Name)
 		Wayland_DestroyObject(_G.Wayland.XdgWmBase);
+	// else if (_G.Wayland.Drm && _G.Wayland.Drm->Header.Name == Name)
+	// 	Wayland_DestroyObject(_G.Wayland.Drm);
 }
 
 internal void
@@ -536,8 +609,6 @@ Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
 	Window->FrameCallback			= FrameCallback;
 
 	CALL(Surface, Commit);
-
-	while (1);
 
 	return Surface;
 
