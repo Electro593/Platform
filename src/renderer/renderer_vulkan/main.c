@@ -21,50 +21,50 @@
 #undef INCLUDE_SOURCE
 #else
 #ifdef INCLUDE_SOURCE
-extern $module$_state _G;
-extern $module$_funcs _F;
+extern renderer_vulkan_state _G;
+extern renderer_vulkan_funcs _F;
 #endif
 
 // #include <...>
 
 #ifdef INCLUDE_HEADER
 
-#define $MODULE$_MODULE_NAME CStringL("$module$")
+#define RENDERER_VULKAN_MODULE_NAME CStringL("renderer_vulkan")
 
-#define $MODULE$_FUNCS
+#define RENDERER_VULKAN_FUNCS
 
-typedef struct $module$_state {
-} $module$_state;
+typedef struct renderer_vulkan_state {
+} renderer_vulkan_state;
 
-typedef struct $module$_funcs {
+typedef struct renderer_vulkan_funcs {
 #define EXPORT(R, N, ...) R (*N)(__VA_ARGS__);
-#define X $MODULE$_FUNCS
+#define X RENDERER_VULKAN_FUNCS
 #include <x.h>
-} $module$_funcs;
+} renderer_vulkan_funcs;
 
-#if defined(_$MODULE$_MODULE)
+#if defined(_RENDERER_VULKAN_MODULE)
 #define EXPORT(R, N, ...) \
             internal R N(__VA_ARGS__);
-#define X $MODULE$_FUNCS
+#define X RENDERER_VULKAN_FUNCS
 #include <x.h>
 #else
 #define EXPORT(R, N, ...) \
             global R (*N)(__VA_ARGS__);
-#define X $MODULE$_FUNCS
+#define X RENDERER_VULKAN_FUNCS
 #include <x.h>
 #endif
 #endif
 
 #ifdef INCLUDE_SOURCE
-$module$_state _G;
-$module$_funcs _F;
+renderer_vulkan_state _G;
+renderer_vulkan_funcs _F;
 
 external void
 Load(platform_state *Platform, platform_module *Module)
 {
-	_F = ($module$_funcs) {
+	_F = (renderer_vulkan_funcs) {
 #define EXPORT(R, N, ...) N,
-#define X $MODULE$_FUNCS
+#define X RENDERER_VULKAN_FUNCS
 #include <x.h>
 	};
 

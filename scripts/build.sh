@@ -4,16 +4,20 @@ Mode="debug"
 PositionalArgs=()
 UseLoader="false"
 
+echo_help() {
+	echo "build.sh [OPTIONS]"
+	echo "  OPTIONS:"
+	echo "    -p=  --platform=  |  'win32' for windows, 'linux' for linux"
+	echo "    -a=  --arch=      |  'amd64' for AMD64"
+	echo "    -m=  --mode=      |  'debug' (default), 'release' for optimizations"
+	echo "    -h   --help       |  Display all options and their descriptions"
+	echo
+}
+
 while [[ $# -gt 0 ]]; do
 	case $1 in
 		-h|--help)
-			echo "build.sh [OPTIONS]"
-			echo "  OPTIONS:"
-			echo "    -p=  --platform=  |  'win32' for windows, 'linux' for linux"
-			echo "    -a=  --arch=      |  'amd64' for AMD64"
-			echo "    -m=  --mode=      |  'debug' (default), 'release' for optimizations"
-			echo "    -h   --help       |  Display all options and their descriptions"
-			echo
+			echo_help
 			shift
 			;;
 		-p=*|--platform=*)
@@ -30,6 +34,7 @@ while [[ $# -gt 0 ]]; do
 			;;
 		-*|--*)
 			echo "Unknown option $1"
+			echo_help
 			exit 1
 			;;
 		*)
@@ -58,6 +63,7 @@ elif [[ "$Platform" = "linux" ]]; then
 	DllSuffix=".so"
 else
 	echo "Unknown platform option $Platform"
+	echo_help
 	exit 1
 fi
 
@@ -66,6 +72,7 @@ if [[ "$Arch" = "amd64" ]]; then
 	CompilerSwitches="$CompilerSwitches -D_X64"
 else
 	echo "Unknown arch option $Arch"
+	echo_help
 	exit 1
 fi
 
@@ -77,6 +84,7 @@ elif [[ "$Mode" = "release" ]]; then
 	CompilerSwitches="$CompilerSwitches -O3"
 else
 	echo "Unknown mode option $Mode"
+	echo_help
 	exit 1
 fi
 
@@ -144,8 +152,17 @@ build_module() {
 	fi
 }
 
-for Module in Platform/src/*/; do build_module; done
-for Module in src/*/; do build_module; done
+find_modules() {
+	Modules=`find $1 -name main.c`
+
+	for ModuleMain in $Modules; do
+		Module="$(dirname $ModuleMain)/"
+		build_module
+	done
+}
+
+find_modules Platform/src
+find_modules src
 
 if [[ -e build/*.obj ]]; then rm build/*.obj > /dev/null; fi
 if [[ -e build/*.exp ]]; then rm build/*.exp > /dev/null; fi
