@@ -21,51 +21,51 @@
 #undef INCLUDE_SOURCE
 #else
 #ifdef INCLUDE_SOURCE
-extern renderer_vulkan_state _G;
-extern renderer_vulkan_funcs _F;
+extern renderer_opengl_state _G;
+extern renderer_opengl_funcs _F;
 #endif
 
 #include <renderer/renderer.c>
 
 #ifdef INCLUDE_HEADER
 
-#define RENDERER_VULKAN_MODULE_NAME CStringL("renderer_vulkan")
+#define RENDERER_OPENGL_MODULE_NAME CStringL("renderer_opengl")
 
-#define RENDERER_VULKAN_FUNCS \
+#define RENDERER_OPENGL_FUNCS \
 	RENDERER_FUNCS
 
-typedef struct renderer_vulkan_state {
-} renderer_vulkan_state;
+typedef struct renderer_opengl_state {
+} renderer_opengl_state;
 
-typedef struct renderer_vulkan_funcs {
+typedef struct renderer_opengl_funcs {
 #define EXPORT(R, N, ...) R (*N)(__VA_ARGS__);
-#define X RENDERER_VULKAN_FUNCS
+#define X RENDERER_OPENGL_FUNCS
 #include <x.h>
-} renderer_vulkan_funcs;
+} renderer_opengl_funcs;
 
-#if defined(_RENDERER_VULKAN_MODULE)
+#if defined(_RENDERER_OPENGL_MODULE)
 #define EXPORT(R, N, ...) \
             internal R N(__VA_ARGS__);
-#define X RENDERER_VULKAN_FUNCS
+#define X RENDERER_OPENGL_FUNCS
 #include <x.h>
 #else
 #define EXPORT(R, N, ...) \
             global R (*N)(__VA_ARGS__);
-#define X RENDERER_VULKAN_FUNCS
+#define X RENDERER_OPENGL_FUNCS
 #include <x.h>
 #endif
 #endif
 
 #ifdef INCLUDE_SOURCE
-renderer_vulkan_state _G;
-renderer_vulkan_funcs _F;
+renderer_opengl_state _G;
+renderer_opengl_funcs _F;
 
 external void
 Load(platform_state *Platform, platform_module *Module)
 {
-	_F = (renderer_vulkan_funcs) {
+	_F = (renderer_opengl_funcs) {
 #define EXPORT(R, N, ...) N,
-#define X RENDERER_VULKAN_FUNCS
+#define X RENDERER_OPENGL_FUNCS
 #include <x.h>
 	};
 
