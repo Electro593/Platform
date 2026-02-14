@@ -58,7 +58,7 @@ typedef struct wayland_state {
 
 #define WAYLAND_USER_FUNCS \
 	EXPORT(b08,               Wayland_TryInit,            void) \
-	EXPORT(wayland_surface *, Wayland_CreateOpenGLWindow, c08 *Title, usize Width, usize Height) \
+	EXPORT(wayland_surface *, Wayland_CreateGLWindow, c08 *Title, usize Width, usize Height) \
 	//
 
 #endif
@@ -342,13 +342,14 @@ Wayland_Registry_HandleGlobal(
 		_G.Wayland.XdgWmBase =
 			CALL(This, Bind, Name, WAYLAND_OBJECT_TYPE_XDG_WM_BASE, Version);
 		_G.Wayland.XdgWmBase->HandlePing = Wayland_XdgWmBase_HandlePing;
-	// } else if (!String_Cmp(Interface, WaylandNames[WAYLAND_OBJECT_TYPE_DRM])) {
-	// 	_G.Wayland.Drm =
-	// 		CALL(This, Bind, Name, WAYLAND_OBJECT_TYPE_DRM, Version);
-	// 	_G.Wayland.Drm->HandleDevice		= Wayland_Drm_HandleDevice;
-	// 	_G.Wayland.Drm->HandleFormat		= Wayland_Drm_HandleFormat;
-	// 	_G.Wayland.Drm->HandleAuthenticated = Wayland_Drm_HandleAuthenticated;
-	// 	_G.Wayland.Drm->HandleCapabilities	= Wayland_Drm_HandleCapabilities;
+		// } else if (!String_Cmp(Interface,
+		// WaylandNames[WAYLAND_OBJECT_TYPE_DRM])) { 	_G.Wayland.Drm = 		CALL(This,
+		// Bind, Name, WAYLAND_OBJECT_TYPE_DRM, Version);
+		// 	_G.Wayland.Drm->HandleDevice		= Wayland_Drm_HandleDevice;
+		// 	_G.Wayland.Drm->HandleFormat		= Wayland_Drm_HandleFormat;
+		// 	_G.Wayland.Drm->HandleAuthenticated =
+		// Wayland_Drm_HandleAuthenticated; 	_G.Wayland.Drm->HandleCapabilities
+		// = Wayland_Drm_HandleCapabilities;
 	}
 }
 
@@ -498,7 +499,7 @@ Wayland_TryInit(void)
 }
 
 internal wayland_surface *
-Wayland_CreateOpenGLWindow(c08 *Title, usize Width, usize Height)
+Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 {
 	if (!Wayland_IsConnected()) return NULL;
 

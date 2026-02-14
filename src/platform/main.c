@@ -36,6 +36,7 @@ global platform_funcs _F;
 // #include <platform/linux/drm.c>
 #include <platform/platform.c>
 #include <platform/linux/wayland/api.c>
+// #include <platform/linux/wayland/egl.c>
 #include <platform/linux/wayland/wayland.c>
 #endif
 
