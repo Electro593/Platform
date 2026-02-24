@@ -33,10 +33,11 @@ global platform_funcs _F;
 #include <platform/platform.c>
 #elif defined(_LINUX)
 #include <platform/linux/linux.c>
-// #include <platform/linux/drm.c>
 #include <platform/platform.c>
+#include <platform/linux/wayland/drm.c>
+#include <platform/linux/wayland/gbm.c>
+#include <platform/linux/wayland/egl.c>
 #include <platform/linux/wayland/api.c>
-// #include <platform/linux/wayland/egl.c>
 #include <platform/linux/wayland/wayland.c>
 #endif
 
@@ -47,12 +48,16 @@ global platform_funcs _F;
 #elif defined(_LINUX)
 #define PLATFORM_SPECIFIC_FUNCS \
 	WAYLAND_API_FUNCS \
-	WAYLAND_USER_FUNCS
+	WAYLAND_USER_FUNCS \
+	GBM_FUNCS \
+	EGL_FUNCS \
+	//
 #endif
 
 #define PLATFORM_FUNCS \
 	PLATFORM_SPECIFIC_FUNCS \
-	PLATFORM_SHARED_FUNCS
+	PLATFORM_SHARED_FUNCS \
+	//
 
 struct platform_state {
 	b08 CursorIsDisabled : 1;
@@ -93,6 +98,7 @@ typedef struct platform_funcs {
 
 #if defined(_PLATFORM_MODULE)
 #define DEFAULT(R, N, ...) internal R N(__VA_ARGS__);
+#define IMPORT(R, M, MN, N, ...) global R (*N)(__VA_ARGS__);
 #else
 #define EXPORT(R, N, ...) global R (*N)(__VA_ARGS__);
 #endif

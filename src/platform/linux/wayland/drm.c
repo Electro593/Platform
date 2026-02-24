@@ -11,6 +11,12 @@
 
 #define DRM_DEV_MAJOR 226
 
+#define DRM_FOURCC_CODE(A, B, C, D) ((u32)(A) | ((u32)(B) << 8) | ((u32)(C) << 16) | ((u32)(D) << 24))
+
+typedef enum drm_format {
+	DRM_FORMAT_XRGB8888 = DRM_FOURCC_CODE('X', 'R', '2', '4')
+} drm_format;
+
 typedef enum drm_node_type {
 	DRM_NODE_TYPE_PRIMARY = 0,	// Display & graphics control
 	DRM_NODE_TYPE_CONTROL = 1,

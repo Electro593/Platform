@@ -242,7 +242,7 @@ internal s64 Platform_WindowCallback(
 );
 
 internal void
-Platform_CreateWindow(void)
+Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 {
 	Platform_LoadWGL();
 
@@ -258,7 +258,7 @@ Platform_CreateWindow(void)
 	PrimaryWindow = Win32_CreateWindowExA(
 		0,
 		WindowClass.ClassName,
-		"Voxarc",
+		Name,
 		WS_OVERLAPPED
 			| WS_SYSMENU
 			| WS_CAPTION
@@ -809,8 +809,6 @@ Platform_Entry(void)
 	Win32_QueryPerformanceFrequency(&CounterFrequency);
 
 	platform_module *UtilModule = Platform_LoadModule(UTIL_MODULE_NAME);
-
-	Platform_CreateWindow();
 
 	Platform_LoadModule(CStringL("base"));
 

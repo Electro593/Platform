@@ -30,9 +30,13 @@ typedef struct wayland_window_state {
 } wayland_window_state;
 
 typedef struct wayland_state {
-	// s32					   DrmFd;
-	// b08					   DrmAuthenticated;
-	// wayland_drm_capability DrmCapabilities;
+	s32					   DrmFd;
+	b08					   DrmAuthenticated;
+	wayland_drm_capability DrmCapabilities;
+	drm_format			   DrmFormat;
+
+	gbm Gbm;
+	egl Egl;
 
 	thread_handle EventThread;
 
@@ -43,7 +47,7 @@ typedef struct wayland_state {
 	wayland_compositor	*Compositor;
 	wayland_shm			*Shm;
 	wayland_xdg_wm_base *XdgWmBase;
-	// wayland_drm			*Drm;
+	wayland_drm			*Drm;
 
 	wayland_window_state Window;
 
@@ -259,57 +263,61 @@ Wayland_XdgToplevel_HandleWmCapabilities(
 	FPrintL("\n");
 }
 
-// internal void
-// Wayland_Drm_HandleDevice(wayland_drm *This, string Name)
-// {
-// 	Wayland_DebugLog(This, "Using device name %s\n", Name);
-//
-// 	s32 Fd = Drm_OpenDriver(Name);
-// 	if (Fd < 0) goto error;
-//
-// 	s32 NodeType = Drm_GetNodeType(Fd);
-// 	if (NodeType < 0) goto error;
-//
-// 	if (NodeType == DRM_NODE_TYPE_RENDER) {
-// 		_G.Wayland.DrmAuthenticated = TRUE;
-// 	} else {
-// 		u32 MagicNumber;
-// 		s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
-// 		if (Result < 0) goto error;
-// 		CALL(This, Authenticate, MagicNumber);
-// 	}
-//
-// 	_G.Wayland.DrmFd = Fd;
-// 	return;
-//
-// error:
-// 	if (Fd >= 0) Drm_CloseDriver(Fd);
-// }
+internal void
+Wayland_Drm_HandleDevice(wayland_drm *This, string Name)
+{
+	Wayland_DebugLog(This, "Using device name %s\n", Name);
 
-// internal void
-// Wayland_Drm_HandleFormat(wayland_drm *This, u32 Format)
-// {
-// 	Wayland_DebugLog(This, "Can handle format %d\n", Format);
-// }
-//
-// internal void
-// Wayland_Drm_HandleAuthenticated(wayland_drm *This)
-// {
-// 	Wayland_DebugLog(This, "Authenticated!\n");
-//
-// 	_G.Wayland.DrmAuthenticated = TRUE;
-// }
-//
-// internal void
-// Wayland_Drm_HandleCapabilities(
-// 	wayland_drm			  *This,
-// 	wayland_drm_capability Capabilities
-// )
-// {
-// 	Wayland_DebugLog(This, "Capabilities: %d\n", Capabilities);
-//
-// 	_G.Wayland.DrmCapabilities = Capabilities;
-// }
+	s32 Fd = Drm_OpenDriver(Name);
+	if (Fd < 0) goto error;
+
+	s32 NodeType = Drm_GetNodeType(Fd);
+	if (NodeType < 0) goto error;
+
+	if (NodeType == DRM_NODE_TYPE_RENDER) {
+		_G.Wayland.DrmAuthenticated = TRUE;
+	} else {
+		u32 MagicNumber;
+		s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
+		if (Result < 0) goto error;
+		CALL(This, Authenticate, MagicNumber);
+	}
+
+	_G.Wayland.DrmFd = Fd;
+	return;
+
+error:
+	if (Fd >= 0) Drm_CloseDriver(Fd);
+}
+
+internal void
+Wayland_Drm_HandleFormat(wayland_drm *This, u32 Format)
+{
+	Wayland_DebugLog(This, "Can handle format %d\n", Format);
+
+	if (Format == DRM_FORMAT_XRGB8888) {
+		Wayland_DebugLog(This, "Selected pixel format!\n");
+		_G.Wayland.DrmFormat = Format;
+	}
+}
+
+internal void
+Wayland_Drm_HandleAuthenticated(wayland_drm *This)
+{
+	Wayland_DebugLog(This, "Authenticated!\n");
+	_G.Wayland.DrmAuthenticated = TRUE;
+}
+
+internal void
+Wayland_Drm_HandleCapabilities(
+	wayland_drm			  *This,
+	wayland_drm_capability Capabilities
+)
+{
+	Wayland_DebugLog(This, "Capabilities: %d\n", Capabilities);
+
+	_G.Wayland.DrmCapabilities = Capabilities;
+}
 
 internal void
 Wayland_Registry_HandleGlobal(
@@ -342,14 +350,13 @@ Wayland_Registry_HandleGlobal(
 		_G.Wayland.XdgWmBase =
 			CALL(This, Bind, Name, WAYLAND_OBJECT_TYPE_XDG_WM_BASE, Version);
 		_G.Wayland.XdgWmBase->HandlePing = Wayland_XdgWmBase_HandlePing;
-		// } else if (!String_Cmp(Interface,
-		// WaylandNames[WAYLAND_OBJECT_TYPE_DRM])) { 	_G.Wayland.Drm = 		CALL(This,
-		// Bind, Name, WAYLAND_OBJECT_TYPE_DRM, Version);
-		// 	_G.Wayland.Drm->HandleDevice		= Wayland_Drm_HandleDevice;
-		// 	_G.Wayland.Drm->HandleFormat		= Wayland_Drm_HandleFormat;
-		// 	_G.Wayland.Drm->HandleAuthenticated =
-		// Wayland_Drm_HandleAuthenticated; 	_G.Wayland.Drm->HandleCapabilities
-		// = Wayland_Drm_HandleCapabilities;
+	} else if (!String_Cmp(Interface, WaylandNames[WAYLAND_OBJECT_TYPE_DRM])) {
+		_G.Wayland.Drm =
+			CALL(This, Bind, Name, WAYLAND_OBJECT_TYPE_DRM, Version);
+		_G.Wayland.Drm->HandleDevice		= Wayland_Drm_HandleDevice;
+		_G.Wayland.Drm->HandleFormat		= Wayland_Drm_HandleFormat;
+		_G.Wayland.Drm->HandleAuthenticated = Wayland_Drm_HandleAuthenticated;
+		_G.Wayland.Drm->HandleCapabilities	= Wayland_Drm_HandleCapabilities;
 	}
 }
 
@@ -364,8 +371,8 @@ Wayland_Registry_HandleGlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DestroyObject(_G.Wayland.Shm);
 	else if (_G.Wayland.XdgWmBase && _G.Wayland.XdgWmBase->Header.Name == Name)
 		Wayland_DestroyObject(_G.Wayland.XdgWmBase);
-	// else if (_G.Wayland.Drm && _G.Wayland.Drm->Header.Name == Name)
-	// 	Wayland_DestroyObject(_G.Wayland.Drm);
+	else if (_G.Wayland.Drm && _G.Wayland.Drm->Header.Name == Name)
+		Wayland_DestroyObject(_G.Wayland.Drm);
 }
 
 internal void
@@ -487,15 +494,32 @@ Wayland_TryInit(void)
 			Wayland_EventHandlerThread,
 			NULL
 		);
-		if (!Success) {
-			Wayland_Disconnect();
-			return FALSE;
-		}
+		if (!Success) goto error;
 
+		// Wait for global events to come and pass
 		Wayland_SyncAndHandleEvents();
+
+		// Wait for drm authentication events to pass
+		Wayland_SyncAndHandleEvents();
+		if (!_G.Wayland.DrmAuthenticated) goto error;
+
+		b08 GbmStatus = Gbm_Init(
+			_G.Wayland.DrmFd,
+			_G.Wayland.PreferredWindowSize.X,
+			_G.Wayland.PreferredWindowSize.Y,
+			_G.Wayland.DrmFormat,
+			&_G.Wayland.Gbm
+		);
+		if (!GbmStatus) goto error;
+
+		if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
 	}
 
 	return Wayland_IsConnected();
+
+error:
+	Wayland_Disconnect();
+	return FALSE;
 }
 
 internal wayland_surface *

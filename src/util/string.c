@@ -342,7 +342,7 @@ typedef struct fstring_format_list {
 /// @param[in] STR The string to iterate over
 #define STRING_FOREACH(INDEX, CODEPOINT, CURSOR, STR) \
 	for (usize INDEX = 0; INDEX == 0;) \
-		for (string CURSOR = STR; INDEX == 0; INDEX++) \
+		for (string CURSOR = (STR); INDEX == 0; INDEX++) \
 			for (c32 CODEPOINT = 0; CURSOR.Length ? (CODEPOINT = String_NextCodepoint(&CURSOR)), TRUE : FALSE; INDEX++)
 
 #endif	// SECTION_STRING_MACROS
@@ -361,9 +361,10 @@ typedef struct fstring_format_list {
 	EXPORT(string, HString,   heap *Heap, c08 *Text) \
 	EXPORT(string, LString,   usize Length) \
 	\
-	EXPORT(usize,  String_FindCharFromLeft, string Str, c32 Target) \
-	EXPORT(usize,  String_Cpy,              string Dest, string Src) \
-	EXPORT(usize,  String_Fill,             string Dest, u32 Codepoint, usize Count) \
+	EXPORT(usize,  String_FindCharFromLeft,     string Str, c32 Target) \
+	EXPORT(string, String_SplitLeftByCodepoint, string *Str, c32 Codepoint) \
+	EXPORT(usize,  String_Cpy,                  string Dest, string Src) \
+	EXPORT(usize,  String_Fill,                 string Dest, u32 Codepoint, usize Count) \
 	\
 	EXPORT(s08,    String_Cmp,     string A, string B) \
 	EXPORT(s08,    String_CmpPtr,  string *A, string *B, vptr _) \
@@ -498,6 +499,38 @@ String_FindCharFromLeft(string Str, c32 Target)
 	STRING_FOREACH (I, C, Cursor, Str)
 		if (C == Target) return (usize) (Cursor.Text - Str.Text);
 	return (usize) -1;
+}
+
+/// @brief Find the first instance of Codepoint from the left and and split on
+/// it, returning the first half and writing the second half into Cursor.
+///
+/// The returned strings will be views pointing to the same data.
+///
+/// If the codepoint is not found in the string, the full string will be
+/// returned and Cursor will be an empty view at the end of the string.
+/// @param Str A pointer to the string to split.
+/// @param Codepoint The codepoint to split at.
+/// @return The first half of the split string.
+internal string
+String_SplitLeftByCodepoint(string *Str, c32 Codepoint)
+{
+	string Left = *Str;
+
+	STRING_FOREACH (I, C, Cursor, Left) {
+		if (C == Codepoint) {
+			*Str = Cursor;
+			String_NextCodepoint(Str);
+
+			Left.Length = (usize) (Cursor.Text - Left.Text);
+			Left.Count	= I;
+			return Left;
+		}
+	}
+
+	Str->Length = 0;
+	Str->Count	= 0;
+	Str->Text	= Left.Text + Left.Length;
+	return Left;
 }
 
 /// @brief Copy a string's entire contents into another, respecting encoding.
@@ -2639,9 +2672,8 @@ FString_WriteFloat(fstring_format *Format, string Buffer)
 	ssize PadCount		= MAX(Format->Width, ContentCount) - ContentCount;
 	Format->ActualWidth = PadCount * PadCharLen + ContentLength;
 
-	if (!Buffer.Text || Buffer.Length < Format->ActualWidth) {
+	if (!Buffer.Text || Buffer.Length < Format->ActualWidth)
 		return FSTRING_FORMAT_BUFFER_TOO_SMALL;
-	}
 
 	if (!IsLeft)
 		String_BumpBytes(&Buffer, String_Fill(Buffer, PadCodepoint, PadCount));

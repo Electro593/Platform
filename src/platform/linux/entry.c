@@ -66,8 +66,10 @@ Platform_LoadOpenGL(void)
 }
 
 internal void
-Platform_CreateWindow(void)
-{ }
+Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
+{
+	if (Wayland_TryInit()) Wayland_CreateGLWindow(Name, Width, Height);
+}
 
 internal vptr
 Platform_AllocateMemory(u64 Size)
@@ -367,6 +369,31 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 	}
 }
 
+internal void
+Platform_LoadDependencies(void)
+{
+	vptr Egl = dlopen("libEGL.so", SYS_RUNTIME_LOADER_LAZY);
+	if (!Egl) {
+		FPrintL("Failed to load libEGL.so!\n");
+		Sys_Exit(-1);
+	}
+	vptr Gbm = dlopen("libgbm.so", SYS_RUNTIME_LOADER_LAZY);
+	if (!Gbm) {
+		FPrintL("Failed to load gbm.so!\n");
+		Sys_Exit(-1);
+	}
+
+#define IMPORT(R, M, MN, N, ...) Platform_GetProcAddress(M, #MN, (vptr*)&N);
+#define X GBM_FUNCS EGL_FUNCS
+#include <x.h>
+
+	Platform_GetProcAddress(
+		Gbm,
+		"gbm_create_device",
+		(vptr *) &Gbm_CreateDevice
+	);
+}
+
 external void
 Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
@@ -388,6 +415,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	Platform_LoadModule(UTIL_MODULE_NAME);
 	Platform_SetupArgTable(ArgCount, Args);
 	Platform_SetupEnvTable(EnvCount, EnvParams);
+
+	Platform_LoadDependencies();
 
 	Platform_LoadModule(CStringL("base"));
 

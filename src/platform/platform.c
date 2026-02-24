@@ -288,7 +288,7 @@ typedef enum file_mode {
 
 #define PLATFORM_SHARED_FUNCS \
 	EXPORT(void,             Platform_Exit,                  u32 ExitCode) \
-	EXPORT(void,             Platform_CreateWindow,          void) \
+	EXPORT(void,             Platform_CreateWindow,          c08 *Name, u32 Width, u32 Height) \
 	EXPORT(void,             Platform_Assert,                c08 *File, u32 Line, c08 *Expression, c08 *Message) \
 	EXPORT(vptr,             Platform_AllocateMemory,        u64 Size) \
 	EXPORT(void,             Platform_CloseFile,             file_handle FileHandle) \
