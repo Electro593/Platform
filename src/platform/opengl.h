@@ -183,7 +183,7 @@ typedef void(API_ENTRY func_OpenGL_DebugProc)(
    IMPORT(void,         Uniform2ui,                  s32 Location, u32 V0, u32 V1) \
    IMPORT(void,         Uniform3f,                   s32 Location, r32 V0, r32 V1, r32 V2) \
    IMPORT(void,         Uniform4f,                   s32 Location, r32 V0, r32 V1, r32 V2, r32 V3) \
-   IMPORT(void,         UniformMatrix4fv,            s32 Location, u32 Count, b08 Transpose, m4x4r32 Matrix) \
+   IMPORT(void,         UniformMatrix4fv,            s32 Location, u32 Count, b08 Transpose, r32 *Value) \
    IMPORT(void,         UseProgram,                  u32 Program) \
    IMPORT(void,         VertexAttribPointer,         u32 Index, s32 Size, u32 Type, b08 Normalized, s32 Stride, vptr Offset) \
    IMPORT(void,         VertexAttribIPointer,        u32 Index, s32 Size, u32 Type, s32 Stride, vptr Offset)
