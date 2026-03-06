@@ -451,6 +451,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	usize EnvCount = 0;
 	for (; EnvParams[EnvCount]; EnvCount++);
 
+	_G.WindowSize = (v2u32) { 800, 600 };
+
 	Platform_LoadModule(UTIL_MODULE_NAME);
 	Platform_SetupArgTable(ArgCount, Args);
 	Platform_SetupEnvTable(EnvCount, EnvParams);
