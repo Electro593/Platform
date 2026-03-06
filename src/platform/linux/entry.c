@@ -372,26 +372,25 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 internal void
 Platform_LoadDependencies(void)
 {
-	vptr Egl = dlopen("libEGL.so", SYS_RUNTIME_LOADER_LAZY);
-	if (!Egl) {
+	platform_module Egl, Gbm;
+	Egl.FileName = "libEGL.so";
+	Gbm.FileName = "libgbm.so";
+
+	Platform_OpenModuleBackend(&Egl);
+	if (!Platform_IsModuleBackendOpened(&Egl)) {
 		FPrintL("Failed to load libEGL.so!\n");
 		Sys_Exit(-1);
 	}
-	vptr Gbm = dlopen("libgbm.so", SYS_RUNTIME_LOADER_LAZY);
-	if (!Gbm) {
+
+	Platform_OpenModuleBackend(&Gbm);
+	if (!Platform_IsModuleBackendOpened(&Gbm)) {
 		FPrintL("Failed to load gbm.so!\n");
 		Sys_Exit(-1);
 	}
 
-#define IMPORT(R, M, MN, N, ...) Platform_GetProcAddress(M, #MN, (vptr*)&N);
+#define IMPORT(R, M, MN, N, ...) Platform_GetProcAddress(&M, #MN, (vptr*)&N);
 #define X GBM_FUNCS EGL_FUNCS
 #include <x.h>
-
-	Platform_GetProcAddress(
-		Gbm,
-		"gbm_create_device",
-		(vptr *) &Gbm_CreateDevice
-	);
 }
 
 external void

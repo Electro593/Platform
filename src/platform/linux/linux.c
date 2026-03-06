@@ -44,10 +44,42 @@ typedef enum sys_map {
 	SYS_MAP_UNINITIALIZED = 0x4000000,
 } sys_map;
 
-#define SYS_EINTR -4
-#define SYS_EAGAIN -11
-#define SYS_ENODEV -19
-#define SYS_EINVAL -22
+typedef enum sys_errno {
+	SYS_EPERM	= 1,  /* Operation not permitted */
+	SYS_ENOENT	= 2,  /* No such file or directory */
+	SYS_ESRCH	= 3,  /* No such process */
+	SYS_EINTR	= 4,  /* Interrupted system call */
+	SYS_EIO		= 5,  /* I/O error */
+	SYS_ENXIO	= 6,  /* No such device or address */
+	SYS_E2BIG	= 7,  /* Argument list too long */
+	SYS_ENOEXEC = 8,  /* Exec format error */
+	SYS_EBADF	= 9,  /* Bad file number */
+	SYS_ECHILD	= 10, /* No child processes */
+	SYS_EAGAIN	= 11, /* Try again */
+	SYS_ENOMEM	= 12, /* Out of memory */
+	SYS_EACCES	= 13, /* Permission denied */
+	SYS_EFAULT	= 14, /* Bad address */
+	SYS_ENOTBLK = 15, /* Block device required */
+	SYS_EBUSY	= 16, /* Device or resource busy */
+	SYS_EEXIST	= 17, /* File exists */
+	SYS_EXDEV	= 18, /* Cross-device link */
+	SYS_ENODEV	= 19, /* No such device */
+	SYS_ENOTDIR = 20, /* Not a directory */
+	SYS_EISDIR	= 21, /* Is a directory */
+	SYS_EINVAL	= 22, /* Invalid argument */
+	SYS_ENFILE	= 23, /* File table overflow */
+	SYS_EMFILE	= 24, /* Too many open files */
+	SYS_ENOTTY	= 25, /* Not a typewriter */
+	SYS_ETXTBSY = 26, /* Text file busy */
+	SYS_EFBIG	= 27, /* File too large */
+	SYS_ENOSPC	= 28, /* No space left on device */
+	SYS_ESPIPE	= 29, /* Illegal seek */
+	SYS_EROFS	= 30, /* Read-only file system */
+	SYS_EMLINK	= 31, /* Too many links */
+	SYS_EPIPE	= 32, /* Broken pipe */
+	SYS_EDOM	= 33, /* Math argument out of domain of func */
+	SYS_ERANGE	= 34, /* Math result not representable */
+} sys_errno;
 
 #define SYS_OPEN_READONLY  0x0000
 #define SYS_OPEN_WRITEONLY 0x0001

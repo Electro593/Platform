@@ -80,14 +80,18 @@ Wayland_DebugLog(vptr Object, c08 *Format, ...)
 	string Message = FVString(CString(Format), Args);
 	VA_End(Args);
 
-	wayland_interface *Interface = Object;
-	FPrintL(
-		"[%d] [Wayland] [%s#%d] %s",
-		Sys_GetTid(),
-		WaylandNames[Interface->Type],
-		Interface->Id,
-		Message
-	);
+	if (Object) {
+		wayland_interface *Interface = Object;
+		FPrintL(
+			"[%d] [Wayland] [%s#%d] %s",
+			Sys_GetTid(),
+			WaylandNames[Interface->Type],
+			Interface->Id,
+			Message
+		);
+	} else {
+		FPrintL("[%d] [Wayland] %s", Sys_GetTid(), Message);
+	}
 }
 
 internal void
@@ -496,23 +500,14 @@ Wayland_TryInit(void)
 		);
 		if (!Success) goto error;
 
-		// Wait for global events to come and pass
+		Wayland_DebugLog(NULL, "Syncing for global events...\n");
 		Wayland_SyncAndHandleEvents();
 
-		// Wait for drm authentication events to pass
+		Wayland_DebugLog(NULL, "Syncing for DRM authentication...\n");
 		Wayland_SyncAndHandleEvents();
 		if (!_G.Wayland.DrmAuthenticated) goto error;
 
-		b08 GbmStatus = Gbm_Init(
-			_G.Wayland.DrmFd,
-			_G.Wayland.PreferredWindowSize.X,
-			_G.Wayland.PreferredWindowSize.Y,
-			_G.Wayland.DrmFormat,
-			&_G.Wayland.Gbm
-		);
-		if (!GbmStatus) goto error;
-
-		if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
+		Wayland_DebugLog(NULL, "Connected!\n");
 	}
 
 	return Wayland_IsConnected();
@@ -526,6 +521,24 @@ internal wayland_surface *
 Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 {
 	if (!Wayland_IsConnected()) return NULL;
+	if (_G.Wayland.Window.Surface) return _G.Wayland.Window.Surface;
+	if (!Width || !Height) return NULL;
+
+	Wayland_DebugLog(NULL, "Creating %dx%d window titled %s...\n", Width, Height, CString(Title));
+	_G.Wayland.Window.Width	 = Width;
+	_G.Wayland.Window.Height = Height;
+	_G.Wayland.DrmFormat = DRM_FORMAT_XRGB8888;
+
+	b08 GbmStatus = Gbm_Init(
+		_G.Wayland.DrmFd,
+		Width,
+		Height,
+		_G.Wayland.DrmFormat,
+		&_G.Wayland.Gbm
+	);
+	if (!GbmStatus) goto error;
+
+	if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
 
 	s32	  ShmFd		 = 0;
 	usize BufferSize = 4 * Width * Height;
@@ -539,7 +552,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	wayland_xdg_toplevel *XdgToplevel = NULL;
 
 	Surface = CALL(_G.Wayland.Compositor, CreateSurface);
-	if (!Surface) goto failed;
+	if (!Surface) goto error;
 	Surface->HandleEnter = Wayland_Surface_HandleEnter;
 	Surface->HandleLeave = Wayland_Surface_HandleLeave;
 	Surface->HandlePreferredBufferScale =
@@ -548,11 +561,11 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 		Wayland_Surface_HandlePreferredBufferTransform;
 
 	XdgSurface = CALL(_G.Wayland.XdgWmBase, GetXdgSurface, Surface);
-	if (!XdgSurface) goto failed;
+	if (!XdgSurface) goto error;
 	XdgSurface->HandleConfigure = Wayland_XdgSurface_HandleConfigure;
 
 	XdgToplevel = CALL(XdgSurface, GetToplevel);
-	if (!XdgToplevel) goto failed;
+	if (!XdgToplevel) goto error;
 	XdgToplevel->HandleConfigure = Wayland_XdgToplevel_HandleConfigure;
 	XdgToplevel->HandleClose	 = Wayland_XdgToplevel_HandleClose;
 	XdgToplevel->HandleConfigureBounds =
@@ -562,8 +575,8 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 
 	s32 ShmSize = 2 * BufferSize;
 	ShmFd		= Sys_MemfdCreate("wayland-shm", 0);
-	if (ShmFd < 0) goto failed;
-	if (Sys_FTruncate(ShmFd, ShmSize) < 0) goto failed;
+	if (ShmFd < 0) goto error;
+	if (Sys_FTruncate(ShmFd, ShmSize) < 0) goto error;
 	BufferData = Sys_MemMap(
 		NULL,
 		ShmSize,
@@ -572,10 +585,10 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 		ShmFd,
 		0
 	);
-	if ((ssize) BufferData < 0 && (ssize) BufferData > -4096) goto failed;
+	if ((ssize) BufferData < 0 && (ssize) BufferData > -4096) goto error;
 
 	ShmPool = CALL(_G.Wayland.Shm, CreatePool, ShmFd, ShmSize);
-	if (!ShmPool) goto failed;
+	if (!ShmPool) goto error;
 
 	Buffer1 = CALL(
 		ShmPool,
@@ -586,7 +599,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 		Width * 4,
 		WAYLAND_SHM_FORMAT_ARGB8888
 	);
-	if (!Buffer1) goto failed;
+	if (!Buffer1) goto error;
 	Buffer1->HandleRelease = Wayland_Buffer_HandleRelease;
 
 	Buffer2 = CALL(
@@ -598,7 +611,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 		Width * 4,
 		WAYLAND_SHM_FORMAT_ARGB8888
 	);
-	if (!Buffer2) goto failed;
+	if (!Buffer2) goto error;
 	Buffer2->HandleRelease = Wayland_Buffer_HandleRelease;
 
 	CALL(XdgToplevel, SetTitle, CStringL("Voxarc"));
@@ -637,7 +650,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 
 	return Surface;
 
-failed:
+error:
 	if (Buffer1->Header.Id) CALL(Buffer1, Destroy);
 	if (Buffer2->Header.Id) CALL(Buffer2, Destroy);
 	if (ShmPool->Header.Id) CALL(ShmPool, Destroy);
@@ -646,6 +659,7 @@ failed:
 	if (Surface->Header.Id) CALL(Surface, Destroy);
 	if (BufferData) Sys_MemUnmap(BufferData, ShmSize);
 	if (ShmFd) Sys_Close(ShmFd);
+	Wayland_Disconnect();
 	return NULL;
 }
 

@@ -45,7 +45,7 @@ Drm_IoCtl(s32 Fd, usize Op, vptr Data)
 	s32 Result;
 	do {
 		Result = Sys_IoCtl(Fd, Op, Data);
-	} while (Result == SYS_EINTR || Result == SYS_EAGAIN);
+	} while (Result == -SYS_EINTR || Result == -SYS_EAGAIN);
 
 	return Result;
 }
@@ -72,12 +72,12 @@ Drm_GetNodeType(s32 Fd)
 	s32 Major = SYS_DEV_MAJOR(Stat.SpecialDeviceId);
 	s32 Minor = SYS_DEV_MINOR(Stat.SpecialDeviceId);
 
-	if (Major != DRM_DEV_MAJOR) return SYS_EINVAL;
+	if (Major != DRM_DEV_MAJOR) return -SYS_EINVAL;
 
 	drm_node_type NodeType = Minor >> 6;
 	if (NodeType >= 0 && NodeType < DRM_NODE_TYPE_COUNT) return NodeType;
 
-	return SYS_ENODEV;
+	return -SYS_ENODEV;
 }
 
 internal s32

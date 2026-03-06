@@ -343,7 +343,9 @@ typedef struct fstring_format_list {
 #define STRING_FOREACH(INDEX, CODEPOINT, CURSOR, STR) \
 	for (usize INDEX = 0; INDEX == 0;) \
 		for (string CURSOR = (STR); INDEX == 0; INDEX++) \
-			for (c32 CODEPOINT = 0; CURSOR.Length ? (CODEPOINT = String_NextCodepoint(&CURSOR)), TRUE : FALSE; INDEX++)
+			for (c32 CODEPOINT = 0; \
+				CURSOR.Length ? (CODEPOINT = String_PeekCodepoint(&CURSOR)), TRUE : FALSE; \
+				String_NextCodepoint(&CURSOR), INDEX++)
 
 #endif	// SECTION_STRING_MACROS
 
@@ -1004,7 +1006,7 @@ global fstring_format_type FStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 		S('p', TYPE_PTR),
 		S('T', TYPE_B08),
 		S('n', TYPE_QUERY32),
-		S('m', TYPE_S32 | FSTRING_FORMAT_FLAG_INT_DEC),
+		S('m', TYPE_U32 | FSTRING_FORMAT_FLAG_INT_HEX | FSTRING_FORMAT_FLAG_SPECIFY_RADIX),
 	},
 	[FSTRING_FORMAT_SIZE_HALFHALF] = {
 		S('d', TYPE_S08 | FSTRING_FORMAT_FLAG_INT_DEC),

@@ -291,7 +291,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	// Initialize
 	egl_int Major, Minor;
 	if (!Egl_Initialize(EglDisplay, &Major, &Minor)) {
-		FPrintL("Failed to initialize egl: code %x\n", Egl_GetError());
+		FPrintL("Failed to initialize egl: code %#x\n", Egl_GetError());
 		goto error;
 	}
 
@@ -319,21 +319,21 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	while (ApisStr.Length) {
 		string ApiStr = String_SplitLeftByCodepoint(&ApisStr, ' ');
 
-		if (String_Cmp(ApiStr, CStringL("EGL_OPENGL_API")) == 0) {
+		if (String_Cmp(ApiStr, CStringL("OpenGL")) == 0) {
 			if (Egl_BindApi(EGL_API_OPENGL)) Api = EGL_API_OPENGL;
 		}
 	}
 
 	if (Api != EGL_API_OPENGL) {
-		FPrintL("Failed to select OPENGL as egl's client API\n");
+		FPrintL("Failed to select OpenGL as EGL's client API\n");
 		goto error;
 	}
-	FPrintL("Selected egl opengl client api\n");
+	FPrintL("Selected EGL OpenGL client api\n");
 
 	// Select Config
 	egl_int ConfigCount = 0;
 	if (!Egl_GetConfigs(EglDisplay, NULL, 0, &ConfigCount)) {
-		FPrintL("Failed to get egl config count: code %x\n", Egl_GetError());
+		FPrintL("Failed to get egl config count: code %#x\n", Egl_GetError());
 		goto error;
 	}
 	if (ConfigCount < 1) {
@@ -378,7 +378,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	   );
 	if (!Success) {
 		FPrintL(
-			"Failed to find applicable egl configs: code %x\n",
+			"Failed to find applicable egl configs: code %#x\n",
 			Egl_GetError()
 		);
 		goto error;
@@ -395,7 +395,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		);
 		if (!Success) {
 			FPrintL(
-				"Failed to query egl config attrib: code %x\n",
+				"Failed to query egl config attrib: code %#x\n",
 				Egl_GetError()
 			);
 			goto error;
@@ -431,10 +431,14 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		EGL_CONTEXT_NONE,
 	};
 	// clang-format on
-	egl_context EglContext =
-		Egl_CreateContext(EglDisplay, EglConfig, EGL_NO_CONTEXT, ConfigAttribs);
+	egl_context EglContext = Egl_CreateContext(
+		EglDisplay,
+		EglConfig,
+		EGL_NO_CONTEXT,
+		ContextAttribs
+	);
 	if (EglContext == EGL_NO_CONTEXT) {
-		FPrintL("Failed to create egl context: code %x\n", Egl_GetError());
+		FPrintL("Failed to create egl context: code %#x\n", Egl_GetError());
 		goto error;
 	}
 

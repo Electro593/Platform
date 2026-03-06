@@ -43,6 +43,14 @@ struct gbm {
 
 #ifdef INCLUDE_SOURCE
 
+extern s32 *__errno_location(void);
+
+internal sys_errno
+Gbm_GetError(void)
+{
+	return *__errno_location();
+}
+
 internal b08
 Gbm_Init(s32 DrmFd, u32 Width, u32 Height, drm_format Format, gbm *GbmOut)
 {
@@ -50,7 +58,7 @@ Gbm_Init(s32 DrmFd, u32 Width, u32 Height, drm_format Format, gbm *GbmOut)
 
 	GbmOut->Device = Gbm_CreateDevice(DrmFd);
 	if (!GbmOut->Device) {
-		FPrintL("Failed to create gbm device\n");
+		FPrintL("Failed to create gbm device: code %m\n", Gbm_GetError());
 		return FALSE;
 	}
 
@@ -66,7 +74,7 @@ Gbm_Init(s32 DrmFd, u32 Width, u32 Height, drm_format Format, gbm *GbmOut)
 		GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING
 	);
 	if (!GbmOut->Surface) {
-		FPrintL("Failed to create gbm surface\n");
+		FPrintL("Failed to create gbm surface: code %m\n", Gbm_GetError());
 		return FALSE;
 	}
 
