@@ -488,10 +488,10 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 			&_G.ModuleTable
 		)
 		{
-			// stack Stack;
-			// if (_G.UtilIsLoaded) Stack = Stack_Get();
-			// Module->Update(&_G);
-			// if (_G.UtilIsLoaded) Stack_Set(Stack);
+			stack Stack;
+			if (_G.UtilIsLoaded) Stack = *Stack_Get();
+			Module->Update(&_G);
+			if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		}
 	}
 
