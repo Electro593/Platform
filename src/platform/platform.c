@@ -394,32 +394,95 @@ _Str_Cmp(vptr A, vptr B)
 	return _Mem_Cmp(A, B, MAX(AL, BL));
 }
 
+typedef struct _platform_buf {
+	usize Size;
+	usize Capacity;
+	c08	 *Data;
+} _platform_buf;
+
+#define _BufInit(BUF, SIZE)      \
+	c08 _##BUF##Data[SIZE];      \
+	_platform_buf BUF = {        \
+		.Size     = 0,           \
+		.Capacity = (SIZE),      \
+		.Data     = _##BUF##Data \
+	};
+
+inline internal string
+_BufToStr(_platform_buf *Buf)
+{
+	if (!Buf || !Buf->Data) return EString();
+
+	return (string) { .Text		= Buf->Data,
+					  .Encoding = STRING_ENCODING_ASCII,
+					  .Length	= Buf->Size };
+}
+
+inline internal void
+_ChrToBuf(_platform_buf *Buf, c08 Char)
+{
+	if (!Buf || !Buf->Data) return;
+	if (Buf->Size < Buf->Capacity) Buf->Data[Buf->Size++] = Char;
+}
+
+inline internal void
+_StrToBuf(_platform_buf *Buf, c08 *Str)
+{
+	if (!Buf || !Buf->Data) return;
+	while (*Str && Buf->Size < Buf->Capacity) _ChrToBuf(Buf, *Str++);
+}
+
+inline internal void
+_IntToBuf(_platform_buf *Buf, usize Value, u08 Radix)
+{
+	if (!Buf || !Buf->Data) return;
+	if (!Radix || Radix > 16) return;
+
+	static c08 *Encoding = "0123456789abcdef";
+
+	if (Radix == 16) _StrToBuf(Buf, "0x");
+	else if (Radix == 8) _StrToBuf(Buf, "0");
+	else if (Radix == 2) _StrToBuf(Buf, "0b");
+
+	usize ValueCpy = Value;
+	usize Len	   = 0;
+	do {
+		ValueCpy /= Radix;
+		Len++;
+	} while (ValueCpy);
+
+	usize NewSize = Buf->Size;
+	for (usize I = 0; I < Len; I++) {
+		usize Idx = Buf->Size + Len - I - 1;
+		if (Idx < Buf->Capacity) {
+			Buf->Data[Idx] = Encoding[Value % Radix];
+			NewSize++;
+		}
+		Value /= Radix;
+	}
+
+	Buf->Size = NewSize;
+}
+
 internal void
 Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message)
 {
-	c08 LineStr[11];
-	u32 Index		 = sizeof(LineStr);
-	LineStr[--Index] = 0;
-	do {
-		LineStr[--Index]  = (Line % 10) + '0';
-		Line			 /= 10;
-	} while (Line);
-
-	Platform_WriteError(_CString(File), FALSE);
-	Platform_WriteError(_CString(": "), FALSE);
-	Platform_WriteError(_CString(LineStr + Index), FALSE);
-	if (Expression[0] != 0) {
-		Platform_WriteError(_CString(": Assertion hit!\n\t("), FALSE);
-		Platform_WriteError(_CString(Expression), FALSE);
-		Platform_WriteError(_CString(") was FALSE\n"), FALSE);
-	} else {
-		Platform_WriteError(_CString(": \n"), FALSE);
+	_BufInit(Buf, 2048);
+	_StrToBuf(&Buf, File);
+	_StrToBuf(&Buf, ": ");
+	_IntToBuf(&Buf, Line, 10);
+	_StrToBuf(&Buf, ": Assertion hit!\n");
+	if (*Expression) {
+		_StrToBuf(&Buf, "\t(");
+		_StrToBuf(&Buf, Expression);
+		_StrToBuf(&Buf, ") was FALSE\n");
 	}
-	if (Message[0] != 0) {
-		Platform_WriteError(_CString("\t"), FALSE);
-		Platform_WriteError(_CString(Message), FALSE);
+	if (*Message) {
+		_StrToBuf(&Buf, "\t");
+		_StrToBuf(&Buf, Message);
 	}
-	Platform_WriteError(_CString("\n"), FALSE);
+	_StrToBuf(&Buf, "\n");
+	Platform_WriteError(_BufToStr(&Buf), FALSE);
 }
 
 internal void

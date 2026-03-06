@@ -15,6 +15,7 @@ typedef vptr egl_context;
 typedef vptr egl_display;
 typedef s32	 egl_int;
 typedef vptr egl_native_display_type;
+typedef vptr egl_native_window_type;
 typedef vptr egl_surface;
 
 #define EGL_DONT_CARE ((egl_int)(-1))  // v1.0
@@ -116,6 +117,7 @@ typedef enum egl_renderable_type_flags		 egl_renderable_type_flags;
 typedef enum egl_reset_notification_strategy egl_reset_notification_strategy;
 typedef enum egl_surface_type_flags			 egl_surface_type_flags;
 typedef enum egl_transparent_type			 egl_transparent_type;
+typedef enum egl_window_attrib				 egl_window_attrib;
 
 typedef struct egl egl;
 
@@ -253,28 +255,39 @@ enum egl_transparent_type {
 	EGL_TRANSPARENT_RGB	 = 0x3052,	  // v1.0
 };
 
+enum egl_window_attrib {
+	EGL_WINDOW_NONE = EGL_NONE	// v1.0
+};
+
 struct egl {
 	gbm *Gbm;
 
 	egl_display Display;
+	egl_surface Surface;
 	egl_context Context;
 	egl_config	Config;
 };
 
 #define EGL_FUNCS \
 	INTERN(b08, Egl_Init, gbm *Gbm, heap *Heap, egl *EglOut) \
+	INTERN(b08, Egl_Swap, egl *Egl) \
 	\
-	IMPORT(egl_boolean, Egl, eglBindAPI,         Egl_BindApi,         egl_api Api) \
-	IMPORT(egl_boolean, Egl, eglChooseConfig,    Egl_ChooseConfig,    egl_display Display, egl_int *Attribs, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
-	IMPORT(egl_context, Egl, eglCreateContext,   Egl_CreateContext,   egl_display Display, egl_config Config, egl_context ShareContext, egl_int *Attribs) \
-	IMPORT(egl_boolean, Egl, eglGetConfigAttrib, Egl_GetConfigAttrib, egl_display Display, egl_config Config, egl_config_attrib Attrib, egl_int *ValueOut) \
-	IMPORT(egl_boolean, Egl, eglGetConfigs,      Egl_GetConfigs,      egl_display Display, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
-	IMPORT(egl_display, Egl, eglGetDisplay,      Egl_GetDisplay,      egl_native_display_type Display) \
-	IMPORT(egl_int,     Egl, eglGetError,        Egl_GetError,        void) \
-	IMPORT(egl_boolean, Egl, eglInitialize,      Egl_Initialize,      egl_display Display, egl_int *Major, egl_int *Minor) \
-	IMPORT(egl_api,     Egl, eglQueryAPI,        Egl_QueryApi,        void) \
-	IMPORT(egl_display, Egl, eglQueryString,     Egl_QueryString,     egl_display Display, egl_int Name) \
-	IMPORT(egl_boolean, Egl, eglTerminate,       Egl_Terminate,       egl_display Display) \
+	IMPORT(egl_boolean, Egl, eglBindAPI,             Egl_BindApi,             egl_api Api) \
+	IMPORT(egl_boolean, Egl, eglChooseConfig,        Egl_ChooseConfig,        egl_display Display, egl_int *Attribs, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
+	IMPORT(egl_context, Egl, eglCreateContext,       Egl_CreateContext,       egl_display Display, egl_config Config, egl_context ShareContext, egl_int *Attribs) \
+	IMPORT(egl_surface, Egl, eglCreateWindowSurface, Egl_CreateWindowSurface, egl_display Display, egl_config Config, egl_native_window_type NativeWindow, egl_int *Attribs) \
+	IMPORT(egl_boolean, Egl, eglDestroyContext,      Egl_DestroyContext,      egl_display Display, egl_context Context) \
+	IMPORT(egl_boolean, Egl, eglDestroySurface,      Egl_DestroySurface,      egl_display Display, egl_surface Surface) \
+	IMPORT(egl_boolean, Egl, eglGetConfigAttrib,     Egl_GetConfigAttrib,     egl_display Display, egl_config Config, egl_config_attrib Attrib, egl_int *ValueOut) \
+	IMPORT(egl_boolean, Egl, eglGetConfigs,          Egl_GetConfigs,          egl_display Display, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
+	IMPORT(egl_display, Egl, eglGetDisplay,          Egl_GetDisplay,          egl_native_display_type Display) \
+	IMPORT(egl_int,     Egl, eglGetError,            Egl_GetError,            void) \
+	IMPORT(egl_boolean, Egl, eglInitialize,          Egl_Initialize,          egl_display Display, egl_int *Major, egl_int *Minor) \
+	IMPORT(egl_boolean, Egl, eglMakeCurrent,         Egl_MakeCurrent,         egl_display Display, egl_surface Draw, egl_surface Read, egl_context Context) \
+	IMPORT(egl_api,     Egl, eglQueryAPI,            Egl_QueryApi,            void) \
+	IMPORT(egl_display, Egl, eglQueryString,         Egl_QueryString,         egl_display Display, egl_int Name) \
+	IMPORT(egl_boolean, Egl, eglSwapBuffers,         Egl_SwapBuffers,         egl_display Display, egl_surface Surface) \
+	IMPORT(egl_boolean, Egl, eglTerminate,           Egl_Terminate,           egl_display Display) \
 	//
 
 #endif
@@ -284,8 +297,8 @@ struct egl {
 internal b08
 Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 {
-	egl_config *Configs = NULL;
-
+	egl_config *Configs	   = NULL;
+	egl_surface EglSurface = EGL_NO_SURFACE;
 	egl_display EglDisplay = Egl_GetDisplay(Gbm->Device);
 
 	// Initialize
@@ -442,16 +455,48 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		goto error;
 	}
 
-	FPrintL("Successfully created an egl context!\n");
+	EglSurface =
+		Egl_CreateWindowSurface(EglDisplay, EglConfig, Gbm->Surface, NULL);
+	if (EglSurface == EGL_NO_SURFACE) {
+		FPrintL("Failed to create egl surface: code %#x\n", Egl_GetError());
+		goto error;
+	}
+
+	if (!Egl_MakeCurrent(EglDisplay, EglSurface, EglSurface, EglContext)) {
+		FPrintL(
+			"Failed to make egl context current: code %#x\n",
+			Egl_GetError()
+		);
+		goto error;
+	}
+
+	FPrintL("Successfully initialized an egl context!\n");
+	EglOut->Gbm		= Gbm;
 	EglOut->Display = EglDisplay;
+	EglOut->Surface = EglSurface;
 	EglOut->Context = EglContext;
 	EglOut->Config	= EglConfig;
 	return TRUE;
 
 error:
+	if (EglSurface != EGL_NO_SURFACE)
+		Egl_DestroySurface(EglDisplay, EglSurface);
+	if (EglContext != EGL_NO_CONTEXT)
+		Egl_DestroyContext(EglDisplay, EglContext);
 	if (Configs) Heap_FreeA(Configs);
 	Egl_Terminate(EglDisplay);
 	return FALSE;
+}
+
+internal b08
+Egl_Swap(egl *Egl)
+{
+	if (!Egl_SwapBuffers(Egl->Display, Egl->Surface)) {
+		FPrintL("Failed to swap egl buffers: code %#x\n", Egl_GetError());
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 #endif

@@ -65,12 +65,15 @@
 	},
     "C_Cpp.dimInactiveRegions": true,
     "C_Cpp.errorSquiggles": "disabled",
+	"C_Cpp.default.compilerPath": "/usr/bin/gcc",
+	"C_Cpp.files.exclude": {
+		"**/*.i": true
+	},
     "todo-tree.tree.showCountsInTree": false,
     "todo-tree.tree.showBadges": false,
     "editor.indentSize": "tabSize",
     "editor.tabSize": 4,
 	"editor.insertSpaces": false,
-	"C_Cpp.default.compilerPath": "/usr/bin/gcc",
 	"terminal.integrated.profiles.windows": {
 		"PowerShell": {
 			"source": "PowerShell",

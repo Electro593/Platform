@@ -707,22 +707,29 @@ Stack_Get(void)
 {
 	return *_G.Stack;
 }
+
 internal void
 Stack_Set(stack Stack)
 {
+	stack *OldStack = _G.Stack;
+	Platform_LockMutex(&OldStack->Mutex);
+
 	*_G.Stack = Stack;
+
+	Platform_UnlockMutex(&OldStack->Mutex);
 }
 
 internal vptr
 Stack_Allocate(usize Size)
 {
-	Platform_LockMutex(&_G.Stack->Mutex);
+	stack *Stack = _G.Stack;
+	Platform_LockMutex(&Stack->Mutex);
 
-	vptr Result		  = _G.Stack->Cursor;
-	_G.Stack->Cursor += Size;
-	Assert(_G.Stack->Cursor <= (u08 *) (_G.Stack + 1) + _G.Stack->Size);
+	vptr Result		  = Stack->Cursor;
+	Stack->Cursor += Size;
+	Assert(Stack->Cursor <= (u08 *) (_G.Stack + 1) + Stack->Size);
 
-	Platform_UnlockMutex(&_G.Stack->Mutex);
+	Platform_UnlockMutex(&Stack->Mutex);
 	return Result;
 }
 

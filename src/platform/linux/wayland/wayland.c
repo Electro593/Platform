@@ -450,6 +450,8 @@ Wayland_HandleFrame(wayland_callback *This, u32 CallbackData)
 	CALL(Window->Surface, DamageBuffer, 0, 0, Window->Width, Window->Height);
 
 	CALL(Window->Surface, Commit);
+
+	// Egl_Swap(&_G.Wayland.Egl);
 }
 
 internal s32
@@ -524,10 +526,16 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	if (_G.Wayland.Window.Surface) return _G.Wayland.Window.Surface;
 	if (!Width || !Height) return NULL;
 
-	Wayland_DebugLog(NULL, "Creating %dx%d window titled %s...\n", Width, Height, CString(Title));
+	Wayland_DebugLog(
+		NULL,
+		"Creating %dx%d window titled %s...\n",
+		Width,
+		Height,
+		CString(Title)
+	);
 	_G.Wayland.Window.Width	 = Width;
 	_G.Wayland.Window.Height = Height;
-	_G.Wayland.DrmFormat = DRM_FORMAT_XRGB8888;
+	_G.Wayland.DrmFormat	 = DRM_FORMAT_XRGB8888;
 
 	b08 GbmStatus = Gbm_Init(
 		_G.Wayland.DrmFd,

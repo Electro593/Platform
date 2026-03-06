@@ -146,29 +146,62 @@ Platform_JoinThread(thread_handle ThreadHandle)
 }
 
 internal void
+Platform_LogMutex(s32 Tid, u32 *Mutex, c08 *Message)
+{
+#if 0 && defined(_DEBUG)
+	s32 Value = *Mutex;
+	_BufInit(Buf, 2048);
+	_StrToBuf(&Buf, "[");
+	_IntToBuf(&Buf, Tid, 10);
+	_StrToBuf(&Buf, "] ");
+	_StrToBuf(&Buf, Message);
+	_StrToBuf(&Buf, " ");
+	_IntToBuf(&Buf, (usize) Mutex, 16);
+	_StrToBuf(&Buf, " (");
+	_IntToBuf(&Buf, Value, 10);
+	_StrToBuf(&Buf, ")\n");
+	Platform_WriteConsole(_BufToStr(&Buf));
+#endif
+}
+
+internal void
 Platform_LockMutex(u32 *Mutex)
 {
-	s32 Tid = Sys_GetTid();
-
 	Assert(Mutex);
+
+	s32 Tid = Sys_GetTid();
+	Platform_LogMutex(Tid, Mutex, "Attempting to lock");
+
+	s32 WaitCount = 0;
 	while (1) {
 		s32 OldValue = Intrin_CompareExchange32(Mutex, 0, 1);
 		if (OldValue == 0) break;
 
+		if (WaitCount < 10) Platform_LogMutex(Tid, Mutex, "Waiting to lock");
+		WaitCount++;
+
 		s32 Result = Sys_Futex(Mutex, SYS_FUTEX_WAIT, 0, NULL, NULL, 0);
 		if (Result < 0) Assert(Result == -11);
 	}
+
+	Platform_LogMutex(Tid, Mutex, "Locked");
 }
 
 internal void
 Platform_UnlockMutex(u32 *Mutex)
 {
-	s32 Tid = Sys_GetTid();
-
 	Assert(Mutex);
-	s32 OldValue = Intrin_CompareExchange32(Mutex, 1, 0);
-	if (OldValue == 0) return;
 
+	s32 Tid = Sys_GetTid();
+	Platform_LogMutex(Tid, Mutex, "Attempting to unlock");
+
+	s32 OldValue = Intrin_CompareExchange32(Mutex, 1, 0);
+	if (OldValue == 0) {
+		Platform_LogMutex(Tid, Mutex, "Already unlocked");
+		return;
+	}
+
+	Platform_LogMutex(Tid, Mutex, "Unlocked");
 	Sys_Futex(Mutex, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
 }
 
@@ -435,6 +468,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (_G.UtilIsLoaded) Stack_Set(Stack);
 	}
 
+	Platform_WriteConsole(CStringL("Completed initialization!\n"));
+
 	while (_G.ExecutionState == EXECUTION_RUNNING) {
 		HASHMAP_FOREACH (
 			I,
@@ -446,10 +481,10 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 			&_G.ModuleTable
 		)
 		{
-			stack Stack;
-			if (_G.UtilIsLoaded) Stack = Stack_Get();
-			Module->Update(&_G);
-			if (_G.UtilIsLoaded) Stack_Set(Stack);
+			// stack Stack;
+			// if (_G.UtilIsLoaded) Stack = Stack_Get();
+			// Module->Update(&_G);
+			// if (_G.UtilIsLoaded) Stack_Set(Stack);
 		}
 	}
 
