@@ -1,11 +1,11 @@
-// /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-// **                                                                         **
-// **  Author: Aria Seiler                                                    **
-// **                                                                         **
-// **  This program is in the public domain. There is no implied warranty,    **
-// **  so use it at your own risk.                                            **
-// **                                                                         **
-// \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+**                                                                         **
+**  Author: Aria Seiler                                                    **
+**                                                                         **
+**  This program is in the public domain. There is no implied warranty,    **
+**  so use it at your own risk.                                            **
+**                                                                         **
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
@@ -43,7 +43,7 @@ typedef struct hashmap {
    EXPORT(vptr,    HashMap_GetRef,       hashmap *Map, vptr Key) \
    EXPORT(b08,     HashMap_Get,          hashmap *Map, vptr Key, vptr ValueOut) \
    EXPORT(b08,     HashMap_Remove,       hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut) \
-   EXPORT(b08,     HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
+   EXPORT(vptr,    HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
    EXPORT(void,    HashMap_Free,         hashmap *Map)
 
 #endif
@@ -302,7 +302,7 @@ HashMap_Remove(hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut)
 	return TRUE;
 }
 
-internal b08
+internal vptr
 HashMap_AddWithHash(hashmap *Map, usize Hash, vptr Key, vptr Value)
 {
 	if (Hash < 2) Hash = 2;
@@ -323,12 +323,13 @@ HashMap_AddWithHash(hashmap *Map, usize Hash, vptr Key, vptr Value)
 		Mem_Cpy(EntryKey, Key, Map->KeySize);
 
 		vptr EntryValue = EntryKey + Map->KeySize;
-		Mem_Cpy(EntryValue, Value, Map->ValueSize);
+		if (Value) Mem_Cpy(EntryValue, Value, Map->ValueSize);
+		else Mem_Set(EntryValue, 0, Map->ValueSize);
 
-		return TRUE;
+		return EntryValue;
 	}
 
-	return FALSE;
+	return NULL;
 }
 
 internal void
@@ -353,7 +354,7 @@ HashMap_Grow(hashmap *Map)
 	Heap_Free(OldData);
 }
 
-internal b08
+internal vptr
 HashMap_Add(hashmap *Map, vptr Key, vptr Value)
 {
 	Map->EntryCount++;

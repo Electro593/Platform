@@ -330,6 +330,13 @@ Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 #endif
 }
 
+internal s32
+Platform_GetThreadId(thread_handle *ThreadHandle)
+{
+	if (ThreadHandle) return ThreadHandle->ThreadId;
+	return Sys_GetTid();
+}
+
 internal b08
 Platform_IsModuleBackendOpened(platform_module *Module)
 {
@@ -463,9 +470,9 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	)
 	{
 		stack Stack;
-		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		if (_G.UtilIsLoaded) Stack = *Stack_Get();
 		Module->Init(&_G);
-		if (_G.UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 	}
 
 	Platform_WriteConsole(CStringL("Completed initialization!\n"));
@@ -499,9 +506,9 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	)
 	{
 		stack Stack;
-		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		if (_G.UtilIsLoaded) Stack = *Stack_Get();
 		Module->Deinit(&_G);
-		if (_G.UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		Platform_UnloadModule(Module);
 	}
 

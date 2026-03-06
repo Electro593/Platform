@@ -301,6 +301,7 @@ typedef enum file_mode {
 	EXPORT(platform_module*, Platform_LoadModule,            string Name) \
 	EXPORT(opengl_funcs*,    Platform_LoadOpenGL,            void) \
 	INTERN(void,             Platform_GetProcAddress,        platform_module *Module, c08 *Name, vptr *ProcOut) \
+	EXPORT(s32,              Platform_GetThreadId,           thread_handle *ThreadHandle) \
 	INTERN(b08,              Platform_IsModuleBackendOpened, platform_module *Module) \
 	INTERN(void,             Platform_OpenModuleBackend,     platform_module *Module) \
 	INTERN(void,             Platform_CloseModuleBackend,    platform_module *Module) \
@@ -489,9 +490,9 @@ internal void
 Platform_UnloadModule(platform_module *Module)
 {
 	stack Stack;
-	if (_G.UtilIsLoaded) Stack = Stack_Get();
+	if (_G.UtilIsLoaded) Stack = *Stack_Get();
 	Module->Unload(&_G);
-	if (_G.UtilIsLoaded) Stack_Set(Stack);
+	if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 
 	Platform_CloseModuleBackend(Module);
 	if (Module->IsUtil) _G.UtilIsLoaded = FALSE;
@@ -524,9 +525,9 @@ Platform_ReloadModule(platform_module *Module)
 	if (!Module->Unload) Module->Unload = (vptr) Platform_Stub;
 
 	stack Stack;
-	if (_G.UtilIsLoaded) Stack = Stack_Get();
+	if (_G.UtilIsLoaded) Stack = *Stack_Get();
 	if (Module->Load) Module->Load(&_G, Module);
-	if (_G.UtilIsLoaded) Stack_Set(Stack);
+	if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 
 	if (Module->IsUtil) {
 		util_funcs Funcs = *(util_funcs *) Module->Funcs;
@@ -594,13 +595,16 @@ Platform_LoadModule(string Name)
 	Platform_ReloadModule(Module);
 
 	if (!UtilIsLoaded) {
-		usize StackSize = 64 * 1024 * 1024;
-		usize HeapSize	= 8 * 1024 * 1024;
-		vptr  Mem		= Platform_AllocateMemory(StackSize + HeapSize);
-		Stack_Init(Mem, StackSize);
-		Stack_Push();
-		_G.Heap = Heap_Init(Mem + StackSize, HeapSize);
+		usize HeapSize = 8 * 1024 * 1024;
+		vptr Mem	   = Platform_AllocateMemory(HeapSize);
+		_G.Heap		   = Heap_Init(Mem, HeapSize);
 
+		util_state *UtilState = Module->Data;
+		UtilState->StackSize = 64 * 1024 * 1024;
+		UtilState->Tls =
+			Tls_Init(_G.Heap, sizeof(util_tls));
+
+		Stack_Push();
 		_G.ModuleTable = HashMap_InitCustom(
 			_G.Heap,
 			sizeof(string),

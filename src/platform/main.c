@@ -67,6 +67,7 @@ struct platform_state {
 
 	v2s32 RestoreCursorPos;
 	v2s32 CursorPos;
+
 	heap *Heap;
 
 	hashmap ModuleTable;

@@ -568,6 +568,13 @@ Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
 	else *ProcOut = Proc;
 }
 
+internal s32
+Platform_GetThreadId(thread_handle *ThreadHandle)
+{
+	if (ThreadHandle) return ThreadHandle->ThreadId;
+	return 0;
+}
+
 internal b08
 Platform_IsModuleBackendOpened(platform_module *Module)
 {

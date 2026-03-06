@@ -51,6 +51,7 @@ global util_funcs _F;
 #include <util/msdf.c>
 #include <util/font.c>
 #include <util/file.c>
+#include <util/tls.c>
 
 #ifdef INCLUDE_HEADER
 
@@ -65,11 +66,18 @@ global util_funcs _F;
     SET_FUNCS      \
     MSDF_FUNCS     \
     FONT_FUNCS     \
-    FILE_FUNCS
+    FILE_FUNCS     \
+	TLS_FUNCS      \
+	//
 
 typedef struct util_state {
-	stack *Stack;
+	usize StackSize;
+	tls	  Tls;
 } util_state;
+
+typedef struct util_tls {
+	stack *Stack;
+} util_tls;
 
 typedef struct util_funcs {
 #define EXPORT(R, N, ...) R (*N)(__VA_ARGS__);

@@ -63,8 +63,8 @@ typedef struct stack {
    EXPORT(void,         Heap_Dump,          heap *Heap) \
    \
    EXPORT(stack*,       Stack_Init,         vptr Mem, usize Size) \
-   EXPORT(stack,        Stack_Get,          void) \
-   EXPORT(void,         Stack_Set,          stack Stack) \
+   EXPORT(stack*,       Stack_Get,          void) \
+   EXPORT(void,         Stack_Set,          stack *Stack) \
    EXPORT(void,         Stack_Push,         void) \
    EXPORT(vptr,         Stack_GetCursor,    void) \
    EXPORT(void,         Stack_SetCursor,    vptr Cursor) \
@@ -675,69 +675,73 @@ Stack_Init(vptr Mem, usize Size)
 	Result->FirstMarker = NULL;
 	Result->Cursor		= (u08 *) Mem + sizeof(stack);
 
-	_G.Stack = Result;
-
 	return Result;
 }
 
 internal void
 Stack_Push(void)
 {
-	vptr *Marker		   = (vptr *) _G.Stack->Cursor;
-	*Marker				   = _G.Stack->FirstMarker;
-	_G.Stack->FirstMarker  = Marker;
-	_G.Stack->Cursor	  += sizeof(vptr);
+	stack *Stack = Stack_Get();
+
+	vptr *Marker		= (vptr *) Stack->Cursor;
+	*Marker				= Stack->FirstMarker;
+	Stack->FirstMarker	= Marker;
+	Stack->Cursor	   += sizeof(vptr);
 }
 
-// For unbounded allocations
 internal vptr
 Stack_GetCursor(void)
 {
-	return _G.Stack->Cursor;
+	return Stack_Get()->Cursor;
 }
+
 internal void
 Stack_SetCursor(vptr Cursor)
 {
-	Assert((u08 *) Cursor <= (u08 *) (_G.Stack + 1) + _G.Stack->Size);
-	_G.Stack->Cursor = Cursor;
+	stack *Stack = Stack_Get();
+	Assert((u08 *) Cursor <= (u08 *) (Stack + 1) + Stack->Size);
+	Stack->Cursor = Cursor;
 }
 
-internal stack
+internal stack *
 Stack_Get(void)
 {
-	return *_G.Stack;
+	util_tls *Tls = Tls_Get(&_G.Tls, NULL);
+
+	if (!Tls->Stack) {
+		vptr Mem   = Platform_AllocateMemory(_G.StackSize);
+		Tls->Stack = Stack_Init(Mem, _G.StackSize);
+	}
+
+	return Tls->Stack;
 }
 
 internal void
-Stack_Set(stack Stack)
+Stack_Set(stack *Stack)
 {
-	stack *OldStack = _G.Stack;
-	Platform_LockMutex(&OldStack->Mutex);
-
-	*_G.Stack = Stack;
-
-	Platform_UnlockMutex(&OldStack->Mutex);
+	util_tls *Tls = Tls_Get(&_G.Tls, NULL);
+	Tls->Stack	  = Stack;
 }
 
 internal vptr
 Stack_Allocate(usize Size)
 {
-	stack *Stack = _G.Stack;
-	Platform_LockMutex(&Stack->Mutex);
+	stack *Stack = Stack_Get();
 
-	vptr Result		  = Stack->Cursor;
+	vptr Result	   = Stack->Cursor;
 	Stack->Cursor += Size;
-	Assert(Stack->Cursor <= (u08 *) (_G.Stack + 1) + Stack->Size);
+	Assert(Stack->Cursor <= (u08 *) (Stack + 1) + Stack->Size);
 
-	Platform_UnlockMutex(&Stack->Mutex);
 	return Result;
 }
 
 internal void
 Stack_Pop(void)
 {
-	_G.Stack->Cursor	  = (u08 *) _G.Stack->FirstMarker;
-	_G.Stack->FirstMarker = *_G.Stack->FirstMarker;
+	stack *Stack = Stack_Get();
+
+	Stack->Cursor	   = (u08 *) Stack->FirstMarker;
+	Stack->FirstMarker = *Stack->FirstMarker;
 }
 
 #endif
