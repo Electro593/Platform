@@ -461,6 +461,7 @@ Wayland_EventHandlerThread(vptr Data)
 		Platform_LockMutex(&_G.Wayland.SyncLock);
 		wayland_message *Message = Wayland_ReadMessage(20);
 		Wayland_HandleMessage(Message);
+		Wayland_DestroyMessage(Message);
 		Platform_UnlockMutex(&_G.Wayland.SyncLock);
 	}
 	return 0;
@@ -475,6 +476,7 @@ Wayland_SyncAndHandleEvents(void)
 	while (Wayland_IsConnected()) {
 		wayland_message *Message = Wayland_ReadMessage(20);
 		vptr			 Object	 = Wayland_HandleMessage(Message);
+		Wayland_DestroyMessage(Message);
 		if (Object == SyncCallback) break;
 	}
 

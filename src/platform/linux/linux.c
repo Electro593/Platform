@@ -138,9 +138,11 @@ typedef struct sys_sockaddr {
 	};
 } sys_sockaddr;
 
-typedef enum sys_send_flags {
+typedef enum sys_msg_flags {
+	SYS_MSG_PEEK	 = 0x0002,
+	SYS_MSG_TRUNC	 = 0x0020,
 	SYS_MSG_NOSIGNAL = 0x4000,
-} sys_send_flags;
+} sys_msg_flags;
 
 typedef struct sys_iovec {
 	vptr  Base;
@@ -284,10 +286,12 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(10,  MemProtect,   s32,     vptr Address, usize Length, s32 Protection) \
 	SYSCALL(11,  MemUnmap,     s32,     vptr Address, usize Length) \
 	SYSCALL(16,  IoCtl,        s32,     s32 FileDescriptor, usize Op, vptr Data) \
+	SYSCALL(35,  NanoSleep,    s32,     sys_timespec *Duration, sys_timespec *Rem) \
 	SYSCALL(41,  Socket,       s32,     s32 Domain, s32 Type, s32 Protocol) \
 	SYSCALL(42,  Connect,      s32,     s32 SocketFileDescriptor, sys_sockaddr *Address, u32 AddressLength) \
-	SYSCALL(44,  SendTo,       ssize,   s32 SocketFileDescriptor, vptr Buffer, usize Size, sys_send_flags Flags, sys_sockaddr *Address, u32 AddressLength) \
-	SYSCALL(46,  SendMsg,      ssize,   s32 SocketFileDescriptor, sys_msghdr *Message, sys_send_flags Flags) \
+	SYSCALL(44,  SendTo,       ssize,   s32 SocketFileDescriptor, vptr Buffer, usize Size, sys_msg_flags Flags, sys_sockaddr *Address, u32 AddressLength) \
+	SYSCALL(46,  SendMsg,      ssize,   s32 SocketFileDescriptor, sys_msghdr *Message, sys_msg_flags Flags) \
+	SYSCALL(47,  RecvMsg,      ssize,   s32 SocketFileDescriptor, sys_msghdr *Message, sys_msg_flags Flags) \
 	SYSCALL(56,  Clone,        sys_pid, sys_clone_flags Flags, vptr Stack, s32 *ParentTidOut, usize TLS, s32 *ChildTidOut) \
 	SYSCALL(57,  Fork,         sys_pid, void) \
 	SYSCALL(60,  Exit,         void,    s32 ErrorCode) \
