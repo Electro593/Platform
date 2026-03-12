@@ -140,6 +140,7 @@ typedef struct sys_sockaddr {
 
 typedef enum sys_msg_flags {
 	SYS_MSG_PEEK	 = 0x0002,
+	SYS_MSG_CTRUNC	 = 0x0008,
 	SYS_MSG_TRUNC	 = 0x0020,
 	SYS_MSG_NOSIGNAL = 0x4000,
 } sys_msg_flags;

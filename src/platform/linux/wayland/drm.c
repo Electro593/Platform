@@ -51,9 +51,9 @@ Drm_IoCtl(s32 Fd, usize Op, vptr Data)
 }
 
 internal s32
-Drm_OpenDriver(string Name)
+Drm_OpenDriver(c08 *Name)
 {
-	return Sys_Open(Name.Text, SYS_OPEN_READWRITE, 0);
+	return Sys_Open(Name, SYS_OPEN_READWRITE, 0);
 }
 
 internal s32
