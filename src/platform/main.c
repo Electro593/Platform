@@ -38,6 +38,7 @@ global platform_funcs _F;
 #include <platform/linux/wayland/gbm.c>
 #include <platform/linux/wayland/egl.c>
 #include <platform/linux/wayland/api.c>
+#include <platform/linux/wayland/protocol.c>
 #include <platform/linux/wayland/wayland.c>
 #endif
 
@@ -48,6 +49,7 @@ global platform_funcs _F;
 #elif defined(_LINUX)
 #define PLATFORM_SPECIFIC_FUNCS \
 	WAYLAND_API_FUNCS \
+	WAYLAND_PROTOCOL_FUNCS \
 	WAYLAND_USER_FUNCS \
 	GBM_FUNCS \
 	EGL_FUNCS \
