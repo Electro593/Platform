@@ -313,10 +313,63 @@ Wayland_AllocateObjectId(void)
 	return Id;
 }
 
+internal vptr
+Wayland_GetObject(u32 ObjectId)
+{
+	wayland_interface *Object = NULL;
+	HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Object);
+	return Object;
+}
+
+internal vptr
+Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
+{
+	usize InterfaceSize =
+		sizeof(wayland_interface) + sizeof(vptr) * Prototype->EventCount;
+	wayland_interface *Object =
+		Heap_AllocateA(_G.WaylandApi.Heap, InterfaceSize);
+
+	if (Prototype->Version < Version) {
+		FPrintL(
+			"Warning: Attempted to create %s-v%d, but its maximum version is "
+			"v%d. Defaulting to v%d\n",
+			Prototype->Name,
+			Version,
+			Prototype->Version,
+			Prototype->Version
+		);
+		Version = Prototype->Version;
+	}
+
+	Mem_Set(Object, 0, InterfaceSize);
+	Object->Id		  = ObjectId;
+	Object->Version	  = Version;
+	Object->Size	  = InterfaceSize;
+	Object->Prototype = Prototype;
+
+	HashMap_Add(&_G.WaylandApi.IdTable, &ObjectId, &Object);
+	return Object;
+}
+
+internal void
+Wayland_DestroyObject(vptr Object)
+{
+	wayland_interface *Interface = Object;
+	if (!Interface->Id) return;
+
+	HashMap_Remove(&_G.WaylandApi.IdTable, &Interface->Id, NULL, NULL);
+
+	Mem_Set(Interface, 0, Interface->Size);
+	Heap_FreeA(Interface);
+}
+
 internal void
 Wayland_FreeObjectId(u32 ObjectId)
 {
 	Platform_LockMutex(&_G.WaylandApi.Lock);
+
+	wayland_interface *Object = Wayland_GetObject(ObjectId);
+	if (Object) Wayland_DestroyObject(Object);
 
 	// Store a pointer to the entry pointer to allow inserting a new record
 	// after the previous.
@@ -368,56 +421,6 @@ Wayland_FreeObjectId(u32 ObjectId)
 
 	// Shouldn't get here
 	Assert(FALSE);
-}
-
-internal vptr
-Wayland_GetObject(u32 ObjectId)
-{
-	wayland_interface *Object = NULL;
-	HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Object);
-	return Object;
-}
-
-internal vptr
-Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
-{
-	usize InterfaceSize =
-		sizeof(wayland_interface) + sizeof(vptr) * Prototype->EventCount;
-	wayland_interface *Object =
-		Heap_AllocateA(_G.WaylandApi.Heap, InterfaceSize);
-
-	if (Prototype->Version < Version) {
-		FPrintL(
-			"Warning: Attempted to create %s-v%d, but its maximum version is "
-			"v%d. Defaulting to v%d\n",
-			Prototype->Name,
-			Version,
-			Prototype->Version,
-			Prototype->Version
-		);
-		Version = Prototype->Version;
-	}
-
-	Mem_Set(Object, 0, InterfaceSize);
-	Object->Id		  = ObjectId;
-	Object->Version	  = Version;
-	Object->Size	  = InterfaceSize;
-	Object->Prototype = Prototype;
-
-	HashMap_Add(&_G.WaylandApi.IdTable, &ObjectId, &Object);
-	return Object;
-}
-
-internal void
-Wayland_DestroyObject(vptr Object)
-{
-	wayland_interface *Interface = Object;
-	if (!Interface->Id) return;
-
-	HashMap_Remove(&_G.WaylandApi.IdTable, &Interface->Id, NULL, NULL);
-
-	Mem_Set(Interface, 0, Interface->Size);
-	Heap_FreeA(Interface);
 }
 
 internal wayland_display *
@@ -1427,8 +1430,10 @@ Wayland_DispatchEvent(wayland_event Event)
 internal void
 Wayland_DestroyEvent(wayland_event Event)
 {
+	Platform_LockMutex(&_G.WaylandApi.Lock);
 	Wayland_DestroyPreparedMethod(Event.Method);
 	Wayland_DestroyMessage(Event.Message);
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
 }
 
 internal void

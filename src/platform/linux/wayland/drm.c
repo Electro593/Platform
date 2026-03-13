@@ -14,7 +14,8 @@
 #define DRM_FOURCC_CODE(A, B, C, D) ((u32)(A) | ((u32)(B) << 8) | ((u32)(C) << 16) | ((u32)(D) << 24))
 
 typedef enum drm_format {
-	DRM_FORMAT_XRGB8888 = DRM_FOURCC_CODE('X', 'R', '2', '4')
+	DRM_FORMAT_XRGB8888	   = DRM_FOURCC_CODE('X', 'R', '2', '4'),
+	DRM_FORMAT_RGBX1010102 = DRM_FOURCC_CODE('R', 'X', '3', '0'),
 } drm_format;
 
 typedef enum drm_node_type {
@@ -51,9 +52,9 @@ Drm_IoCtl(s32 Fd, usize Op, vptr Data)
 }
 
 internal s32
-Drm_OpenDriver(c08 *Name)
+Drm_OpenDriver(string Name)
 {
-	return Sys_Open(Name, SYS_OPEN_READWRITE, 0);
+	return Sys_Open(Name.Text, SYS_OPEN_READWRITE, 0);
 }
 
 internal s32
@@ -84,6 +85,13 @@ internal s32
 Drm_GetMagicNumber(s32 Fd, u32 *MagicOut)
 {
 	return Drm_IoCtl(Fd, DRM_IOCTL_GET_MAGIC, MagicOut);
+}
+
+internal s32
+Drm_OpenDriverFromVersion(s32 Major, s32 Minor)
+{
+	string DriverName = FNStringL("/sys/dev/char/%d:%d", Major, Minor);
+	return Drm_OpenDriver(DriverName);
 }
 
 #endif

@@ -327,7 +327,7 @@ Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable(
 	u32									  Size
 )
 {
-	Wayland_DebugLog(This, "Sent format table (fd %d, %d bytes):\n", Fd, Size);
+	Wayland_DebugLog(This, "Sent format table (fd %d, %d bytes)\n", Fd, Size);
 
 	vptr FormatData =
 		Sys_MemMap(NULL, Size, SYS_PROT_READ, SYS_MAP_PRIVATE, Fd, 0);
@@ -344,7 +344,38 @@ Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice(
 	wayland_array						  Device
 )
 {
-	Wayland_DebugLog(This, "Sent main device (%d bytes)\n", Device.Size);
+	Wayland_DebugLog(
+		This,
+		"Sent main device (%d bytes, %#llx)\n",
+		Device.Size,
+		*(u64 *) Device.Data
+	);
+
+	u64 SpecialDeviceId = *(u64 *) Device.Data;
+
+	s32 Fd = Drm_OpenDriverFromVersion(
+		SYS_DEV_MAJOR(SpecialDeviceId),
+		SYS_DEV_MINOR(SpecialDeviceId)
+	);
+	if (Fd < 0) goto error;
+
+	s32 NodeType = Drm_GetNodeType(Fd);
+	if (NodeType < 0) goto error;
+
+	_G.Wayland.DrmAuthenticated = TRUE;
+	// if (NodeType == DRM_NODE_TYPE_RENDER) {
+	// } else {
+	// 	u32 MagicNumber;
+	// 	s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
+	// 	if (Result < 0) goto error;
+	// 	Wayland_Drm_Authenticate(This, MagicNumber);
+	// }
+
+	_G.Wayland.DrmFd = Fd;
+	return;
+
+error:
+	if (Fd >= 0) Drm_CloseDriver(Fd);
 }
 
 internal void
@@ -363,32 +394,10 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice(
 {
 	Wayland_DebugLog(
 		This,
-		"Sent tranche target device (%d bytes)\n",
-		Device.Size
+		"Sent tranche target device (%d bytes, %#llx)\n",
+		Device.Size,
+		*(u64 *) Device.Data
 	);
-
-	// 	Wayland_DebugLog(This, "Using device name %s\n", Name);
-	//
-	// 	s32 Fd = Drm_OpenDriver(Name);
-	// 	if (Fd < 0) goto error;
-	//
-	// 	s32 NodeType = Drm_GetNodeType(Fd);
-	// 	if (NodeType < 0) goto error;
-	//
-	// 	if (NodeType == DRM_NODE_TYPE_RENDER) {
-	// 		_G.Wayland.DrmAuthenticated = TRUE;
-	// 	} else {
-	// 		u32 MagicNumber;
-	// 		s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
-	// 		if (Result < 0) goto error;
-	// 		Wayland_Drm_Authenticate(This, MagicNumber);
-	// 	}
-	//
-	// 	_G.Wayland.DrmFd = Fd;
-	// 	return;
-	//
-	// error:
-	// 	if (Fd >= 0) Drm_CloseDriver(Fd);
 }
 
 internal void
@@ -397,15 +406,28 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats(
 	wayland_array						  Indices
 )
 {
-	Wayland_DebugLog(This, "Sent supported format indices for this tranche:\n");
+	Wayland_DebugLog(This, "Sent supported format indices for this tranche\n");
+
+	if (_G.Wayland.DrmFormat) return;
 
 	u16	 *IndicesData = (u16 *) Indices.Data;
 	usize IndexCount  = Indices.Size / sizeof(u16);
 	for (usize I = 0; I < IndexCount; I++) {
 		wayland_dmabuf_format_entry Format = _G.Wayland.DrmFormats[I];
+		if (Format.Format == DRM_FORMAT_XRGB8888
+			|| Format.Format == DRM_FORMAT_RGBX1010102)
+		{
+			_G.Wayland.DrmFormat	  = Format.Format;
+			_G.Wayland.FormatModifier = Format.Modifier;
+		}
+		c08 *C = (c08 *) &Format.Format;
 		FPrintL(
-			"\t- Format %#x, Modifier %#llx\n",
+			"- Format %#x ('%c%c%c%c'), Modifier %#llx\n",
 			Format.Format,
+			C[0],
+			C[1],
+			C[2],
+			C[3],
 			Format.Modifier
 		);
 	}
@@ -666,12 +688,13 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	if (_G.Wayland.Window.Surface) return _G.Wayland.Window.Surface;
 	if (!Width || !Height) return NULL;
 
-	wayland_buffer		 *Buffer1 = NULL, *Buffer2 = NULL;
-	wayland_surface		 *Surface	  = NULL;
-	wayland_xdg_surface	 *XdgSurface  = NULL;
-	wayland_xdg_toplevel *XdgToplevel = NULL;
-	s32					  DmabufFd	  = 0;
-	vptr				  BufferData  = NULL;
+	wayland_zwp_linux_dmabuf_feedback_v1 *Feedback = NULL;
+	wayland_buffer						 *Buffer1 = NULL, *Buffer2 = NULL;
+	wayland_surface						 *Surface	  = NULL;
+	wayland_xdg_surface					 *XdgSurface  = NULL;
+	wayland_xdg_toplevel				 *XdgToplevel = NULL;
+	s32									  DmabufFd	  = 0;
+	vptr								  BufferData  = NULL;
 
 	Wayland_DebugLog(
 		NULL,
@@ -683,6 +706,8 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	_G.Wayland.Window.Width	 = Width;
 	_G.Wayland.Window.Height = Height;
 
+	if (!_G.Wayland.ZwpLinuxDmabufV1) goto error;
+
 	Surface = Wayland_Compositor_CreateSurface(_G.Wayland.Compositor);
 	if (!Surface) goto error;
 	Surface->Enter				  = Wayland_Surface_Enter;
@@ -690,6 +715,19 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	Surface->PreferredBufferScale = Wayland_Surface_PreferredBufferScale;
 	Surface->PreferredBufferTransform =
 		Wayland_Surface_PreferredBufferTransform;
+
+	Feedback = Wayland_ZwpLinuxDmabufV1_GetSurfaceFeedback(
+		_G.Wayland.ZwpLinuxDmabufV1,
+		Surface
+	);
+	Feedback->Done		  = Wayland_ZwpLinuxDmabufFeedbackV1_Done;
+	Feedback->FormatTable = Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable;
+	Feedback->MainDevice  = Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice;
+	Feedback->TrancheDone = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheDone;
+	Feedback->TrancheTargetDevice =
+		Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice;
+	Feedback->TrancheFormats = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats;
+	Feedback->TrancheFlags	 = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFlags;
 
 	XdgSurface = Wayland_XdgWmBase_GetXdgSurface(_G.Wayland.XdgWmBase, Surface);
 	if (!XdgSurface) goto error;
@@ -704,42 +742,36 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	Wayland_XdgToplevel_SetTitle(XdgToplevel, "Voxarc");
 	Wayland_XdgToplevel_SetAppId(XdgToplevel, "voxarc");
 
-	usize BufferSize = 4 * Width * Height;
-	s32	  DmabufSize = 2 * BufferSize;
-	DmabufFd		 = Sys_MemfdCreate("wayland-dmabuf", 0);
-	if (DmabufFd < 0) goto error;
-	if (Sys_FTruncate(DmabufFd, DmabufSize) < 0) goto error;
-	BufferData = Sys_MemMap(
-		NULL,
-		DmabufSize,
-		SYS_PROT_READ | SYS_PROT_WRITE,
-		SYS_MAP_SHARED | SYS_MAP_POPULATE,
-		DmabufFd,
-		0
-	);
-	if ((ssize) BufferData < 0 && (ssize) BufferData > -4096) goto error;
-	Mem_Set(BufferData, -1, DmabufSize);
-
-	if (!_G.Wayland.ZwpLinuxDmabufV1) goto error;
-
-	wayland_zwp_linux_dmabuf_feedback_v1 *Feedback =
-		Wayland_ZwpLinuxDmabufV1_GetSurfaceFeedback(
-			_G.Wayland.ZwpLinuxDmabufV1,
-			Surface
-		);
-	Feedback->Done		  = Wayland_ZwpLinuxDmabufFeedbackV1_Done;
-	Feedback->FormatTable = Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable;
-	Feedback->MainDevice  = Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice;
-	Feedback->TrancheDone = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheDone;
-	Feedback->TrancheTargetDevice =
-		Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice;
-	Feedback->TrancheFormats = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats;
-	Feedback->TrancheFlags	 = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFlags;
 	Wayland_DebugLog(NULL, "Syncing for dmabuf feedback...\n");
 	Wayland_SyncAndHandleEvents();
+	if (!_G.Wayland.DrmFormat) goto error;
+
 	Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(Feedback);
 
-	if (!_G.Wayland.DrmFormat) goto error;
+	b08 GbmStatus = Gbm_Init(
+		_G.Wayland.DrmFd,
+		Width,
+		Height,
+		_G.Wayland.DrmFormat,
+		&_G.Wayland.Gbm
+	);
+	if (!GbmStatus) goto error;
+
+	usize BufferSize = 4 * Width * Height;
+	// s32	  DmabufSize = 2 * BufferSize;
+	// DmabufFd		 = Sys_MemfdCreate("wayland-dmabuf", 0);
+	// if (DmabufFd < 0) goto error;
+	// if (Sys_FTruncate(DmabufFd, DmabufSize) < 0) goto error;
+	// BufferData = Sys_MemMap(
+	// 	NULL,
+	// 	DmabufSize,
+	// 	SYS_PROT_READ | SYS_PROT_WRITE,
+	// 	SYS_MAP_SHARED | SYS_MAP_POPULATE,
+	// 	DmabufFd,
+	// 	0
+	// );
+	// if ((ssize) BufferData < 0 && (ssize) BufferData > -4096) goto error;
+	// Mem_Set(BufferData, -1, DmabufSize);
 
 	wayland_zwp_linux_buffer_params_v1 *BufferParams[2];
 	for (usize I = 0; I < 2; I++) {
@@ -774,9 +806,6 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	Buffer1 = _G.Wayland.Window.Buffers[0];
 	Buffer2 = _G.Wayland.Window.Buffers[1];
 	if (!Buffer1 || !Buffer2) goto error;
-
-	b08 GbmStatus = Gbm_Init(0, Width, Height, 0, &_G.Wayland.Gbm);
-	if (!GbmStatus) goto error;
 
 	if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
 
@@ -817,7 +846,8 @@ error:
 	if (XdgToplevel) Wayland_XdgToplevel_Destroy(XdgToplevel);
 	if (XdgSurface) Wayland_XdgSurface_Destroy(XdgSurface);
 	if (Surface) Wayland_Surface_Destroy(Surface);
-	if (BufferData) Sys_MemUnmap(BufferData, DmabufSize);
+	// if (BufferData) Sys_MemUnmap(BufferData, DmabufSize);
+	if (Feedback) Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(Feedback);
 	if (DmabufFd) Sys_Close(DmabufFd);
 	Wayland_Disconnect();
 	return NULL;
