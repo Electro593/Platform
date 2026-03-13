@@ -1066,7 +1066,7 @@ wayland_prototype WaylandRegistryPrototype = {
 };
 
 wayland_prototype WaylandCallbackPrototype = {
-	"wl_callback", 1,
+	"wl_callback", 0,
 	0, 1,
 	NULL,
 	(wayland_method[]){
@@ -1108,7 +1108,7 @@ wayland_prototype WaylandShmPrototype = {
 };
 
 wayland_prototype WaylandBufferPrototype = {
-	"wl_buffer", 1,
+	"wl_buffer", 0,
 	1, 1,
 	(wayland_method[]){
 		{ "destroy", "d", NULL },

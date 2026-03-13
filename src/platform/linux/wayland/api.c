@@ -321,6 +321,51 @@ Wayland_GetObject(u32 ObjectId)
 	return Object;
 }
 
+internal string
+Wayland_GetObjectName(wayland_interface *Object)
+{
+	if (!Object) return CStringL("null");
+	return FStringL(
+		"%s-v%d#%d",
+		CString(Object->Prototype->Name),
+		Object->Version,
+		Object->Id
+	);
+}
+
+internal void
+Wayland_LogMessage(
+	wayland_interface *Object,
+	c08				  *MethodName,
+	c08				  *Message,
+	...
+)
+{
+	string Descriptor = EString();
+	if (Object) {
+		string ObjectName = Wayland_GetObjectName(Object);
+
+		Descriptor = FStringL(
+			" [%s%s%s]",
+			ObjectName,
+			MethodName ? CStringL("::") : EString(),
+			CString(MethodName)
+		);
+	}
+
+	va_list Args;
+	VA_Start(Args, Message);
+	string FormattedMessage = FVString(CString(Message), Args);
+	VA_End(Args);
+
+	FPrintL(
+		"[%d] [WaylandApi]%s %s\n",
+		Sys_GetTid(),
+		Descriptor,
+		FormattedMessage
+	);
+}
+
 internal vptr
 Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
 {
@@ -329,11 +374,13 @@ Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
 	wayland_interface *Object =
 		Heap_AllocateA(_G.WaylandApi.Heap, InterfaceSize);
 
-	if (Prototype->Version < Version) {
-		FPrintL(
+	if (Prototype->Version && Prototype->Version < Version) {
+		Wayland_LogMessage(
+			NULL,
+			NULL,
 			"Warning: Attempted to create %s-v%d, but its maximum version is "
 			"v%d. Defaulting to v%d\n",
-			Prototype->Name,
+			CString(Prototype->Name),
 			Version,
 			Prototype->Version,
 			Prototype->Version
@@ -606,46 +653,6 @@ Wayland_DestroyMessage(wayland_message Message)
 {
 	if (Message.MessageData) Heap_FreeA(Message.MessageData);
 	if (Message.ControlData) Heap_FreeA(Message.ControlData);
-}
-
-internal string
-Wayland_GetObjectName(wayland_interface *Object)
-{
-	if (!Object) return CStringL("null");
-	return FStringL(
-		"%s-v%d#%d",
-		CString(Object->Prototype->Name),
-		Object->Version,
-		Object->Id
-	);
-}
-
-internal void
-Wayland_LogMessage(
-	wayland_interface *Object,
-	c08				  *MethodName,
-	c08				  *Message,
-	...
-)
-{
-	string Descriptor = EString();
-	if (Object) {
-		string ObjectName = Wayland_GetObjectName(Object);
-
-		Descriptor = FStringL(
-			" [%s%s%s]",
-			ObjectName,
-			MethodName ? CStringL("::") : EString(),
-			CString(MethodName)
-		);
-	}
-
-	va_list Args;
-	VA_Start(Args, Message);
-	string FormattedMessage = FVString(CString(Message), Args);
-	VA_End(Args);
-
-	FPrintL("[WaylandApi]%s %s\n", Descriptor, FormattedMessage);
 }
 
 internal wayland_prepared_method

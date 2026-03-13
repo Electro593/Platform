@@ -263,14 +263,12 @@ struct egl {
 	gbm *Gbm;
 
 	egl_display Display;
-	egl_surface Surface;
 	egl_context Context;
 	egl_config	Config;
 };
 
 #define EGL_FUNCS \
 	INTERN(b08, Egl_Init, gbm *Gbm, heap *Heap, egl *EglOut) \
-	INTERN(b08, Egl_Swap, egl *Egl) \
 	\
 	IMPORT(egl_boolean, Egl, eglBindAPI,             Egl_BindApi,             egl_api Api) \
 	IMPORT(egl_boolean, Egl, eglChooseConfig,        Egl_ChooseConfig,        egl_display Display, egl_int *Attribs, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
@@ -455,14 +453,13 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		goto error;
 	}
 
-	EglSurface =
-		Egl_CreateWindowSurface(EglDisplay, EglConfig, Gbm->Surface, NULL);
-	if (EglSurface == EGL_NO_SURFACE) {
-		FPrintL("Failed to create egl surface: code %#x\n", Egl_GetError());
-		goto error;
-	}
-
-	if (!Egl_MakeCurrent(EglDisplay, EglSurface, EglSurface, EglContext)) {
+	if (!Egl_MakeCurrent(
+			EglDisplay,
+			EGL_NO_SURFACE,
+			EGL_NO_SURFACE,
+			EglContext
+		))
+	{
 		FPrintL(
 			"Failed to make egl context current: code %#x\n",
 			Egl_GetError()
@@ -473,30 +470,16 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	FPrintL("Successfully initialized an egl context!\n");
 	EglOut->Gbm		= Gbm;
 	EglOut->Display = EglDisplay;
-	EglOut->Surface = EglSurface;
 	EglOut->Context = EglContext;
 	EglOut->Config	= EglConfig;
 	return TRUE;
 
 error:
-	if (EglSurface != EGL_NO_SURFACE)
-		Egl_DestroySurface(EglDisplay, EglSurface);
 	if (EglContext != EGL_NO_CONTEXT)
 		Egl_DestroyContext(EglDisplay, EglContext);
 	if (Configs) Heap_FreeA(Configs);
 	Egl_Terminate(EglDisplay);
 	return FALSE;
-}
-
-internal b08
-Egl_Swap(egl *Egl)
-{
-	if (!Egl_SwapBuffers(Egl->Display, Egl->Surface)) {
-		FPrintL("Failed to swap egl buffers: code %#x\n", Egl_GetError());
-		return FALSE;
-	}
-
-	return TRUE;
 }
 
 #endif

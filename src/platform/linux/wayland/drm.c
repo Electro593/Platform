@@ -15,8 +15,14 @@
 
 typedef enum drm_format {
 	DRM_FORMAT_XRGB8888	   = DRM_FOURCC_CODE('X', 'R', '2', '4'),
+	DRM_FORMAT_ARGB8888    = DRM_FOURCC_CODE('A', 'R', '2', '4'),
 	DRM_FORMAT_RGBX1010102 = DRM_FOURCC_CODE('R', 'X', '3', '0'),
 } drm_format;
+
+typedef enum drm_format_modifier : u64 {
+	DRM_FORMAT_MOD_LINEAR = 0,
+	DRM_FORMAT_MOD_INVALID = 0x00FFFFFFFFFFFFFFull,
+} drm_format_modifier;
 
 typedef enum drm_node_type {
 	DRM_NODE_TYPE_PRIMARY = 0,	// Display & graphics control
@@ -90,8 +96,29 @@ Drm_GetMagicNumber(s32 Fd, u32 *MagicOut)
 internal s32
 Drm_OpenDriverFromVersion(s32 Major, s32 Minor)
 {
-	string DriverName = FNStringL("/sys/dev/char/%d:%d", Major, Minor);
-	return Drm_OpenDriver(DriverName);
+	string UeventName = FNStringL("/sys/dev/char/%d:%d/uevent", Major, Minor);
+	s32	   UeventFd	  = Sys_Open(UeventName.Text, SYS_OPEN_READONLY, 0);
+	if (UeventFd < 0) return UeventFd;
+
+	c08 Buffer[256];
+	Buffer[255]		= 0;
+	ssize BytesRead = Sys_Read(UeventFd, Buffer, 255);
+	if (BytesRead < 0) return (s32) BytesRead;
+
+	string Str = CString(Buffer);
+	while (Str.Length) {
+		string Line	 = String_SplitLeftByCodepoint(&Str, '\n');
+		string Key	 = String_SplitLeftByCodepoint(&Line, '=');
+		string Value = String_TrimWhitespace(Line);
+		Key			 = String_TrimWhitespace(Key);
+
+		if (String_Cmp(Key, CStringL("DEVNAME")) == 0) {
+			string Path = FNStringL("/dev/%s", Value);
+			return Drm_OpenDriver(Path);
+		}
+	}
+
+	return SYS_ENODEV;
 }
 
 #endif

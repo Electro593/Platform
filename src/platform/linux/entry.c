@@ -196,12 +196,9 @@ Platform_UnlockMutex(u32 *Mutex)
 	Platform_LogMutex(Tid, Mutex, "Attempting to unlock");
 
 	s32 OldValue = Intrin_CompareExchange32(Mutex, 1, 0);
-	if (OldValue == 0) {
-		Platform_LogMutex(Tid, Mutex, "Already unlocked");
-		return;
-	}
+	if (OldValue == 0) Platform_LogMutex(Tid, Mutex, "Already unlocked");
+	else Platform_LogMutex(Tid, Mutex, "Unlocked");
 
-	Platform_LogMutex(Tid, Mutex, "Unlocked");
 	Sys_Futex(Mutex, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
 }
 

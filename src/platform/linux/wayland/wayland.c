@@ -10,8 +10,8 @@
 #ifdef INCLUDE_HEADER
 
 typedef struct wayland_dmabuf_format_entry {
-	u32 Format;
-	u64 Modifier;
+	drm_format			Format;
+	drm_format_modifier Modifier;
 } wayland_dmabuf_format_entry;
 
 typedef struct wayland_window_state {
@@ -24,20 +24,15 @@ typedef struct wayland_window_state {
 	s32 Width;
 	s32 Height;
 
-	s32	  DmabufFd;
-	usize BufferSize;
-	vptr  BufferData[2];
-
-	wayland_buffer *Buffers[2];
-
+	wayland_buffer	 *Buffers[2];
 	wayland_callback *FrameCallback;
 } wayland_window_state;
 
 typedef struct wayland_state {
-	s32		   DrmFd;
-	b08		   DrmAuthenticated;
-	drm_format DrmFormat;
-	u64		   FormatModifier;
+	s32					DrmFd;
+	b08					DrmAuthenticated;
+	drm_format			DrmFormat;
+	drm_format_modifier DrmFormatModifier;
 
 	gbm Gbm;
 	egl Egl;
@@ -90,12 +85,10 @@ Wayland_DebugLog(vptr Object, c08 *Format, ...)
 	VA_End(Args);
 
 	if (Object) {
-		wayland_interface *Interface = Object;
 		FPrintL(
-			"[%d] [Wayland] [%s#%d] %s",
+			"[%d] [Wayland] [%s] %s",
 			Sys_GetTid(),
-			CString(Interface->Prototype->Name),
-			Interface->Id,
+			Wayland_GetObjectName(Object),
 			Message
 		);
 	} else {
@@ -139,10 +132,6 @@ Wayland_Buffer_Release(wayland_buffer *This)
 	if (Window->Buffers[1] == This) {
 		Window->Buffers[1] = Window->Buffers[0];
 		Window->Buffers[0] = This;
-
-		vptr BufferData		  = Window->BufferData[1];
-		Window->BufferData[1] = Window->BufferData[0];
-		Window->BufferData[0] = BufferData;
 	}
 }
 
@@ -357,7 +346,10 @@ Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice(
 		SYS_DEV_MAJOR(SpecialDeviceId),
 		SYS_DEV_MINOR(SpecialDeviceId)
 	);
-	if (Fd < 0) goto error;
+	if (Fd < 0) {
+		Wayland_DebugLog(This, "Failed to open device node! code %d\n", -Fd);
+		goto error;
+	}
 
 	s32 NodeType = Drm_GetNodeType(Fd);
 	if (NodeType < 0) goto error;
@@ -414,14 +406,17 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats(
 	usize IndexCount  = Indices.Size / sizeof(u16);
 	for (usize I = 0; I < IndexCount; I++) {
 		wayland_dmabuf_format_entry Format = _G.Wayland.DrmFormats[I];
-		if (Format.Format == DRM_FORMAT_XRGB8888
-			|| Format.Format == DRM_FORMAT_RGBX1010102)
-		{
-			_G.Wayland.DrmFormat	  = Format.Format;
-			_G.Wayland.FormatModifier = Format.Modifier;
+
+		b08 FormatMatches = Format.Format == DRM_FORMAT_XRGB8888
+						 || Format.Format == DRM_FORMAT_ARGB8888;
+		b08 ModifierMatches = Format.Modifier == DRM_FORMAT_MOD_INVALID;
+		if (FormatMatches && ModifierMatches) {
+			_G.Wayland.DrmFormat		 = Format.Format;
+			_G.Wayland.DrmFormatModifier = Format.Modifier;
 		}
 		c08 *C = (c08 *) &Format.Format;
-		FPrintL(
+		Wayland_DebugLog(
+			This,
 			"- Format %#x ('%c%c%c%c'), Modifier %#llx\n",
 			Format.Format,
 			C[0],
@@ -540,61 +535,61 @@ Wayland_Frame(wayland_callback *This, u32 CallbackData)
 	FrameCallback->Done				= Wayland_Frame;
 	Window->FrameCallback			= FrameCallback;
 
-	u32 Stage = (CallbackData >> 12) & 7;
-
-	u32 Value	 = (CallbackData >> 4) & 0xFF;
-	u32 InvValue = 255 - Value;
-	u32 Red = 0, Green = 0, Blue = 0;
-
-	switch (Stage) {
-		case 0:
-			Red	  = Value;
-			Green = 0;
-			Blue  = 0;
-			break;
-		case 1:
-			Red	  = 255;
-			Green = Value;
-			Blue  = 0;
-			break;
-		case 2:
-			Red	  = InvValue;
-			Green = 255;
-			Blue  = 0;
-			break;
-		case 3:
-			Red	  = 0;
-			Green = 255;
-			Blue  = Value;
-			break;
-		case 4:
-			Red	  = 0;
-			Green = InvValue;
-			Blue  = 255;
-			break;
-		case 5:
-			Red	  = Value;
-			Green = 0;
-			Blue  = 255;
-			break;
-		case 6:
-			Red	  = 255;
-			Green = Value;
-			Blue  = 255;
-			break;
-		case 7:
-			Red	  = InvValue;
-			Green = InvValue;
-			Blue  = InvValue;
-			break;
-	}
-
-	u32 Color = (255 << 24) | (Red << 16) | (Green << 8) | Blue;
-
-	u32 *Colors = Window->BufferData[0];
-	for (usize Y = 0; Y < Window->Height; Y++)
-		for (usize X = 0; X < Window->Width; X++)
-			Colors[X + Y * Window->Width] = Color;
+	// u32 Stage = (CallbackData >> 12) & 7;
+	//
+	// 	u32 Value	 = (CallbackData >> 4) & 0xFF;
+	// 	u32 InvValue = 255 - Value;
+	// 	u32 Red = 0, Green = 0, Blue = 0;
+	//
+	// 	switch (Stage) {
+	// 		case 0:
+	// 			Red	  = Value;
+	// 			Green = 0;
+	// 			Blue  = 0;
+	// 			break;
+	// 		case 1:
+	// 			Red	  = 255;
+	// 			Green = Value;
+	// 			Blue  = 0;
+	// 			break;
+	// 		case 2:
+	// 			Red	  = InvValue;
+	// 			Green = 255;
+	// 			Blue  = 0;
+	// 			break;
+	// 		case 3:
+	// 			Red	  = 0;
+	// 			Green = 255;
+	// 			Blue  = Value;
+	// 			break;
+	// 		case 4:
+	// 			Red	  = 0;
+	// 			Green = InvValue;
+	// 			Blue  = 255;
+	// 			break;
+	// 		case 5:
+	// 			Red	  = Value;
+	// 			Green = 0;
+	// 			Blue  = 255;
+	// 			break;
+	// 		case 6:
+	// 			Red	  = 255;
+	// 			Green = Value;
+	// 			Blue  = 255;
+	// 			break;
+	// 		case 7:
+	// 			Red	  = InvValue;
+	// 			Green = InvValue;
+	// 			Blue  = InvValue;
+	// 			break;
+	// 	}
+	//
+	// 	u32 Color = (255 << 24) | (Red << 16) | (Green << 8) | Blue;
+	//
+	// 	u32 *Colors = Window->BufferData[0];
+	// 	for (usize Y = 0; Y < Window->Height; Y++)
+	// 		for (usize X = 0; X < Window->Width; X++)
+	// 			Colors[X + Y * Window->Width] = Color;
 
 	Wayland_Surface_Attach(Window->Surface, Window->Buffers[0], 0, 0);
 	Wayland_Surface_DamageBuffer(
@@ -649,6 +644,8 @@ Wayland_SyncAndHandleEvents(void)
 internal b08
 Wayland_TryInit(void)
 {
+	if (Wayland_IsConnected()) return TRUE;
+	
 	if (Wayland_Connect()) {
 		wayland_display *Display = Wayland_GetDisplay();
 		Display->Error			 = Wayland_Display_Error;
@@ -693,8 +690,6 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	wayland_surface						 *Surface	  = NULL;
 	wayland_xdg_surface					 *XdgSurface  = NULL;
 	wayland_xdg_toplevel				 *XdgToplevel = NULL;
-	s32									  DmabufFd	  = 0;
-	vptr								  BufferData  = NULL;
 
 	Wayland_DebugLog(
 		NULL,
@@ -747,31 +742,21 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	if (!_G.Wayland.DrmFormat) goto error;
 
 	Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(Feedback);
+	Feedback = NULL;
 
 	b08 GbmStatus = Gbm_Init(
 		_G.Wayland.DrmFd,
 		Width,
 		Height,
 		_G.Wayland.DrmFormat,
+		_G.Wayland.DrmFormatModifier,
 		&_G.Wayland.Gbm
 	);
 	if (!GbmStatus) goto error;
 
+	if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
+
 	usize BufferSize = 4 * Width * Height;
-	// s32	  DmabufSize = 2 * BufferSize;
-	// DmabufFd		 = Sys_MemfdCreate("wayland-dmabuf", 0);
-	// if (DmabufFd < 0) goto error;
-	// if (Sys_FTruncate(DmabufFd, DmabufSize) < 0) goto error;
-	// BufferData = Sys_MemMap(
-	// 	NULL,
-	// 	DmabufSize,
-	// 	SYS_PROT_READ | SYS_PROT_WRITE,
-	// 	SYS_MAP_SHARED | SYS_MAP_POPULATE,
-	// 	DmabufFd,
-	// 	0
-	// );
-	// if ((ssize) BufferData < 0 && (ssize) BufferData > -4096) goto error;
-	// Mem_Set(BufferData, -1, DmabufSize);
 
 	wayland_zwp_linux_buffer_params_v1 *BufferParams[2];
 	for (usize I = 0; I < 2; I++) {
@@ -781,12 +766,12 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 		BufferParams[I]->Failed	 = Wayland_ZwpLinuxBufferParamsV1_Failed;
 		Wayland_ZwpLinuxBufferParamsV1_Add(
 			BufferParams[I],
-			DmabufFd,
+			Gbm_BoGetFd(_G.Wayland.Gbm.BufferObjects[I]),
 			0,
-			I * BufferSize,
+			0,
 			Width,
-			_G.Wayland.FormatModifier >> 32,
-			_G.Wayland.FormatModifier & 0xFFFFFFFF
+			_G.Wayland.DrmFormatModifier >> 32,
+			_G.Wayland.DrmFormatModifier & 0xFFFFFFFF
 		);
 		Wayland_ZwpLinuxBufferParamsV1_Create(
 			BufferParams[I],
@@ -807,24 +792,16 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	Buffer2 = _G.Wayland.Window.Buffers[1];
 	if (!Buffer1 || !Buffer2) goto error;
 
-	if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
-
 	Wayland_Surface_Commit(Surface);
 
 	wayland_window_state *Window = &_G.Wayland.Window;
 
-	Window->Initialized	  = TRUE;
-	Window->Surface		  = Surface;
-	Window->XdgSurface	  = XdgSurface;
-	Window->XdgToplevel	  = XdgToplevel;
-	Window->DmabufFd	  = DmabufFd;
-	Window->Width		  = Width;
-	Window->Height		  = Height;
-	Window->BufferSize	  = BufferSize;
-	Window->BufferData[0] = BufferData;
-	Window->BufferData[1] = BufferData + BufferSize;
-	Window->Buffers[0]	  = Buffer1;
-	Window->Buffers[1]	  = Buffer2;
+	Window->Initialized = TRUE;
+	Window->Surface		= Surface;
+	Window->XdgSurface	= XdgSurface;
+	Window->XdgToplevel = XdgToplevel;
+	Window->Width		= Width;
+	Window->Height		= Height;
 
 	// Wait for the configure events to pass
 	Wayland_SyncAndHandleEvents();
@@ -846,9 +823,7 @@ error:
 	if (XdgToplevel) Wayland_XdgToplevel_Destroy(XdgToplevel);
 	if (XdgSurface) Wayland_XdgSurface_Destroy(XdgSurface);
 	if (Surface) Wayland_Surface_Destroy(Surface);
-	// if (BufferData) Sys_MemUnmap(BufferData, DmabufSize);
 	if (Feedback) Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(Feedback);
-	if (DmabufFd) Sys_Close(DmabufFd);
 	Wayland_Disconnect();
 	return NULL;
 }

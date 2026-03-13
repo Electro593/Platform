@@ -363,6 +363,7 @@ typedef struct fstring_format_list {
 	EXPORT(string, HString,   heap *Heap, c08 *Text) \
 	EXPORT(string, LString,   usize Length) \
 	\
+	EXPORT(string, String_TrimWhitespace,       string Str) \
 	EXPORT(usize,  String_FindCharFromLeft,     string Str, c32 Target) \
 	EXPORT(string, String_SplitLeftByCodepoint, string *Str, c32 Codepoint) \
 	EXPORT(usize,  String_Cpy,                  string Dest, string Src) \
@@ -489,6 +490,33 @@ LString(usize Length)
 \***************************************************************************/
 
 #ifndef SECTION_STRING_OPERATIONS
+
+internal string
+String_TrimWhitespace(string Str)
+{
+	b08	   FoundStart = FALSE;
+	b08	   WasEnd	  = FALSE;
+	string Start	  = Str;
+	string End		  = Str;
+
+	STRING_FOREACH (I, C, Cursor, Str) {
+		if (C == ' ' || C == '\t' || C == '\v' || C == '\r' || C == '\n')
+			continue;
+		End = Cursor;
+
+		if (!FoundStart) {
+			FoundStart = TRUE;
+			Start	   = Cursor;
+		}
+	}
+
+	if (!FoundStart) return EString();
+
+	String_NextCodepoint(&End);
+	Start.Length -= End.Length;
+	Start.Count	  = 0;
+	return Start;
+}
 
 /// @brief Locate the first index a codepoint appears in a string, starting from
 /// the first character.
@@ -1006,7 +1034,7 @@ global fstring_format_type FStringFormatTypeStateMachine[]['z' - '1' + 1] = {
 		S('p', TYPE_PTR),
 		S('T', TYPE_B08),
 		S('n', TYPE_QUERY32),
-		S('m', TYPE_U32 | FSTRING_FORMAT_FLAG_INT_HEX | FSTRING_FORMAT_FLAG_SPECIFY_RADIX),
+		S('m', TYPE_S32),
 	},
 	[FSTRING_FORMAT_SIZE_HALFHALF] = {
 		S('d', TYPE_S08 | FSTRING_FORMAT_FLAG_INT_DEC),
