@@ -872,6 +872,7 @@ struct wayland_zwp_linux_dmabuf_v1 {
 	void (*Format)(wayland_zwp_linux_dmabuf_v1 *This, u32 Format);
 	void (*Modifier)(
 		wayland_zwp_linux_dmabuf_v1 *This,
+		u32							 Format,
 		u32							 ModifierHigh,
 		u32							 ModifierLow
 	);
@@ -2263,7 +2264,7 @@ Wayland_ZwpLinuxDmabufV1_GetSurfaceFeedback(
 {
 	return Wayland_HandleConstructorRequest(
 		(wayland_interface *) This,
-		4,
+		3,
 		Surface
 	);
 }

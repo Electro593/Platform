@@ -164,17 +164,13 @@ typedef struct wayland_api_state {
 	usize HeapSize;
 
 	s32 Socket;
-
-	u32 ReadLock;
-	u32 WriteLock;
+	u32 Lock;
 
 	b08 Attempted;
 	b08 Connected;
 
-	u32					  IdLock;
 	wayland_api_id_entry *NextIdEntry;
 
-	u32		IdTableLock;
 	hashmap IdTable;
 
 	wayland_message_queue MessageQueue;
@@ -186,10 +182,8 @@ typedef struct wayland_api_state {
 #ifndef SECTION_FUNCS
 
 #define WAYLAND_API_FUNCS \
-	INTERN(vptr,               Wayland_GetObject,        u32 ObjectId) \
-	INTERN(vptr,               Wayland_CreateObject,     wayland_prototype *Prototype, u32 ObjectId, u32 Version) \
-	INTERN(void,               Wayland_DestroyObject,    vptr Object) \
-	INTERN(wayland_display*,   Wayland_GetDisplay,       void) \
+	INTERN(void,             Wayland_FreeObjectId, u32 ObjectId) \
+	INTERN(wayland_display*, Wayland_GetDisplay,   void) \
 	\
 	INTERN(b08,  Wayland_IsConnected, void) \
 	INTERN(void, Wayland_Disconnect,  void) \
@@ -304,8 +298,6 @@ Wayland_FindPrototype(c08 *Name)
 internal u32
 Wayland_AllocateObjectId(void)
 {
-	Platform_LockMutex(&_G.WaylandApi.IdLock);
-
 	wayland_api_id_entry *Entry = _G.WaylandApi.NextIdEntry;
 	if (!Entry || !Entry->Count) return 0;
 
@@ -318,14 +310,13 @@ Wayland_AllocateObjectId(void)
 		Heap_FreeA(Entry);
 	}
 
-	Platform_UnlockMutex(&_G.WaylandApi.IdLock);
 	return Id;
 }
 
 internal void
 Wayland_FreeObjectId(u32 ObjectId)
 {
-	Platform_LockMutex(&_G.WaylandApi.IdLock);
+	Platform_LockMutex(&_G.WaylandApi.Lock);
 
 	// Store a pointer to the entry pointer to allow inserting a new record
 	// after the previous.
@@ -346,7 +337,7 @@ Wayland_FreeObjectId(u32 ObjectId)
 
 		*Entry = NewEntry;
 
-		Platform_UnlockMutex(&_G.WaylandApi.IdLock);
+		Platform_UnlockMutex(&_G.WaylandApi.Lock);
 		return;
 	}
 
@@ -361,7 +352,7 @@ Wayland_FreeObjectId(u32 ObjectId)
 			Heap_FreeA(Next);
 		}
 
-		Platform_UnlockMutex(&_G.WaylandApi.IdLock);
+		Platform_UnlockMutex(&_G.WaylandApi.Lock);
 		return;
 	}
 
@@ -371,7 +362,7 @@ Wayland_FreeObjectId(u32 ObjectId)
 		(*Entry)->BaseId -= 1;
 		(*Entry)->Count	 += 1;
 
-		Platform_UnlockMutex(&_G.WaylandApi.IdLock);
+		Platform_UnlockMutex(&_G.WaylandApi.Lock);
 		return;
 	}
 
@@ -383,11 +374,7 @@ internal vptr
 Wayland_GetObject(u32 ObjectId)
 {
 	wayland_interface *Object = NULL;
-
-	Platform_LockMutex(&_G.WaylandApi.IdTableLock);
 	HashMap_Get(&_G.WaylandApi.IdTable, &ObjectId, &Object);
-	Platform_UnlockMutex(&_G.WaylandApi.IdTableLock);
-
 	return Object;
 }
 
@@ -417,10 +404,7 @@ Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
 	Object->Size	  = InterfaceSize;
 	Object->Prototype = Prototype;
 
-	Platform_LockMutex(&_G.WaylandApi.IdTableLock);
 	HashMap_Add(&_G.WaylandApi.IdTable, &ObjectId, &Object);
-	Platform_UnlockMutex(&_G.WaylandApi.IdTableLock);
-
 	return Object;
 }
 
@@ -430,9 +414,7 @@ Wayland_DestroyObject(vptr Object)
 	wayland_interface *Interface = Object;
 	if (!Interface->Id) return;
 
-	Platform_LockMutex(&_G.WaylandApi.IdTableLock);
 	HashMap_Remove(&_G.WaylandApi.IdTable, &Interface->Id, NULL, NULL);
-	Platform_UnlockMutex(&_G.WaylandApi.IdTableLock);
 
 	Mem_Set(Interface, 0, Interface->Size);
 	Heap_FreeA(Interface);
@@ -441,14 +423,18 @@ Wayland_DestroyObject(vptr Object)
 internal wayland_display *
 Wayland_GetDisplay()
 {
+	Platform_LockMutex(&_G.WaylandApi.Lock);
 	wayland_display *Display = Wayland_GetObject(WAYLAND_DISPLAY_ID);
-	if (Display) return Display;
 
-	return Wayland_CreateObject(
-		&WaylandDisplayPrototype,
-		WAYLAND_DISPLAY_ID,
-		1
-	);
+	if (!Display)
+		Display = Wayland_CreateObject(
+			&WaylandDisplayPrototype,
+			WAYLAND_DISPLAY_ID,
+			1
+		);
+
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
+	return Display;
 }
 
 #endif
@@ -458,18 +444,24 @@ Wayland_GetDisplay()
 internal b08
 Wayland_IsConnected(void)
 {
-	return _G.WaylandApi.Connected;
+	Platform_LockMutex(&_G.WaylandApi.Lock);
+	b08 IsConnected = _G.WaylandApi.Connected;
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
+	return IsConnected;
 }
 
 internal void
 Wayland_Disconnect(void)
 {
+	Platform_LockMutex(&_G.WaylandApi.Lock);
+
 	if (_G.WaylandApi.Connected) {
 		Sys_Close(_G.WaylandApi.Socket);
 		_G.WaylandApi.Connected = FALSE;
 	}
 
 	// TODO: Clean up file descriptors, queues, etc.
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
 }
 
 internal b08
@@ -505,7 +497,9 @@ Wayland_ConnectToSocket(string Name)
 internal b08
 Wayland_Connect(void)
 {
-	if (_G.WaylandApi.Attempted) return FALSE;
+	Platform_LockMutex(&_G.WaylandApi.Lock);
+
+	if (_G.WaylandApi.Attempted) goto end;
 	_G.WaylandApi.Attempted = TRUE;
 
 	usize HeapSize		   = 16 * 1024 * 1024;
@@ -520,9 +514,7 @@ Wayland_Connect(void)
 	s32	   FileDescriptor;
 	string WaylandSocket = Platform_GetEnvParam(CStringL("WAYLAND_SOCKET"));
 	if (String_TryParseS32(WaylandSocket, &FileDescriptor)) {
-#ifdef _LINUX
-		_G.WaylandApi.Socket = FileDescriptor;
-#endif
+		_G.WaylandApi.Socket	= FileDescriptor;
 		_G.WaylandApi.Connected = TRUE;
 	} else {
 		string XdgRuntimeDir =
@@ -549,7 +541,10 @@ Wayland_Connect(void)
 		_G.WaylandApi.NextIdEntry->Next	  = NULL;
 	}
 
-	return _G.WaylandApi.Connected;
+end:
+	b08 Success = _G.WaylandApi.Connected;
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
+	return Success;
 }
 
 #endif
@@ -1331,33 +1326,39 @@ Wayland_TryDequeueEvent(
 internal b08
 Wayland_PollEventQueue(s32 Timeout, wayland_event *Event)
 {
-	if (!Wayland_IsConnected()) return FALSE;
+	Platform_LockMutex(&_G.WaylandApi.Lock);
 
-	Platform_LockMutex(&_G.WaylandApi.ReadLock);
-	Wayland_PollSocket(
-		_G.WaylandApi.Heap,
-		_G.WaylandApi.Socket,
-		&_G.WaylandApi.MessageQueue,
-		&_G.WaylandApi.FdQueue,
-		Timeout
-	);
+	b08 Dequeued = FALSE;
+	if (_G.WaylandApi.Connected) {
+		Wayland_PollSocket(
+			_G.WaylandApi.Heap,
+			_G.WaylandApi.Socket,
+			&_G.WaylandApi.MessageQueue,
+			&_G.WaylandApi.FdQueue,
+			Timeout
+		);
 
-	b08 Dequeued = Wayland_TryDequeueEvent(
-		_G.WaylandApi.Heap,
-		&_G.WaylandApi.MessageQueue,
-		&_G.WaylandApi.FdQueue,
-		Event
-	);
+		Dequeued = Wayland_TryDequeueEvent(
+			_G.WaylandApi.Heap,
+			&_G.WaylandApi.MessageQueue,
+			&_G.WaylandApi.FdQueue,
+			Event
+		);
+	}
 
-	Platform_UnlockMutex(&_G.WaylandApi.ReadLock);
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
 	return Dequeued;
 }
 
 internal void
 Wayland_DispatchEvent(wayland_event Event)
 {
+	Platform_LockMutex(&_G.WaylandApi.Lock);
 	vptr Proc = Event.Method.Object->Events[Event.Method.Opcode];
-	if (!Proc) return;
+	if (!Proc) {
+		Platform_UnlockMutex(&_G.WaylandApi.Lock);
+		return;
+	}
 
 #if defined(_X64)
 	usize StackSize = 0;
@@ -1392,6 +1393,8 @@ Wayland_DispatchEvent(wayland_event Event)
 			StackCursor += ParamSize;
 		}
 	}
+
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
 
 	__asm__ volatile(
 		"push %%rbx				\n"
@@ -1434,6 +1437,8 @@ Wayland_HandleRequestV(
 	va_list				Args
 )
 {
+	Platform_LockMutex(&_G.WaylandApi.Lock);
+
 	wayland_prepared_method PreparedMethod =
 		Wayland_PrepareMethod(Object, Opcode, FALSE);
 
@@ -1442,16 +1447,16 @@ Wayland_HandleRequestV(
 
 	wayland_message Message = Wayland_SerializeMethod(PreparedMethod);
 
-	Platform_LockMutex(&_G.WaylandApi.WriteLock);
 	b08 CanSend = Wayland_WaitUntilCanSend(-1);
 	b08 Sent	= FALSE;
 	if (CanSend) Sent = Wayland_SendMessage(Message);
-	Platform_UnlockMutex(&_G.WaylandApi.WriteLock);
 
 	Wayland_DestroyMessage(Message);
 
 	if (Sent) Wayland_DestroyDestructorParams(PreparedMethod);
 	Wayland_DestroyPreparedMethod(PreparedMethod);
+
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
 }
 
 internal void

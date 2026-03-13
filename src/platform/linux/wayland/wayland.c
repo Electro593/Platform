@@ -9,6 +9,11 @@
 
 #ifdef INCLUDE_HEADER
 
+typedef struct wayland_dmabuf_format_entry {
+	u32 Format;
+	u64 Modifier;
+} wayland_dmabuf_format_entry;
+
 typedef struct wayland_window_state {
 	b08 Initialized;
 
@@ -19,21 +24,20 @@ typedef struct wayland_window_state {
 	s32 Width;
 	s32 Height;
 
-	s32	  ShmFd;
+	s32	  DmabufFd;
 	usize BufferSize;
 	vptr  BufferData[2];
 
-	wayland_shm_pool *ShmPool;
-	wayland_buffer	 *Buffers[2];
+	wayland_buffer *Buffers[2];
 
 	wayland_callback *FrameCallback;
 } wayland_window_state;
 
 typedef struct wayland_state {
-	s32					   DrmFd;
-	b08					   DrmAuthenticated;
-	wayland_drm_capability DrmCapabilities;
-	drm_format			   DrmFormat;
+	s32		   DrmFd;
+	b08		   DrmAuthenticated;
+	drm_format DrmFormat;
+	u64		   FormatModifier;
 
 	gbm Gbm;
 	egl Egl;
@@ -45,14 +49,16 @@ typedef struct wayland_state {
 	wayland_display	 *Display;
 	wayland_registry *Registry;
 
-	wayland_compositor	*Compositor;
-	u32					 CompositorName;
-	wayland_shm			*Shm;
-	u32					 ShmName;
-	wayland_xdg_wm_base *XdgWmBase;
-	u32					 XdgWmBaseName;
-	wayland_drm			*Drm;
-	u32					 DrmName;
+	wayland_compositor			*Compositor;
+	u32							 CompositorName;
+	wayland_xdg_wm_base			*XdgWmBase;
+	u32							 XdgWmBaseName;
+	wayland_zwp_linux_dmabuf_v1 *ZwpLinuxDmabufV1;
+	u32							 ZwpLinuxDmabufV1Name;
+
+	s32							 DrmFormatsFd;
+	usize						 DrmFormatCount;
+	wayland_dmabuf_format_entry *DrmFormats;
 
 	wayland_window_state Window;
 
@@ -121,12 +127,6 @@ Wayland_Display_DeleteId(wayland_display *This, u32 Id)
 	Wayland_DebugLog(This, "Requested to delete id %u\n", Id);
 
 	Wayland_FreeObjectId(Id);
-}
-
-internal void
-Wayland_Shm_Format(wayland_shm *This, wayland_shm_format Format)
-{
-	Wayland_DebugLog(This, "Offered pixel format %d\n", Format);
 }
 
 internal void
@@ -266,56 +266,158 @@ Wayland_XdgToplevel_WmCapabilities(
 }
 
 internal void
-Wayland_Drm_Device(wayland_drm *This, c08 *Name)
+Wayland_ZwpLinuxDmabufV1_Format(wayland_zwp_linux_dmabuf_v1 *This, u32 Format)
 {
-	Wayland_DebugLog(This, "Using device name %s\n", Name);
+	Wayland_DebugLog(This, "Offered buffer format: %d\n", Format);
+}
 
-	s32 Fd = Drm_OpenDriver(Name);
-	if (Fd < 0) goto error;
+internal void
+Wayland_ZwpLinuxDmabufV1_Modifier(
+	wayland_zwp_linux_dmabuf_v1 *This,
+	u32							 Format,
+	u32							 ModifierHigh,
+	u32							 ModifierLow
+)
+{
+	Wayland_DebugLog(
+		This,
+		"Offered buffer format modifier for %d: %#x%x\n",
+		Format,
+		ModifierHigh,
+		ModifierLow
+	);
+}
 
-	s32 NodeType = Drm_GetNodeType(Fd);
-	if (NodeType < 0) goto error;
+internal void
+Wayland_ZwpLinuxBufferParamsV1_Created(
+	wayland_zwp_linux_buffer_params_v1 *This,
+	wayland_buffer					   *Buffer
+)
+{
+	Wayland_DebugLog(
+		This,
+		"Created dmabuf buffer %s\n",
+		Wayland_GetObjectName((wayland_interface *) Buffer)
+	);
 
-	if (NodeType == DRM_NODE_TYPE_RENDER) {
-		_G.Wayland.DrmAuthenticated = TRUE;
-	} else {
-		u32 MagicNumber;
-		s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
-		if (Result < 0) goto error;
-		Wayland_Drm_Authenticate(This, MagicNumber);
+	usize I = _G.Wayland.Window.Buffers[0] != NULL;
+
+	Buffer->Release				 = Wayland_Buffer_Release;
+	_G.Wayland.Window.Buffers[I] = Buffer;
+}
+
+internal void
+Wayland_ZwpLinuxBufferParamsV1_Failed(wayland_zwp_linux_buffer_params_v1 *This)
+{
+	Wayland_DebugLog(This, "Failed to create dmabuf buffer\n");
+}
+
+internal void
+Wayland_ZwpLinuxDmabufFeedbackV1_Done(
+	wayland_zwp_linux_dmabuf_feedback_v1 *This
+)
+{
+	Wayland_DebugLog(This, "Feedback is complete\n");
+}
+
+internal void
+Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable(
+	wayland_zwp_linux_dmabuf_feedback_v1 *This,
+	s32									  Fd,
+	u32									  Size
+)
+{
+	Wayland_DebugLog(This, "Sent format table (fd %d, %d bytes):\n", Fd, Size);
+
+	vptr FormatData =
+		Sys_MemMap(NULL, Size, SYS_PROT_READ, SYS_MAP_PRIVATE, Fd, 0);
+	Assert(FormatData && (usize) FormatData <= (usize) -4096);
+
+	_G.Wayland.DrmFormatsFd	  = Fd;
+	_G.Wayland.DrmFormatCount = Size / sizeof(wayland_dmabuf_format_entry);
+	_G.Wayland.DrmFormats	  = FormatData;
+}
+
+internal void
+Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice(
+	wayland_zwp_linux_dmabuf_feedback_v1 *This,
+	wayland_array						  Device
+)
+{
+	Wayland_DebugLog(This, "Sent main device (%d bytes)\n", Device.Size);
+}
+
+internal void
+Wayland_ZwpLinuxDmabufFeedbackV1_TrancheDone(
+	wayland_zwp_linux_dmabuf_feedback_v1 *This
+)
+{
+	Wayland_DebugLog(This, "Tranche feedback is complete\n");
+}
+
+internal void
+Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice(
+	wayland_zwp_linux_dmabuf_feedback_v1 *This,
+	wayland_array						  Device
+)
+{
+	Wayland_DebugLog(
+		This,
+		"Sent tranche target device (%d bytes)\n",
+		Device.Size
+	);
+
+	// 	Wayland_DebugLog(This, "Using device name %s\n", Name);
+	//
+	// 	s32 Fd = Drm_OpenDriver(Name);
+	// 	if (Fd < 0) goto error;
+	//
+	// 	s32 NodeType = Drm_GetNodeType(Fd);
+	// 	if (NodeType < 0) goto error;
+	//
+	// 	if (NodeType == DRM_NODE_TYPE_RENDER) {
+	// 		_G.Wayland.DrmAuthenticated = TRUE;
+	// 	} else {
+	// 		u32 MagicNumber;
+	// 		s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
+	// 		if (Result < 0) goto error;
+	// 		Wayland_Drm_Authenticate(This, MagicNumber);
+	// 	}
+	//
+	// 	_G.Wayland.DrmFd = Fd;
+	// 	return;
+	//
+	// error:
+	// 	if (Fd >= 0) Drm_CloseDriver(Fd);
+}
+
+internal void
+Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats(
+	wayland_zwp_linux_dmabuf_feedback_v1 *This,
+	wayland_array						  Indices
+)
+{
+	Wayland_DebugLog(This, "Sent supported format indices for this tranche:\n");
+
+	u16	 *IndicesData = (u16 *) Indices.Data;
+	usize IndexCount  = Indices.Size / sizeof(u16);
+	for (usize I = 0; I < IndexCount; I++) {
+		wayland_dmabuf_format_entry Format = _G.Wayland.DrmFormats[I];
+		FPrintL(
+			"\t- Format %#x, Modifier %#llx\n",
+			Format.Format,
+			Format.Modifier
+		);
 	}
-
-	_G.Wayland.DrmFd = Fd;
-	return;
-
-error:
-	if (Fd >= 0) Drm_CloseDriver(Fd);
 }
 
 internal void
-Wayland_Drm_Format(wayland_drm *This, u32 Format)
+Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFlags(
+	wayland_zwp_linux_dmabuf_feedback_v1			  *This,
+	wayland_zwp_linux_dmabuf_feedback_v1_tranche_flags Flags
+)
 {
-	Wayland_DebugLog(This, "Can handle format %d\n", Format);
-
-	if (Format == DRM_FORMAT_XRGB8888) {
-		Wayland_DebugLog(This, "Selected pixel format!\n");
-		_G.Wayland.DrmFormat = Format;
-	}
-}
-
-internal void
-Wayland_Drm_Authenticated(wayland_drm *This)
-{
-	Wayland_DebugLog(This, "Authenticated!\n");
-	_G.Wayland.DrmAuthenticated = TRUE;
-}
-
-internal void
-Wayland_Drm_Capabilities(wayland_drm *This, wayland_drm_capability Capabilities)
-{
-	Wayland_DebugLog(This, "Capabilities: %d\n", Capabilities);
-
-	_G.Wayland.DrmCapabilities = Capabilities;
+	Wayland_DebugLog(This, "Sent flags for this tranche: %#x\n", Flags);
 }
 
 internal void
@@ -328,7 +430,7 @@ Wayland_Registry_Global(
 {
 	Wayland_DebugLog(
 		This,
-		"Handling global %d, named %s v%d\n",
+		"Offered global #%d, named %s-v%d\n",
 		Name,
 		CString(Interface),
 		Version
@@ -339,24 +441,35 @@ Wayland_Registry_Global(
 		_G.Wayland.CompositorName = Name;
 		_G.Wayland.Compositor	  = (wayland_compositor *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
-	} else if (String_Cmp(Str, CStringL("wl_shm")) == 0) {
-		_G.Wayland.ShmName = Name;
-		_G.Wayland.Shm	   = (wayland_shm *)
-			Wayland_Registry_Bind(This, Name, Interface, Version);
-		_G.Wayland.Shm->Format = Wayland_Shm_Format;
+		Wayland_DebugLog(
+			This,
+			"Bound %s\n",
+			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
+		);
 	} else if (String_Cmp(Str, CStringL("xdg_wm_base")) == 0) {
 		_G.Wayland.XdgWmBaseName = Name;
 		_G.Wayland.XdgWmBase	 = (wayland_xdg_wm_base *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
 		_G.Wayland.XdgWmBase->Ping = Wayland_XdgWmBase_Ping;
-	} else if (String_Cmp(Str, CStringL("wl_drm")) == 0) {
-		_G.Wayland.DrmName = Name;
-		_G.Wayland.Drm	   = (wayland_drm *)
+		Wayland_DebugLog(
+			This,
+			"Bound %s\n",
+			Wayland_GetObjectName((wayland_interface *) _G.Wayland.XdgWmBase)
+		);
+	} else if (String_Cmp(Str, CStringL("zwp_linux_dmabuf_v1")) == 0) {
+		_G.Wayland.ZwpLinuxDmabufV1Name = Name;
+		_G.Wayland.ZwpLinuxDmabufV1		= (wayland_zwp_linux_dmabuf_v1 *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
-		_G.Wayland.Drm->Device		  = Wayland_Drm_Device;
-		_G.Wayland.Drm->Format		  = Wayland_Drm_Format;
-		_G.Wayland.Drm->Authenticated = Wayland_Drm_Authenticated;
-		_G.Wayland.Drm->Capabilities  = Wayland_Drm_Capabilities;
+		_G.Wayland.ZwpLinuxDmabufV1->Format = Wayland_ZwpLinuxDmabufV1_Format;
+		_G.Wayland.ZwpLinuxDmabufV1->Modifier =
+			Wayland_ZwpLinuxDmabufV1_Modifier;
+		Wayland_DebugLog(
+			This,
+			"Bound %s\n",
+			Wayland_GetObjectName(
+				(wayland_interface *) _G.Wayland.ZwpLinuxDmabufV1
+			)
+		);
 	}
 }
 
@@ -367,16 +480,30 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 
 	if (_G.Wayland.CompositorName == Name) {
 		_G.Wayland.CompositorName = 0;
+		Wayland_DebugLog(
+			This,
+			"Destroying %s\n",
+			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
+		);
 		Wayland_DestroyObject(_G.Wayland.Compositor);
-	} else if (_G.Wayland.ShmName == Name) {
-		_G.Wayland.ShmName = 0;
-		Wayland_DestroyObject(_G.Wayland.Shm);
 	} else if (_G.Wayland.XdgWmBaseName == Name) {
 		_G.Wayland.XdgWmBaseName = 0;
+		Wayland_DebugLog(
+			This,
+			"Destroying %s\n",
+			Wayland_GetObjectName((wayland_interface *) _G.Wayland.XdgWmBase)
+		);
 		Wayland_DestroyObject(_G.Wayland.XdgWmBase);
-	} else if (_G.Wayland.DrmName == Name) {
-		_G.Wayland.DrmName = 0;
-		Wayland_DestroyObject(_G.Wayland.Drm);
+	} else if (_G.Wayland.ZwpLinuxDmabufV1Name == Name) {
+		_G.Wayland.ZwpLinuxDmabufV1Name = 0;
+		Wayland_DebugLog(
+			This,
+			"Destroying %s\n",
+			Wayland_GetObjectName(
+				(wayland_interface *) _G.Wayland.ZwpLinuxDmabufV1
+			)
+		);
+		Wayland_DestroyObject(_G.Wayland.ZwpLinuxDmabufV1);
 	}
 }
 
@@ -522,10 +649,6 @@ Wayland_TryInit(void)
 		Wayland_DebugLog(NULL, "Syncing for global events...\n");
 		Wayland_SyncAndHandleEvents();
 
-		Wayland_DebugLog(NULL, "Syncing for DRM authentication...\n");
-		Wayland_SyncAndHandleEvents();
-		if (!_G.Wayland.DrmAuthenticated) goto error;
-
 		Wayland_DebugLog(NULL, "Connected!\n");
 	}
 
@@ -543,6 +666,13 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	if (_G.Wayland.Window.Surface) return _G.Wayland.Window.Surface;
 	if (!Width || !Height) return NULL;
 
+	wayland_buffer		 *Buffer1 = NULL, *Buffer2 = NULL;
+	wayland_surface		 *Surface	  = NULL;
+	wayland_xdg_surface	 *XdgSurface  = NULL;
+	wayland_xdg_toplevel *XdgToplevel = NULL;
+	s32					  DmabufFd	  = 0;
+	vptr				  BufferData  = NULL;
+
 	Wayland_DebugLog(
 		NULL,
 		"Creating %dx%d window titled %s...\n",
@@ -552,29 +682,6 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	);
 	_G.Wayland.Window.Width	 = Width;
 	_G.Wayland.Window.Height = Height;
-	_G.Wayland.DrmFormat	 = DRM_FORMAT_XRGB8888;
-
-	b08 GbmStatus = Gbm_Init(
-		_G.Wayland.DrmFd,
-		Width,
-		Height,
-		_G.Wayland.DrmFormat,
-		&_G.Wayland.Gbm
-	);
-	if (!GbmStatus) goto error;
-
-	if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
-
-	s32	  ShmFd		 = 0;
-	usize BufferSize = 4 * Width * Height;
-	vptr  BufferData = NULL;
-
-	wayland_shm_pool	 *ShmPool	  = NULL;
-	wayland_buffer		 *Buffer1	  = NULL;
-	wayland_buffer		 *Buffer2	  = NULL;
-	wayland_surface		 *Surface	  = NULL;
-	wayland_xdg_surface	 *XdgSurface  = NULL;
-	wayland_xdg_toplevel *XdgToplevel = NULL;
 
 	Surface = Wayland_Compositor_CreateSurface(_G.Wayland.Compositor);
 	if (!Surface) goto error;
@@ -594,51 +701,86 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	XdgToplevel->Close			 = Wayland_XdgToplevel_Close;
 	XdgToplevel->ConfigureBounds = Wayland_XdgToplevel_ConfigureBounds;
 	XdgToplevel->WmCapabilities	 = Wayland_XdgToplevel_WmCapabilities;
+	Wayland_XdgToplevel_SetTitle(XdgToplevel, "Voxarc");
+	Wayland_XdgToplevel_SetAppId(XdgToplevel, "voxarc");
 
-	s32 ShmSize = 2 * BufferSize;
-	ShmFd		= Sys_MemfdCreate("wayland-shm", 0);
-	if (ShmFd < 0) goto error;
-	if (Sys_FTruncate(ShmFd, ShmSize) < 0) goto error;
+	usize BufferSize = 4 * Width * Height;
+	s32	  DmabufSize = 2 * BufferSize;
+	DmabufFd		 = Sys_MemfdCreate("wayland-dmabuf", 0);
+	if (DmabufFd < 0) goto error;
+	if (Sys_FTruncate(DmabufFd, DmabufSize) < 0) goto error;
 	BufferData = Sys_MemMap(
 		NULL,
-		ShmSize,
+		DmabufSize,
 		SYS_PROT_READ | SYS_PROT_WRITE,
 		SYS_MAP_SHARED | SYS_MAP_POPULATE,
-		ShmFd,
+		DmabufFd,
 		0
 	);
 	if ((ssize) BufferData < 0 && (ssize) BufferData > -4096) goto error;
+	Mem_Set(BufferData, -1, DmabufSize);
 
-	ShmPool = Wayland_Shm_CreatePool(_G.Wayland.Shm, ShmFd, ShmSize);
-	if (!ShmPool) goto error;
+	if (!_G.Wayland.ZwpLinuxDmabufV1) goto error;
 
-	Buffer1 = Wayland_ShmPool_CreateBuffer(
-		ShmPool,
-		0,
-		Width,
-		Height,
-		Width * 4,
-		WAYLAND_SHM_FORMAT_ARGB8888
-	);
-	if (!Buffer1) goto error;
-	Buffer1->Release = Wayland_Buffer_Release;
+	wayland_zwp_linux_dmabuf_feedback_v1 *Feedback =
+		Wayland_ZwpLinuxDmabufV1_GetSurfaceFeedback(
+			_G.Wayland.ZwpLinuxDmabufV1,
+			Surface
+		);
+	Feedback->Done		  = Wayland_ZwpLinuxDmabufFeedbackV1_Done;
+	Feedback->FormatTable = Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable;
+	Feedback->MainDevice  = Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice;
+	Feedback->TrancheDone = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheDone;
+	Feedback->TrancheTargetDevice =
+		Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice;
+	Feedback->TrancheFormats = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats;
+	Feedback->TrancheFlags	 = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFlags;
+	Wayland_DebugLog(NULL, "Syncing for dmabuf feedback...\n");
+	Wayland_SyncAndHandleEvents();
+	Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(Feedback);
 
-	Buffer2 = Wayland_ShmPool_CreateBuffer(
-		ShmPool,
-		BufferSize,
-		Width,
-		Height,
-		Width * 4,
-		WAYLAND_SHM_FORMAT_ARGB8888
-	);
-	if (!Buffer2) goto error;
-	Buffer2->Release = Wayland_Buffer_Release;
+	if (!_G.Wayland.DrmFormat) goto error;
 
-	Wayland_XdgToplevel_SetTitle(XdgToplevel, "Voxarc");
-	Wayland_XdgToplevel_SetAppId(XdgToplevel, "voxarc");
+	wayland_zwp_linux_buffer_params_v1 *BufferParams[2];
+	for (usize I = 0; I < 2; I++) {
+		BufferParams[I] =
+			Wayland_ZwpLinuxDmabufV1_CreateParams(_G.Wayland.ZwpLinuxDmabufV1);
+		BufferParams[I]->Created = Wayland_ZwpLinuxBufferParamsV1_Created;
+		BufferParams[I]->Failed	 = Wayland_ZwpLinuxBufferParamsV1_Failed;
+		Wayland_ZwpLinuxBufferParamsV1_Add(
+			BufferParams[I],
+			DmabufFd,
+			0,
+			I * BufferSize,
+			Width,
+			_G.Wayland.FormatModifier >> 32,
+			_G.Wayland.FormatModifier & 0xFFFFFFFF
+		);
+		Wayland_ZwpLinuxBufferParamsV1_Create(
+			BufferParams[I],
+			Width,
+			Height,
+			_G.Wayland.DrmFormat,
+			0
+		);
+	}
+
+	Wayland_DebugLog(NULL, "Syncing for buffer creation...\n");
+	Wayland_SyncAndHandleEvents();
+
+	for (usize I = 0; I < 2; I++)
+		Wayland_ZwpLinuxBufferParamsV1_Destroy(BufferParams[I]);
+
+	Buffer1 = _G.Wayland.Window.Buffers[0];
+	Buffer2 = _G.Wayland.Window.Buffers[1];
+	if (!Buffer1 || !Buffer2) goto error;
+
+	b08 GbmStatus = Gbm_Init(0, Width, Height, 0, &_G.Wayland.Gbm);
+	if (!GbmStatus) goto error;
+
+	if (!Egl_Init(&_G.Wayland.Gbm, _G.Heap, &_G.Wayland.Egl)) goto error;
+
 	Wayland_Surface_Commit(Surface);
-
-	Mem_Set(BufferData, -1, ShmSize);
 
 	wayland_window_state *Window = &_G.Wayland.Window;
 
@@ -646,8 +788,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	Window->Surface		  = Surface;
 	Window->XdgSurface	  = XdgSurface;
 	Window->XdgToplevel	  = XdgToplevel;
-	Window->ShmPool		  = ShmPool;
-	Window->ShmFd		  = ShmFd;
+	Window->DmabufFd	  = DmabufFd;
 	Window->Width		  = Width;
 	Window->Height		  = Height;
 	Window->BufferSize	  = BufferSize;
@@ -671,14 +812,13 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	return Surface;
 
 error:
-	if (Buffer1->Interface.Id) Wayland_Buffer_Destroy(Buffer1);
-	if (Buffer2->Interface.Id) Wayland_Buffer_Destroy(Buffer2);
-	if (ShmPool->Interface.Id) Wayland_ShmPool_Destroy(ShmPool);
-	if (XdgToplevel->Interface.Id) Wayland_XdgToplevel_Destroy(XdgToplevel);
-	if (XdgSurface->Interface.Id) Wayland_XdgSurface_Destroy(XdgSurface);
-	if (Surface->Interface.Id) Wayland_Surface_Destroy(Surface);
-	if (BufferData) Sys_MemUnmap(BufferData, ShmSize);
-	if (ShmFd) Sys_Close(ShmFd);
+	if (Buffer1) Wayland_Buffer_Destroy(Buffer1);
+	if (Buffer2) Wayland_Buffer_Destroy(Buffer2);
+	if (XdgToplevel) Wayland_XdgToplevel_Destroy(XdgToplevel);
+	if (XdgSurface) Wayland_XdgSurface_Destroy(XdgSurface);
+	if (Surface) Wayland_Surface_Destroy(Surface);
+	if (BufferData) Sys_MemUnmap(BufferData, DmabufSize);
+	if (DmabufFd) Sys_Close(DmabufFd);
 	Wayland_Disconnect();
 	return NULL;
 }
