@@ -1362,9 +1362,15 @@ Wayland_DispatchEvent(wayland_event Event)
 
 #if defined(_X64)
 	usize StackSize = 0;
+	u64	  Regs[6];
+	usize RI = 0;
+
 	for (usize I = 0; I < Event.Method.ParamCount; I++) {
-		wayland_param Param	 = Event.Method.Params[I];
-		StackSize			+= (Param.Size + 7) & ~7;
+		wayland_param Param		 = Event.Method.Params[I];
+		usize		  ParamSize	 = (Param.Size + 7) & ~7;
+		usize		  ParamWords = ParamSize / 8;
+		if (ParamWords <= 6 - RI) RI += ParamWords;
+		else StackSize += ParamSize;
 	}
 	usize StackWords = StackSize / 8;
 
@@ -1374,20 +1380,16 @@ Wayland_DispatchEvent(wayland_event Event)
 		StackWords++;
 	}
 
-	u64	  Regs[6];
-	usize RI = 0;
-
+	RI				   = 0;
 	usize *Stack	   = Heap_AllocateA(_G.WaylandApi.Heap, StackSize);
 	vptr   StackCursor = Stack;
 	for (usize I = 0; I < Event.Method.ParamCount; I++) {
-		wayland_param Param		= Event.Method.Params[I];
-		usize		  ParamSize = (Param.Size + 7) & ~7;
-
-		usize ParamWords = ParamSize / 8;
+		wayland_param Param		 = Event.Method.Params[I];
+		usize		  ParamSize	 = (Param.Size + 7) & ~7;
+		usize		  ParamWords = ParamSize / 8;
 		if (ParamWords <= 6 - RI) {
 			Mem_Cpy(Regs + RI, &Param.Data, ParamSize);
-			RI		  += ParamWords;
-			StackSize -= ParamSize;
+			RI += ParamWords;
 		} else {
 			Mem_Cpy(StackCursor, &Param.Data, Param.Size);
 			StackCursor += ParamSize;
