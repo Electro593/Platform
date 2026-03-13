@@ -1389,6 +1389,7 @@ Wayland_Registry_Bind(
 {
 	return Wayland_HandleConstructorRequest(
 		(wayland_interface *) This,
+		0,
 		Name,
 		Interface,
 		Version

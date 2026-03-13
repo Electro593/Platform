@@ -334,22 +334,22 @@ Wayland_Registry_Global(
 		Version
 	);
 
-	wayland_interface *Obj = (vptr) This;
-	if (Wayland_IsType(Obj, "wl_compositor")) {
+	string Str = CString(Interface);
+	if (String_Cmp(Str, CStringL("wl_compositor")) == 0) {
 		_G.Wayland.CompositorName = Name;
 		_G.Wayland.Compositor	  = (wayland_compositor *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
-	} else if (Wayland_IsType(Obj, "wl_shm")) {
+	} else if (String_Cmp(Str, CStringL("wl_shm")) == 0) {
 		_G.Wayland.ShmName = Name;
 		_G.Wayland.Shm	   = (wayland_shm *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
 		_G.Wayland.Shm->Format = Wayland_Shm_Format;
-	} else if (Wayland_IsType(Obj, "xdg_wm_base")) {
+	} else if (String_Cmp(Str, CStringL("xdg_wm_base")) == 0) {
 		_G.Wayland.XdgWmBaseName = Name;
 		_G.Wayland.XdgWmBase	 = (wayland_xdg_wm_base *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
 		_G.Wayland.XdgWmBase->Ping = Wayland_XdgWmBase_Ping;
-	} else if (Wayland_IsType(Obj, "wl_drm")) {
+	} else if (String_Cmp(Str, CStringL("wl_drm")) == 0) {
 		_G.Wayland.DrmName = Name;
 		_G.Wayland.Drm	   = (wayland_drm *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);

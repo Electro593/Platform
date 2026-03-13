@@ -159,9 +159,9 @@ Mem_Cmp(vptr A, vptr B, usize Size)
 {
 	u08 *APtr = A;
 	u08 *BPtr = B;
-	while (Size && *APtr++ == *BPtr++) Size--;
+	while (Size && *APtr == *BPtr) Size--, APtr++, BPtr++;
 	if (!Size) return EQUAL;
-	if ((usize) APtr > (usize) BPtr) return GREATER;
+	if (*APtr > *BPtr) return GREATER;
 	return LESS;
 }
 

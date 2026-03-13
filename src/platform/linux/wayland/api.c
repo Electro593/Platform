@@ -186,7 +186,6 @@ typedef struct wayland_api_state {
 #ifndef SECTION_FUNCS
 
 #define WAYLAND_API_FUNCS \
-	INTERN(b08,                Wayland_IsType,           wayland_interface *Object, c08 *Name) \
 	INTERN(vptr,               Wayland_GetObject,        u32 ObjectId) \
 	INTERN(vptr,               Wayland_CreateObject,     wayland_prototype *Prototype, u32 ObjectId, u32 Version) \
 	INTERN(void,               Wayland_DestroyObject,    vptr Object) \
@@ -244,46 +243,39 @@ extern wayland_prototype WaylandZwpLinuxBufferParamsV1Prototype;
 extern wayland_prototype WaylandZwpLinuxDmabufFeedbackV1Prototype;
 
 wayland_prototype *WaylandPrototypes[] = {
-	&WaylandDisplayPrototype,
-	&WaylandRegistryPrototype,
+	&WaylandBufferPrototype,
 	&WaylandCallbackPrototype,
 	&WaylandCompositorPrototype,
-	&WaylandShmPoolPrototype,
-	&WaylandShmPrototype,
-	&WaylandBufferPrototype,
-	&WaylandDataOfferPrototype,
-	&WaylandDataSourcePrototype,
 	&WaylandDataDevicePrototype,
 	&WaylandDataDeviceManagerPrototype,
+	&WaylandDataOfferPrototype,
+	&WaylandDataSourcePrototype,
+	&WaylandDisplayPrototype,
+	&WaylandDrmPrototype,
+	&WaylandFixesPrototype,
+	&WaylandKeyboardPrototype,
+	&WaylandOutputPrototype,
+	&WaylandPointerPrototype,
+	&WaylandRegionPrototype,
+	&WaylandRegistryPrototype,
+	&WaylandSeatPrototype,
 	&WaylandShellPrototype,
 	&WaylandShellSurfacePrototype,
-	&WaylandSurfacePrototype,
-	&WaylandSeatPrototype,
-	&WaylandPointerPrototype,
-	&WaylandKeyboardPrototype,
-	&WaylandTouchPrototype,
-	&WaylandOutputPrototype,
-	&WaylandRegionPrototype,
+	&WaylandShmPrototype,
+	&WaylandShmPoolPrototype,
 	&WaylandSubcompositorPrototype,
 	&WaylandSubsurfacePrototype,
-	&WaylandFixesPrototype,
-	&WaylandXdgWmBasePrototype,
+	&WaylandSurfacePrototype,
+	&WaylandTouchPrototype,
+	&WaylandXdgPopupPrototype,
 	&WaylandXdgPositionerPrototype,
 	&WaylandXdgSurfacePrototype,
 	&WaylandXdgToplevelPrototype,
-	&WaylandXdgPopupPrototype,
-	&WaylandDrmPrototype,
-	&WaylandZwpLinuxDmabufV1Prototype,
+	&WaylandXdgWmBasePrototype,
 	&WaylandZwpLinuxBufferParamsV1Prototype,
 	&WaylandZwpLinuxDmabufFeedbackV1Prototype,
+	&WaylandZwpLinuxDmabufV1Prototype,
 };
-
-internal b08
-Wayland_IsType(wayland_interface *Object, c08 *Name)
-{
-	if (!Object) return FALSE;
-	return String_Cmp(CString(Object->Prototype->Name), CString(Name)) == 0;
-}
 
 internal wayland_prototype *
 Wayland_FindPrototype(c08 *Name)
@@ -301,9 +293,9 @@ Wayland_FindPrototype(c08 *Name)
 
 		s32 Cmp = String_Cmp(Target, CString(Curr->Name));
 
-		if (Cmp == EQUAL) break;
-		if (Cmp == LESS) Start = Index + 1;
-		else End = Index;
+		if (Cmp > 0) Start = Index + 1;
+		else if (Cmp < 0) End = Index;
+		else break;
 	}
 
 	return Start == End ? NULL : Curr;
@@ -698,10 +690,7 @@ Wayland_PrepareMethod(wayland_interface *Object, u16 Opcode, b08 IsEvent)
 	for (C = PreparedMethod.Format; *C; C++) {
 		if (*C == '?') C++;
 		if (*C == 'f') PreparedMethod.FdCount++;
-		else if (*C == 'n') {
-			wayland_prototype *Prototype = Method.Prototypes[CI++];
-			if (!Prototype) PreparedMethod.ParamCount += 2;
-		}
+		else if (*C == 'n') PreparedMethod.NewCount++;
 		PreparedMethod.ParamCount++;
 	}
 
@@ -853,6 +842,11 @@ Wayland_FillRequestParams(wayland_prepared_method PreparedMethod, va_list Args)
 						Prototype,
 						"Failed to find prototype for constructed object"
 					);
+					Assert(
+						String_Cmp(CString(Prototype->Name), CString(Name))
+							== 0,
+						"Wayland prototypes must be in alphabetical order!"
+					);
 					Param->NewObject.Data =
 						Wayland_CreateObject(Prototype, ObjectId, Version);
 				}
@@ -956,7 +950,7 @@ Wayland_SerializeParam(
 				if (Words) {
 					Words[WI] = Name.Length + 1;
 					Mem_Cpy(Words + WI + 1, Name.Text, Name.Length + 1);
-					Words[StrWords] = Version;
+					Words[WI + StrWords] = Version;
 				}
 				WI += StrWords + 1;
 			}
@@ -977,16 +971,13 @@ Wayland_SerializeParam(
 internal wayland_message
 Wayland_SerializeMethod(wayland_prepared_method PreparedMethod)
 {
-	usize MessageHeaderSize = 2 * sizeof(u32);
-	usize ControlHeaderSize = sizeof(sys_cmsghdr);
-
 	wayland_message Message = { 0 };
 
 	usize WI = 2, FI = 0;
 	for (usize I = 1; I < PreparedMethod.ParamCount; I++)
 		Wayland_SerializeParam(Message, &WI, &FI, PreparedMethod.Params[I]);
 
-	Message.MessageSize = (2 + WI) * sizeof(u32);
+	Message.MessageSize = WI * sizeof(u32);
 	Message.MessageData =
 		Heap_AllocateA(_G.WaylandApi.Heap, Message.MessageSize);
 	Message.MessageData[0] = PreparedMethod.Object->Id;
@@ -1315,7 +1306,6 @@ Wayland_TryDequeueEvent(
 		sizeof(sys_cmsghdr) + Event.Method.FdCount * sizeof(s32);
 	Wayland_DequeueMessage(&_G.WaylandApi.MessageQueue, NULL);
 
-	wayland_prepared_method PreparedMethod = Event.Method;
 	if (Event.Message.ControlSize) {
 		Event.Message.ControlData =
 			Heap_AllocateA(Heap, Event.Message.ControlSize);
@@ -1323,18 +1313,14 @@ Wayland_TryDequeueEvent(
 
 		s32 *Fds = (vptr) &Event.Message.ControlData->Data;
 
-		usize PI = 0;
-		usize CI = 0;
 		usize FI = 0;
-		for (c08 *C = PreparedMethod.Format; *C; C++) {
-			if (*C == '?') C++;
-			if (*C == 'n' && !PreparedMethod.Method.Prototypes[CI++]) PI += 2;
-			else if (*C == 'f') {
+		for (usize I = 0; I < Event.Method.ParamCount; I++) {
+			wayland_param *Param = &Event.Method.Params[I];
+			if (Param->Type == WAYLAND_PARAM_FD) {
 				s32 Fd	  = Wayland_DequeueFd(&_G.WaylandApi.FdQueue);
 				Fds[FI++] = Fd;
-				PreparedMethod.Params[PI].Fd = Fd;
+				Param->Fd = Fd;
 			}
-			PI++;
 		}
 	}
 
