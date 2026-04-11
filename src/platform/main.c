@@ -16,7 +16,6 @@
 #include <loader/main.c>
 #endif
 #include "main.c"
-#include <platform/opengl.h>
 #undef INCLUDE_HEADER
 
 #define INCLUDE_SOURCE
@@ -28,6 +27,7 @@ global platform_state _G;
 global platform_funcs _F;
 #endif
 
+#include <platform/opengl.h>
 #if defined(_WIN32)
 #include <platform/win32/win32.c>
 #include <platform/platform.c>

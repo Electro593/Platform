@@ -9,20 +9,26 @@
 
 #ifdef INCLUDE_HEADER
 
+typedef s64	 egl_attrib;
 typedef u32	 egl_boolean;
+typedef vptr egl_client_buffer;
 typedef vptr egl_config;
 typedef vptr egl_context;
 typedef vptr egl_display;
+typedef vptr egl_image;
 typedef s32	 egl_int;
 typedef vptr egl_native_display_type;
 typedef vptr egl_native_window_type;
 typedef vptr egl_surface;
+typedef vptr egl_sync;
 
 #define EGL_DONT_CARE ((egl_int)(-1))  // v1.0
 #define EGL_UNKNOWN   ((egl_int)(-1))  // v1.2
 #define EGL_FALSE     0                // v1.0
 #define EGL_TRUE      1                // v1.0
 #define EGL_NONE      0x3038           // v1.0
+#define EGL_HEIGHT    0x3056 // v1.0
+#define EGL_WIDTH     0x3057 // v1.0
 
 #define EGL_DISPLAY_SCALING 10000                 // v1.2
 #define EGL_FOREVER         0xFFFFFFFFFFFFFFFFull // v1.5
@@ -30,12 +36,10 @@ typedef vptr egl_surface;
 #define EGL_NO_CONTEXT      ((egl_context)(0))           // v1.0
 #define EGL_NO_DISPLAY      ((egl_display)(0))           // v1.0
 #define EGL_NO_SURFACE      ((egl_surface)(0))           // v1.0
-#define EGL_DEFAULT_DISPLAY ((EGLNativeDisplayType)(0))  // v1.4
-#define EGL_NO_SYNC         ((EGLSync)(0))               // v1.5
-#define EGL_NO_IMAGE        ((EGLImage)(0))              // v1.5
+#define EGL_DEFAULT_DISPLAY ((egl_native_display_type)(0))  // v1.4
+#define EGL_NO_SYNC         ((egl_sync)(0))               // v1.5
+#define EGL_NO_IMAGE        ((egl_image)(0))              // v1.5
 
-#define EGL_HEIGHT                         0x3056 // v1.0
-#define EGL_WIDTH                          0x3057 // v1.0
 #define EGL_LARGEST_PBUFFER                0x3058 // v1.0
 #define EGL_DRAW                           0x3059 // v1.0
 #define EGL_READ                           0x305A // v1.0
@@ -78,18 +82,6 @@ typedef vptr egl_surface;
 #define EGL_MULTISAMPLE_RESOLVE_BOX        0x309B // v1.4
 #define EGL_CL_EVENT_HANDLE                0x309C // v1.5
 #define EGL_GL_COLORSPACE                  0x309D // v1.5
-#define EGL_GL_TEXTURE_2D                  0x30B1 // v1.5
-#define EGL_GL_TEXTURE_3D                  0x30B2 // v1.5
-#define EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x30B3 // v1.5
-#define EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_X 0x30B4 // v1.5
-#define EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Y 0x30B5 // v1.5
-#define EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Y 0x30B6 // v1.5
-#define EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Z 0x30B7 // v1.5
-#define EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Z 0x30B8 // v1.5
-#define EGL_GL_RENDERBUFFER                0x30B9 // v1.5
-#define EGL_GL_TEXTURE_LEVEL               0x30BC // v1.5
-#define EGL_GL_TEXTURE_ZOFFSET             0x30BD // v1.5
-#define EGL_IMAGE_PRESERVED                0x30D2 // v1.5
 #define EGL_SYNC_PRIOR_COMMANDS_COMPLETE   0x30F0 // v1.5
 #define EGL_SYNC_STATUS                    0x30F1 // v1.5
 #define EGL_SIGNALED                       0x30F2 // v1.5
@@ -111,13 +103,19 @@ typedef enum egl_color_buffer_type			 egl_color_buffer_type;
 typedef enum egl_config_caveat				 egl_config_caveat;
 typedef enum egl_conformance_flags			 egl_conformance_flags;
 typedef enum egl_error						 egl_error;
+typedef enum egl_image_attrib				 egl_image_attrib;
+typedef enum egl_image_target				 egl_image_target;
 typedef enum egl_profile_flags				 egl_profile_flags;
 typedef enum egl_query						 egl_query;
 typedef enum egl_renderable_type_flags		 egl_renderable_type_flags;
 typedef enum egl_reset_notification_strategy egl_reset_notification_strategy;
+typedef enum egl_sample_range_hint			 egl_sample_range_hint;
 typedef enum egl_surface_type_flags			 egl_surface_type_flags;
 typedef enum egl_transparent_type			 egl_transparent_type;
 typedef enum egl_window_attrib				 egl_window_attrib;
+typedef enum egl_yuv_chroma_horizontal_siting_hint
+									  egl_yuv_chroma_horizontal_siting_hint;
+typedef enum egl_yuv_color_space_hint egl_yuv_color_space_hint;
 
 typedef struct egl egl;
 
@@ -215,6 +213,46 @@ enum egl_error {
 	EGL_ERROR_CONTEXT_LOST		  = 0x300E,	 // v1.1
 };
 
+enum egl_image_attrib {
+	EGL_IMAGE_ATTRIB_NONE			 = EGL_NONE,  // v1.0
+	EGL_IMAGE_ATTRIB_TEXTURE_LEVEL	 = 0x30BC,	  // v1.5
+	EGL_IMAGE_ATTRIB_TEXTURE_ZOFFSET = 0x30BD,	  // v1.5
+	EGL_IMAGE_ATTRIB_PRESERVED		 = 0x30D2,	  // v1.5
+
+	// EGL_EXT_image_dma_buf_import
+	EGL_IMAGE_ATTRIB_WIDTH							   = EGL_WIDTH,
+	EGL_IMAGE_ATTRIB_HEIGHT							   = EGL_HEIGHT,
+	EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC				   = 0x3271,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD				   = 0x3272,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET			   = 0x3273,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH			   = 0x3274,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_FD				   = 0x3275,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_OFFSET			   = 0x3276,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_PITCH			   = 0x3277,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_FD				   = 0x3278,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_OFFSET			   = 0x3279,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_PITCH			   = 0x327A,
+	EGL_IMAGE_ATTRIB_YUV_COLOR_SPACE_HINT			   = 0x327B,
+	EGL_IMAGE_ATTRIB_SAMPLE_RANGE_HINT				   = 0x327C,
+	EGL_IMAGE_ATTRIB_YUV_CHROMA_HORIZONTAL_SITING_HINT = 0x327D,
+	EGL_IMAGE_ATTRIB_YUV_CHROMA_VERTICAL_SITING_HINT   = 0x327E,
+};
+
+enum egl_image_target {
+	EGL_IMAGE_TARGET_TEXTURE_2D					 = 0x30B1,	// v1.5
+	EGL_IMAGE_TARGET_TEXTURE_3D					 = 0x30B2,	// v1.5
+	EGL_IMAGE_TARGET_TEXTURE_CUBE_MAP_POSITIVE_X = 0x30B3,	// v1.5
+	EGL_IMAGE_TARGET_TEXTURE_CUBE_MAP_NEGATIVE_X = 0x30B4,	// v1.5
+	EGL_IMAGE_TARGET_TEXTURE_CUBE_MAP_POSITIVE_Y = 0x30B5,	// v1.5
+	EGL_IMAGE_TARGET_TEXTURE_CUBE_MAP_NEGATIVE_Y = 0x30B6,	// v1.5
+	EGL_IMAGE_TARGET_TEXTURE_CUBE_MAP_POSITIVE_Z = 0x30B7,	// v1.5
+	EGL_IMAGE_TARGET_TEXTURE_CUBE_MAP_NEGATIVE_Z = 0x30B8,	// v1.5
+	EGL_IMAGE_TARGET_RENDERBUFFER				 = 0x30B9,	// v1.5
+
+	// EGL_EXT_image_dma_buf_import
+	EGL_IMAGE_TARGET_LINUX_DMA_BUF = 0x3270,
+};
+
 enum egl_profile_flags {
 	EGL_PROFILE_OPENGL_CORE			 = 0x00000001,	// v1.5
 	EGL_PROFILE_OPENGL_COMPATIBILITY = 0x00000002,	// v1.5
@@ -240,6 +278,12 @@ enum egl_reset_notification_strategy {
 	EGL_LOSE_CONTEXT_ON_RESET = 0x31BF,	 // v1.5
 };
 
+enum egl_sample_range_hint {
+	// EGL_EXT_image_dma_buf_import
+	EGL_SAMPLE_RANGE_YUV_FULL	= 0x3282,
+	EGL_SAMPLE_RANGE_YUV_NARROW = 0x3283,
+};
+
 enum egl_surface_type_flags {
 	EGL_SURFACE_TYPE_PBUFFER				 = 0x0001,	// v1.0
 	EGL_SURFACE_TYPE_PIXMAP					 = 0x0002,	// v1.0
@@ -259,8 +303,25 @@ enum egl_window_attrib {
 	EGL_WINDOW_NONE = EGL_NONE	// v1.0
 };
 
+enum egl_yuv_chroma_horizontal_siting_hint {
+	// EGL_EXT_image_dma_buf_import
+	EGL_YUV_CHROMA_HORIZONTAL_SITING_0	 = 0x3284,
+	EGL_YUV_CHROMA_HORIZONTAL_SITING_0_5 = 0x3285,
+};
+
+enum egl_yuv_color_space_hint {
+	// EGL_EXT_image_dma_buf_import
+	EGL_YUV_COLOR_SPACE_ITU_REC601	= 0x327F,
+	EGL_YUV_COLOR_SPACE_ITU_REC709	= 0x3280,
+	EGL_YUV_COLOR_SPACE_ITU_REC2020 = 0x3281,
+};
+
 struct egl {
 	gbm *Gbm;
+
+	egl_image EglImages[2];
+	u32		  FrameBufferIds[2];
+	u32		  TextureIds[2];
 
 	egl_display Display;
 	egl_context Context;
@@ -273,8 +334,10 @@ struct egl {
 	IMPORT(egl_boolean, Egl, eglBindAPI,             Egl_BindApi,             egl_api Api) \
 	IMPORT(egl_boolean, Egl, eglChooseConfig,        Egl_ChooseConfig,        egl_display Display, egl_int *Attribs, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
 	IMPORT(egl_context, Egl, eglCreateContext,       Egl_CreateContext,       egl_display Display, egl_config Config, egl_context ShareContext, egl_int *Attribs) \
+	IMPORT(egl_image,   Egl, eglCreateImage,         Egl_CreateImage,         egl_display Display, egl_context Context, egl_image_target Target, egl_client_buffer Buffer, egl_attrib *Attribs) \
 	IMPORT(egl_surface, Egl, eglCreateWindowSurface, Egl_CreateWindowSurface, egl_display Display, egl_config Config, egl_native_window_type NativeWindow, egl_int *Attribs) \
 	IMPORT(egl_boolean, Egl, eglDestroyContext,      Egl_DestroyContext,      egl_display Display, egl_context Context) \
+	IMPORT(egl_boolean, Egl, eglDestroyImage,        Egl_DestroyImage,        egl_display Display, egl_image Image) \
 	IMPORT(egl_boolean, Egl, eglDestroySurface,      Egl_DestroySurface,      egl_display Display, egl_surface Surface) \
 	IMPORT(egl_boolean, Egl, eglGetConfigAttrib,     Egl_GetConfigAttrib,     egl_display Display, egl_config Config, egl_config_attrib Attrib, egl_int *ValueOut) \
 	IMPORT(egl_boolean, Egl, eglGetConfigs,          Egl_GetConfigs,          egl_display Display, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
@@ -321,18 +384,33 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		goto error;
 	}
 
-	c08 *ClientApis = Egl_QueryString(EglDisplay, EGL_QUERY_CLIENT_APIS);
-	FPrintL("- Client APIs: %s\n", CString(ClientApis));
-
 	// Select Client API
-	egl_api Api		= Egl_QueryApi();
-	string	ApisStr = CString(ClientApis);
-	while (ApisStr.Length) {
-		string ApiStr = String_SplitLeftByCodepoint(&ApisStr, ' ');
-
-		if (String_Cmp(ApiStr, CStringL("OpenGL")) == 0) {
+	egl_api Api = Egl_QueryApi();
+	string	ClientApis =
+		CString(Egl_QueryString(EglDisplay, EGL_QUERY_CLIENT_APIS));
+	FPrintL("- Client APIs:\n");
+	string Cursor = ClientApis;
+	while (Cursor.Length) {
+		string ClientApi = String_SplitLeftByCodepoint(&Cursor, ' ');
+		FPrintL("  - %s\n", ClientApi);
+		if (String_Cmp(ClientApi, CStringL("OpenGL")) == 0) {
 			if (Egl_BindApi(EGL_API_OPENGL)) Api = EGL_API_OPENGL;
 		}
+	}
+
+	// Find extensions
+	b08	   HasDmaBufImport = FALSE;
+	string Extensions =
+		CString(Egl_QueryString(EglDisplay, EGL_QUERY_EXTENSIONS));
+	FPrintL("- Extensions:\n");
+	Cursor = Extensions;
+	while (Cursor.Length) {
+		string Extension = String_SplitLeftByCodepoint(&Cursor, ' ');
+		FPrintL("  - %s\n", Extension);
+
+		if (String_Cmp(Extension, CStringL("EGL_EXT_image_dma_buf_import"))
+			== 0)
+			HasDmaBufImport = TRUE;
 	}
 
 	if (Api != EGL_API_OPENGL) {
@@ -340,6 +418,13 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		goto error;
 	}
 	FPrintL("Selected EGL OpenGL client api\n");
+
+	if (!HasDmaBufImport) {
+		FPrintL(
+			"Required extension EGL_EXT_image_dma_buf_import is not present\n"
+		);
+		goto error;
+	}
 
 	// Select Config
 	egl_int ConfigCount = 0;
@@ -467,14 +552,60 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		goto error;
 	}
 
-	FPrintL("Successfully initialized an egl context!\n");
+	egl_image EglImages[2] = { 0 };
+	for (usize I = 0; I < 2; I++) {
+		gbm_bo *Bo = Gbm->BufferObjects[I];
+
+		u64 Modifier = Gbm_BoGetModifier(Bo);
+
+		// clang-format off
+		egl_attrib ImageAttribs[] = {
+			EGL_IMAGE_ATTRIB_WIDTH,                 Gbm_BoGetWidth(Bo),
+			EGL_IMAGE_ATTRIB_HEIGHT,                Gbm_BoGetHeight(Bo),
+			EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,      Gbm_BoGetFormat(Bo),
+			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,     Gbm_BoGetFd(Bo),
+			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET, 0,
+			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,  Gbm_BoGetStride(Bo),
+			0x3443, Modifier & 0xFFFFFFFF,
+			0x3444, Modifier >> 32,
+			EGL_IMAGE_ATTRIB_NONE
+		};
+		// clang-format on
+
+		EglOut->EglImages[I] = Egl_CreateImage(
+			EglDisplay,
+			EGL_NO_CONTEXT,
+			EGL_IMAGE_TARGET_LINUX_DMA_BUF,
+			NULL,
+			ImageAttribs
+		);
+
+		if (!EglOut->EglImages[I]) {
+			FPrintL(
+				"Failed to create egl image %d: code %#x\n",
+				I,
+				Egl_GetError()
+			);
+			goto error;
+		}
+
+		// 		OpenGL_GenTextures(1, &EglOut->TextureIds[I]);
+		// 		OpenGL_BindTexture(GL_TEXTURE_2D, EglOut->TextureIds[I]);
+		//
+		// 		OpenGL_GenFramebuffers(1, &EglOut->FramebufferIds[I]);
+	}
+
+	FPrintL("Successfully initialized egl!\n");
 	EglOut->Gbm		= Gbm;
 	EglOut->Display = EglDisplay;
 	EglOut->Context = EglContext;
 	EglOut->Config	= EglConfig;
+	Mem_Cpy(EglOut->EglImages, EglImages, sizeof(EglImages));
 	return TRUE;
 
 error:
+	if (EglImages[1]) Egl_DestroyImage(EglDisplay, EglImages[1]);
+	if (EglImages[0]) Egl_DestroyImage(EglDisplay, EglImages[0]);
 	if (EglContext != EGL_NO_CONTEXT)
 		Egl_DestroyContext(EglDisplay, EglContext);
 	if (Configs) Heap_FreeA(Configs);

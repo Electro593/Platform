@@ -39,6 +39,7 @@ typedef enum opengl_error {
 #define GL_BLEND                  0x0BE2
 #define GL_COLOR_LOGIC_OP         0x0BF2
 #define GL_SCISSOR_TEST           0x0C11
+#define GL_TEXTURE_2D				 0x0DE1
 #define GL_DONT_CARE              0x1100
 #define GL_UNSIGNED_BYTE          0x1401
 #define GL_SHORT                  0x1402
@@ -103,6 +104,7 @@ typedef enum opengl_debug_severity {
 #define GL_INFO_LOG_LENGTH        0x8B84
 #define GL_TEXTURE_2D_ARRAY       0x8C1A
 #define GL_TEXTURE_BUFFER         0x8C2A
+#define GL_FRAMEBUFFER            0x8D40
 #define GL_RGBA32UI               0x8D70
 #define GL_INT_2_10_10_10_REV     0x8D9F
 #define GL_SHADER_STORAGE_BUFFER  0x90D2

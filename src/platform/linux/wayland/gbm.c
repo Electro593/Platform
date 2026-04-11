@@ -38,6 +38,11 @@ typedef struct gbm {
 	IMPORT(gbm_bo*,      Gbm, gbm_bo_create,                Gbm_BoCreate,              gbm_device *GbmDevice, u32 Width, u32 Height, drm_format Format, gbm_bo_flags Flags) \
 	IMPORT(gbm_bo*,      Gbm, gbm_bo_create_with_modifiers, Gbm_BoCreateWithModifiers, gbm_device *GbmDevice, u32 Width, u32 Height, drm_format Format, drm_format_modifier *Modifiers, u32 ModifierCount) \
 	IMPORT(s32,          Gbm, gbm_bo_get_fd,                Gbm_BoGetFd,               gbm_bo *BufferObject) \
+	IMPORT(drm_format,   Gbm, gbm_bo_get_format,            Gbm_BoGetFormat,           gbm_bo *BufferObject) \
+	IMPORT(u32,          Gbm, gbm_bo_get_height,            Gbm_BoGetHeight,           gbm_bo *BufferObject) \
+	IMPORT(u64,          Gbm, gbm_bo_get_modifier,          Gbm_BoGetModifier,         gbm_bo *BufferObject) \
+	IMPORT(u32,          Gbm, gbm_bo_get_stride,            Gbm_BoGetStride,           gbm_bo *BufferObject) \
+	IMPORT(u32,          Gbm, gbm_bo_get_width,             Gbm_BoGetWidth,            gbm_bo *BufferObject) \
 	IMPORT(gbm_device*,  Gbm, gbm_create_device,            Gbm_CreateDevice,          s32 DrmFd) \
 	IMPORT(gbm_surface*, Gbm, gbm_surface_create,           Gbm_SurfaceCreate,         gbm_device *GbmDevice, u32 Width, u32 Height, drm_format Format, u32 Flags) \
 	//
