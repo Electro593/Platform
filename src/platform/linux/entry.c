@@ -57,7 +57,8 @@ Platform_LoadOpenGL(void)
 
 	vptr Handle = dlopen("/usr/lib/libGL.so", SYS_RUNTIME_LOADER_LAZY);
 
-#define IMPORT(R, N, ...) OpenGLFuncs.OpenGL_##N = dlsym(Handle, "gl" #N);
+#define IMPORT(R, N, ...) \
+	OpenGLFuncs.OpenGL_##N = OpenGL_##N = dlsym(Handle, "gl" #N);
 #define X OPENGL_FUNCS
 #include <x.h>
 

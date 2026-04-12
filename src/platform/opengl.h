@@ -104,7 +104,10 @@ typedef enum opengl_debug_severity {
 #define GL_INFO_LOG_LENGTH        0x8B84
 #define GL_TEXTURE_2D_ARRAY       0x8C1A
 #define GL_TEXTURE_BUFFER         0x8C2A
+#define GL_FRAMEBUFFER_COMPLETE   0x8CD5
+#define GL_COLOR_ATTACHMENT0      0x8CE0
 #define GL_FRAMEBUFFER            0x8D40
+#define GL_RENDERBUFFER           0x8D41
 #define GL_RGBA32UI               0x8D70
 #define GL_INT_2_10_10_10_REV     0x8D9F
 #define GL_SHADER_STORAGE_BUFFER  0x90D2
@@ -125,23 +128,33 @@ typedef void(API_ENTRY func_OpenGL_DebugProc)(
 );
 
 #define OPENGL_FUNCS_TYPE_1 \
-   IMPORT(void, BindTexture,   u32 Target, u32 Texture) \
-   IMPORT(void, BlendFunc,     u32 SFactor, u32 DFactor) \
-   IMPORT(void, Clear,         u32 Mask) \
-   IMPORT(void, ClearColor,    r32 Red, r32 Green, r32 Blue, r32 Alpha) \
-   IMPORT(void, CullFace,      u32 Mode) \
-   IMPORT(void, Disable,       u32 Capability) \
-   IMPORT(void, DrawArrays,    u32 Mode, s32 First, s32 Count) \
-   IMPORT(void, DrawElements,  u32 Mode, s32 Count, u32 Type, vptr Indices) \
-   IMPORT(void, Enable,        u32 Capability) \
-   IMPORT(void, GetFloatv,     u32 Name, r32 *Data) \
-   IMPORT(void, GenTextures,   s32 Count, u32 *Textures) \
-   IMPORT(void, LineWidth,     r32 Width) \
-   IMPORT(void, LogicOp,       u32 OpCode) \
-   IMPORT(void, PolygonMode,   u32 Face, u32 Mode) \
-   IMPORT(void, Scissor,       s32 X, s32 Y, s32 Width, s32 Height) \
-   IMPORT(void, TexParameteri, u32 Target, u32 Name, s32 Param) \
-   IMPORT(void, Viewport,      s32 X, s32 Y, s32 Width, s32 Height)
+   IMPORT(void, BindFramebuffer,                      u32 Target, u32 Id) \
+   IMPORT(void, BindRenderbuffer,                     u32 Target, u32 Id) \
+   IMPORT(void, BindTexture,                          u32 Target, u32 Id) \
+   IMPORT(void, BlendFunc,                            u32 SFactor, u32 DFactor) \
+   IMPORT(u32,  CheckFramebufferStatus,               u32 Target) \
+   IMPORT(void, Clear,                                u32 Mask) \
+   IMPORT(void, ClearColor,                           r32 Red, r32 Green, r32 Blue, r32 Alpha) \
+   IMPORT(void, CullFace,                             u32 Mode) \
+   IMPORT(void, Disable,                              u32 Capability) \
+   IMPORT(void, DrawArrays,                           u32 Mode, s32 First, s32 Count) \
+   IMPORT(void, DrawElements,                         u32 Mode, s32 Count, u32 Type, vptr Indices) \
+   IMPORT(void, EGLImageTargetRenderbufferStorageOES, u32 Target, void *EglImage) \
+   IMPORT(void, EGLImageTargetTexture2DOES,           u32 Target, void *EglImage) \
+   IMPORT(void, Enable,                               u32 Capability) \
+   IMPORT(void, Finish,                               void) \
+   IMPORT(void, FramebufferRenderbuffer,              u32 Target, u32 Attachment, u32 RenderbufferTarget, u32 RenderbufferId) \
+   IMPORT(void, FramebufferTexture2D,                 u32 Target, u32 Attachment, u32 TextureTarget, u32 TextureId, s32 Level) \
+   IMPORT(void, GetFloatv,                            u32 Name, r32 *Data) \
+   IMPORT(void, GenFramebuffers,                      s32 Count, u32 *Ids) \
+   IMPORT(void, GenRenderbuffers,                     s32 Count, u32 *Ids) \
+   IMPORT(void, GenTextures,                          s32 Count, u32 *Ids) \
+   IMPORT(void, LineWidth,                            r32 Width) \
+   IMPORT(void, LogicOp,                              u32 OpCode) \
+   IMPORT(void, PolygonMode,                          u32 Face, u32 Mode) \
+   IMPORT(void, Scissor,                              s32 X, s32 Y, s32 Width, s32 Height) \
+   IMPORT(void, TexParameteri,                        u32 Target, u32 Name, s32 Param) \
+   IMPORT(void, Viewport,                             s32 X, s32 Y, s32 Width, s32 Height)
 
 #define OPENGL_FUNCS_TYPE_2 \
    IMPORT(void,         ActiveTexture,               u32 Texture) \
@@ -206,11 +219,13 @@ typedef struct opengl_funcs {
 	b08 Initialized;
 } opengl_funcs;
 
-#if defined(_RENDERER_MODULE)
+#endif
+
+#ifdef INCLUDE_SOURCE
+
 #define IMPORT(ReturnType, Name, ...) \
       global func_OpenGL_##Name *OpenGL_##Name;
 #define X OPENGL_FUNCS
 #include <x.h>
-#endif
 
 #endif

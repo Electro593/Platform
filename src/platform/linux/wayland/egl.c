@@ -320,8 +320,9 @@ struct egl {
 	gbm *Gbm;
 
 	egl_image EglImages[2];
-	u32		  FrameBufferIds[2];
-	u32		  TextureIds[2];
+	u32		  FramebufferIds[2];
+	u32		  RenderbufferIds[2];
+	// u32		  TextureIds[2];
 
 	egl_display Display;
 	egl_context Context;
@@ -552,6 +553,10 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		goto error;
 	}
 
+	OpenGL_GenFramebuffers(2, EglOut->FramebufferIds);
+	OpenGL_GenRenderbuffers(2, EglOut->RenderbufferIds);
+	// OpenGL_GenTextures(2, EglOut->TextureIds);
+
 	egl_image EglImages[2] = { 0 };
 	for (usize I = 0; I < 2; I++) {
 		gbm_bo *Bo = Gbm->BufferObjects[I];
@@ -589,10 +594,38 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			goto error;
 		}
 
-		// 		OpenGL_GenTextures(1, &EglOut->TextureIds[I]);
-		// 		OpenGL_BindTexture(GL_TEXTURE_2D, EglOut->TextureIds[I]);
-		//
-		// 		OpenGL_GenFramebuffers(1, &EglOut->FramebufferIds[I]);
+		// OpenGL_BindFramebuffer(GL_FRAMEBUFFER, EglOut->FramebufferIds[I]);
+		// OpenGL_BindTexture(GL_TEXTURE_2D, EglOut->TextureIds[I]);
+		// OpenGL_EGLImageTargetTexture2DOES(GL_TEXTURE_2D,
+		// EglOut->EglImages[I]); OpenGL_FramebufferTexture2D( 	GL_FRAMEBUFFER,
+		// 	GL_COLOR_ATTACHMENT0,
+		// 	GL_TEXTURE_2D,
+		// 	EglOut->TextureIds[I],
+		// 	0
+		// );
+
+		OpenGL_BindFramebuffer(GL_FRAMEBUFFER, EglOut->FramebufferIds[I]);
+		OpenGL_BindRenderbuffer(GL_RENDERBUFFER, EglOut->RenderbufferIds[I]);
+		OpenGL_EGLImageTargetRenderbufferStorageOES(
+			GL_RENDERBUFFER,
+			EglOut->EglImages[I]
+		);
+		OpenGL_FramebufferRenderbuffer(
+			GL_FRAMEBUFFER,
+			GL_COLOR_ATTACHMENT0,
+			GL_RENDERBUFFER,
+			EglOut->RenderbufferIds[I]
+		);
+
+		// u32 Status = OpenGL_CheckFramebufferStatus(GL_FRAMEBUFFER);
+		// if (Status != GL_FRAMEBUFFER_COMPLETE) {
+		// 	FPrintL(
+		// 		"Failed to initialize framebuffer %d: code %#x\n",
+		// 		I,
+		// 		Status
+		// 	);
+		// 	goto error;
+		// }
 	}
 
 	FPrintL("Successfully initialized egl!\n");

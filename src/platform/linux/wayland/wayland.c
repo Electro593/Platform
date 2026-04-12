@@ -24,6 +24,7 @@ typedef struct wayland_window_state {
 	s32 Width;
 	s32 Height;
 
+	u32				  FrontBufferIndex;
 	wayland_buffer	 *Buffers[2];
 	wayland_callback *FrameCallback;
 } wayland_window_state;
@@ -67,8 +68,9 @@ typedef struct wayland_state {
 } wayland_state;
 
 #define WAYLAND_USER_FUNCS \
-	EXPORT(b08,               Wayland_TryInit,            void) \
+	EXPORT(b08,               Wayland_TryInit,        void) \
 	EXPORT(wayland_surface *, Wayland_CreateGLWindow, c08 *Title, usize Width, usize Height) \
+	EXPORT(void,              Wayland_SwapBuffers,    void) \
 	//
 
 #endif
@@ -535,63 +537,16 @@ Wayland_Frame(wayland_callback *This, u32 CallbackData)
 	FrameCallback->Done				= Wayland_Frame;
 	Window->FrameCallback			= FrameCallback;
 
-	// u32 Stage = (CallbackData >> 12) & 7;
-	//
-	// 	u32 Value	 = (CallbackData >> 4) & 0xFF;
-	// 	u32 InvValue = 255 - Value;
-	// 	u32 Red = 0, Green = 0, Blue = 0;
-	//
-	// 	switch (Stage) {
-	// 		case 0:
-	// 			Red	  = Value;
-	// 			Green = 0;
-	// 			Blue  = 0;
-	// 			break;
-	// 		case 1:
-	// 			Red	  = 255;
-	// 			Green = Value;
-	// 			Blue  = 0;
-	// 			break;
-	// 		case 2:
-	// 			Red	  = InvValue;
-	// 			Green = 255;
-	// 			Blue  = 0;
-	// 			break;
-	// 		case 3:
-	// 			Red	  = 0;
-	// 			Green = 255;
-	// 			Blue  = Value;
-	// 			break;
-	// 		case 4:
-	// 			Red	  = 0;
-	// 			Green = InvValue;
-	// 			Blue  = 255;
-	// 			break;
-	// 		case 5:
-	// 			Red	  = Value;
-	// 			Green = 0;
-	// 			Blue  = 255;
-	// 			break;
-	// 		case 6:
-	// 			Red	  = 255;
-	// 			Green = Value;
-	// 			Blue  = 255;
-	// 			break;
-	// 		case 7:
-	// 			Red	  = InvValue;
-	// 			Green = InvValue;
-	// 			Blue  = InvValue;
-	// 			break;
-	// 	}
-	//
-	// 	u32 Color = (255 << 24) | (Red << 16) | (Green << 8) | Blue;
-	//
-	// 	u32 *Colors = Window->BufferData[0];
-	// 	for (usize Y = 0; Y < Window->Height; Y++)
-	// 		for (usize X = 0; X < Window->Width; X++)
-	// 			Colors[X + Y * Window->Width] = Color;
+	u32 Index				 = Window->FrontBufferIndex;
+	Window->FrontBufferIndex = (Index + 1) % 2;
 
-	Wayland_Surface_Attach(Window->Surface, Window->Buffers[0], 0, 0);
+	OpenGL_BindFramebuffer(
+		GL_FRAMEBUFFER,
+		_G.Wayland.Egl.FramebufferIds[Index]
+	);
+	OpenGL_Finish();
+
+	Wayland_Surface_Attach(Window->Surface, Window->Buffers[Index], 0, 0);
 	Wayland_Surface_DamageBuffer(
 		Window->Surface,
 		0,
@@ -599,10 +554,7 @@ Wayland_Frame(wayland_callback *This, u32 CallbackData)
 		Window->Width,
 		Window->Height
 	);
-
 	Wayland_Surface_Commit(Window->Surface);
-
-	// Egl_Swap(&_G.Wayland.Egl);
 }
 
 internal s32
@@ -645,7 +597,7 @@ internal b08
 Wayland_TryInit(void)
 {
 	if (Wayland_IsConnected()) return TRUE;
-	
+
 	if (Wayland_Connect()) {
 		wayland_display *Display = Wayland_GetDisplay();
 		Display->Error			 = Wayland_Display_Error;
@@ -676,6 +628,33 @@ Wayland_TryInit(void)
 error:
 	Wayland_Disconnect();
 	return FALSE;
+}
+
+internal void
+Wayland_SwapBuffers(void)
+{
+	wayland_window_state *Window = &_G.Wayland.Window;
+
+	u32 Index				 = Window->FrontBufferIndex;
+	u32 NextIndex			 = (Index + 1) % 2;
+	Window->FrontBufferIndex = NextIndex;
+
+	OpenGL_Finish();
+
+	Wayland_Surface_Attach(Window->Surface, Window->Buffers[Index], 0, 0);
+	Wayland_Surface_DamageBuffer(
+		Window->Surface,
+		0,
+		0,
+		Window->Width,
+		Window->Height
+	);
+	Wayland_Surface_Commit(Window->Surface);
+
+	OpenGL_BindFramebuffer(
+		GL_FRAMEBUFFER,
+		_G.Wayland.Egl.FramebufferIds[NextIndex]
+	);
 }
 
 internal wayland_surface *
@@ -806,14 +785,8 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	// Wait for the configure events to pass
 	Wayland_SyncAndHandleEvents();
 
-	Wayland_Surface_Attach(Surface, Buffer2, 0, 0);
-	Wayland_Surface_DamageBuffer(Surface, 0, 0, Width, Height);
-
-	wayland_callback *FrameCallback = Wayland_Surface_Frame(Surface);
-	FrameCallback->Done				= Wayland_Frame;
-	Window->FrameCallback			= FrameCallback;
-
-	Wayland_Surface_Commit(Surface);
+	Window->FrontBufferIndex = 0;
+	Wayland_SwapBuffers();
 
 	return Surface;
 
