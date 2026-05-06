@@ -294,6 +294,10 @@ Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 	_G.WindowedApp = TRUE;
 }
 
+internal void
+Platform_SwapBuffers(void)
+{ }
+
 internal vptr
 Platform_AllocateMemory(u64 Size)
 {

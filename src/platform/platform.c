@@ -289,6 +289,7 @@ typedef enum file_mode {
 #define PLATFORM_SHARED_FUNCS \
 	EXPORT(void,             Platform_Exit,                  u32 ExitCode) \
 	EXPORT(void,             Platform_CreateWindow,          c08 *Name, u32 Width, u32 Height) \
+	EXPORT(void,             Platform_SwapBuffers,           void) \
 	EXPORT(void,             Platform_Assert,                c08 *File, u32 Line, c08 *Expression, c08 *Message) \
 	EXPORT(vptr,             Platform_AllocateMemory,        u64 Size) \
 	EXPORT(void,             Platform_CloseFile,             file_handle FileHandle) \
@@ -596,13 +597,12 @@ Platform_LoadModule(string Name)
 
 	if (!UtilIsLoaded) {
 		usize HeapSize = 8 * 1024 * 1024;
-		vptr Mem	   = Platform_AllocateMemory(HeapSize);
+		vptr  Mem	   = Platform_AllocateMemory(HeapSize);
 		_G.Heap		   = Heap_Init(Mem, HeapSize);
 
 		util_state *UtilState = Module->Data;
-		UtilState->StackSize = 64 * 1024 * 1024;
-		UtilState->Tls =
-			Tls_Init(_G.Heap, sizeof(util_tls));
+		UtilState->StackSize  = 64 * 1024 * 1024;
+		UtilState->Tls		  = Tls_Init(_G.Heap, sizeof(util_tls));
 
 		Stack_Push();
 		_G.ModuleTable = HashMap_InitCustom(

@@ -467,12 +467,12 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 
 	egl_int		MatchCount = 0;
 	egl_boolean Success	   = Egl_ChooseConfig(
-		   EglDisplay,
-		   ConfigAttribs,
-		   Configs,
-		   ConfigCount,
-		   &MatchCount
-	   );
+		EglDisplay,
+		ConfigAttribs,
+		Configs,
+		ConfigCount,
+		&MatchCount
+	);
 	if (!Success) {
 		FPrintL(
 			"Failed to find applicable egl configs: code %#x\n",
@@ -617,15 +617,15 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			EglOut->RenderbufferIds[I]
 		);
 
-		// u32 Status = OpenGL_CheckFramebufferStatus(GL_FRAMEBUFFER);
-		// if (Status != GL_FRAMEBUFFER_COMPLETE) {
-		// 	FPrintL(
-		// 		"Failed to initialize framebuffer %d: code %#x\n",
-		// 		I,
-		// 		Status
-		// 	);
-		// 	goto error;
-		// }
+		u32 Status = OpenGL_CheckFramebufferStatus(GL_FRAMEBUFFER);
+		if (Status != GL_FRAMEBUFFER_COMPLETE) {
+			FPrintL(
+				"Failed to initialize framebuffer %d: code %#x\n",
+				I,
+				Status
+			);
+			goto error;
+		}
 	}
 
 	FPrintL("Successfully initialized egl!\n");

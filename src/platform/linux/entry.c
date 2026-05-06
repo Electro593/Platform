@@ -72,6 +72,12 @@ Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 	if (Wayland_TryInit()) Wayland_CreateGLWindow(Name, Width, Height);
 }
 
+internal void
+Platform_SwapBuffers(void)
+{
+	if (Wayland_IsConnected()) Wayland_SwapBuffers();
+}
+
 internal vptr
 Platform_AllocateMemory(u64 Size)
 {

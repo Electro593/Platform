@@ -79,6 +79,11 @@ typedef enum sys_errno {
 	SYS_EPIPE	= 32, /* Broken pipe */
 	SYS_EDOM	= 33, /* Math argument out of domain of func */
 	SYS_ERANGE	= 34, /* Math result not representable */
+
+	SYS_EDEADLK		 = 35, /* Resource deadlock would occur */
+	SYS_ENAMETOOLONG = 36, /* File name too long */
+	SYS_ENOLCK		 = 37, /* No record locks available */
+	SYS_ENOSYS		 = 38, /* Invalid system call number */
 } sys_errno;
 
 #define SYS_OPEN_READONLY  0x0000

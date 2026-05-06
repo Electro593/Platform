@@ -31,7 +31,6 @@ typedef struct wayland_window_state {
 
 typedef struct wayland_state {
 	s32					DrmFd;
-	b08					DrmAuthenticated;
 	drm_format			DrmFormat;
 	drm_format_modifier DrmFormatModifier;
 
@@ -257,29 +256,6 @@ Wayland_XdgToplevel_WmCapabilities(
 }
 
 internal void
-Wayland_ZwpLinuxDmabufV1_Format(wayland_zwp_linux_dmabuf_v1 *This, u32 Format)
-{
-	Wayland_DebugLog(This, "Offered buffer format: %d\n", Format);
-}
-
-internal void
-Wayland_ZwpLinuxDmabufV1_Modifier(
-	wayland_zwp_linux_dmabuf_v1 *This,
-	u32							 Format,
-	u32							 ModifierHigh,
-	u32							 ModifierLow
-)
-{
-	Wayland_DebugLog(
-		This,
-		"Offered buffer format modifier for %d: %#x%x\n",
-		Format,
-		ModifierHigh,
-		ModifierLow
-	);
-}
-
-internal void
 Wayland_ZwpLinuxBufferParamsV1_Created(
 	wayland_zwp_linux_buffer_params_v1 *This,
 	wayland_buffer					   *Buffer
@@ -299,17 +275,13 @@ Wayland_ZwpLinuxBufferParamsV1_Created(
 
 internal void
 Wayland_ZwpLinuxBufferParamsV1_Failed(wayland_zwp_linux_buffer_params_v1 *This)
-{
-	Wayland_DebugLog(This, "Failed to create dmabuf buffer\n");
-}
+{ Wayland_DebugLog(This, "Failed to create dmabuf buffer\n"); }
 
 internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_Done(
 	wayland_zwp_linux_dmabuf_feedback_v1 *This
 )
-{
-	Wayland_DebugLog(This, "Feedback is complete\n");
-}
+{ Wayland_DebugLog(This, "Feedback is complete\n"); }
 
 internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable(
@@ -356,15 +328,6 @@ Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice(
 	s32 NodeType = Drm_GetNodeType(Fd);
 	if (NodeType < 0) goto error;
 
-	_G.Wayland.DrmAuthenticated = TRUE;
-	// if (NodeType == DRM_NODE_TYPE_RENDER) {
-	// } else {
-	// 	u32 MagicNumber;
-	// 	s32 Result = Drm_GetMagicNumber(Fd, &MagicNumber);
-	// 	if (Result < 0) goto error;
-	// 	Wayland_Drm_Authenticate(This, MagicNumber);
-	// }
-
 	_G.Wayland.DrmFd = Fd;
 	return;
 
@@ -376,9 +339,7 @@ internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_TrancheDone(
 	wayland_zwp_linux_dmabuf_feedback_v1 *This
 )
-{
-	Wayland_DebugLog(This, "Tranche feedback is complete\n");
-}
+{ Wayland_DebugLog(This, "Tranche feedback is complete\n"); }
 
 internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice(
@@ -409,8 +370,9 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats(
 	for (usize I = 0; I < IndexCount; I++) {
 		wayland_dmabuf_format_entry Format = _G.Wayland.DrmFormats[I];
 
-		b08 FormatMatches = Format.Format == DRM_FORMAT_XRGB8888
-						 || Format.Format == DRM_FORMAT_ARGB8888;
+		b08 FormatMatches	= Format.Format == DRM_FORMAT_XRGB8888
+						   || Format.Format == DRM_FORMAT_XBGR8888
+						   || Format.Format == DRM_FORMAT_ARGB8888;
 		b08 ModifierMatches = Format.Modifier == DRM_FORMAT_MOD_INVALID;
 		if (FormatMatches && ModifierMatches) {
 			_G.Wayland.DrmFormat		 = Format.Format;
@@ -435,9 +397,7 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFlags(
 	wayland_zwp_linux_dmabuf_feedback_v1			  *This,
 	wayland_zwp_linux_dmabuf_feedback_v1_tranche_flags Flags
 )
-{
-	Wayland_DebugLog(This, "Sent flags for this tranche: %#x\n", Flags);
-}
+{ Wayland_DebugLog(This, "Sent flags for this tranche: %#x\n", Flags); }
 
 internal void
 Wayland_Registry_Global(
@@ -476,12 +436,10 @@ Wayland_Registry_Global(
 			Wayland_GetObjectName((wayland_interface *) _G.Wayland.XdgWmBase)
 		);
 	} else if (String_Cmp(Str, CStringL("zwp_linux_dmabuf_v1")) == 0) {
+		if (Version < 4) return;
 		_G.Wayland.ZwpLinuxDmabufV1Name = Name;
 		_G.Wayland.ZwpLinuxDmabufV1		= (wayland_zwp_linux_dmabuf_v1 *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
-		_G.Wayland.ZwpLinuxDmabufV1->Format = Wayland_ZwpLinuxDmabufV1_Format;
-		_G.Wayland.ZwpLinuxDmabufV1->Modifier =
-			Wayland_ZwpLinuxDmabufV1_Modifier;
 		Wayland_DebugLog(
 			This,
 			"Bound %s\n",

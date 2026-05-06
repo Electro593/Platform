@@ -15,6 +15,7 @@
 
 typedef enum drm_format {
 	DRM_FORMAT_XRGB8888	   = DRM_FOURCC_CODE('X', 'R', '2', '4'),
+	DRM_FORMAT_XBGR8888	   = DRM_FOURCC_CODE('X', 'B', '2', '4'),
 	DRM_FORMAT_ARGB8888    = DRM_FOURCC_CODE('A', 'R', '2', '4'),
 	DRM_FORMAT_RGBX1010102 = DRM_FOURCC_CODE('R', 'X', '3', '0'),
 } drm_format;
