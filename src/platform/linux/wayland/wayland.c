@@ -281,7 +281,27 @@ internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_Done(
 	wayland_zwp_linux_dmabuf_feedback_v1 *This
 )
-{ Wayland_DebugLog(This, "Feedback is complete\n"); }
+{
+	Wayland_DebugLog(This, "Feedback is complete\n");
+
+	if (_G.Wayland.DrmFormat) {
+		c08 *C = (c08 *) &_G.Wayland.DrmFormat;
+		Wayland_DebugLog(
+			This,
+			"- Selected Format: %#x ('%c%c%c%c')\n",
+			_G.Wayland.DrmFormat,
+			C[0],
+			C[1],
+			C[2],
+			C[3]
+		);
+		Wayland_DebugLog(
+			This,
+			"- Selected Modifier: %0#18llx\n",
+			_G.Wayland.DrmFormatModifier
+		);
+	}
+}
 
 internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable(
@@ -383,7 +403,7 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats(
 		c08 *C = (c08 *) &Format.Format;
 		Wayland_DebugLog(
 			This,
-			"- Format %#x ('%c%c%c%c'), Modifier %#llx\n",
+			"- Format %#x ('%c%c%c%c'), Modifier %0#18llx\n",
 			Format.Format,
 			C[0],
 			C[1],
@@ -600,6 +620,95 @@ Wayland_SwapBuffers(void)
 	Window->FrontBufferIndex = NextIndex;
 
 	OpenGL_Finish();
+
+#if 0
+	for (usize I = 0; I < 2; I++) {
+		gbm_bo *Bo = _G.Wayland.Gbm.BufferObjects[I];
+
+		gbm_bo *BlitTarget = Gbm_BoCreate(
+			_G.Wayland.Gbm.Device,
+			Gbm_BoGetWidth(Bo),
+			Gbm_BoGetHeight(Bo),
+			Gbm_BoGetFormat(Bo),
+			GBM_BO_USE_LINEAR
+		);
+
+		// clang-format off
+		egl_attrib ImageAttribs[] = {
+			EGL_IMAGE_ATTRIB_WIDTH,                 Gbm_BoGetWidth(BlitTarget),
+			EGL_IMAGE_ATTRIB_HEIGHT,                Gbm_BoGetHeight(BlitTarget),
+			EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,      Gbm_BoGetFormat(BlitTarget),
+			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,     Gbm_BoGetFd(BlitTarget),
+			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET, 0,
+			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,  Gbm_BoGetStride(BlitTarget),
+			0x3443, Gbm_BoGetModifier(BlitTarget) & 0xFFFFFFFF,
+			0x3444, Gbm_BoGetModifier(BlitTarget) >> 32,
+			EGL_IMAGE_ATTRIB_NONE
+		};
+		// clang-format on
+
+		egl_image EglImage = Egl_CreateImage(
+			_G.Wayland.Egl.Display,
+			EGL_NO_CONTEXT,
+			EGL_IMAGE_TARGET_LINUX_DMA_BUF,
+			NULL,
+			ImageAttribs
+		);
+
+		u32 RenderbufferId;
+		OpenGL_GenRenderbuffers(1, &RenderbufferId);
+		OpenGL_BindRenderbuffer(GL_RENDERBUFFER, RenderbufferId);
+		OpenGL_EGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, EglImage);
+
+		u32 FramebufferId;
+		OpenGL_GenFramebuffers(1, &FramebufferId);
+		OpenGL_BindFramebuffer(GL_FRAMEBUFFER, FramebufferId);
+		OpenGL_FramebufferRenderbuffer(
+			GL_FRAMEBUFFER,
+			GL_COLOR_ATTACHMENT0,
+			GL_RENDERBUFFER,
+			RenderbufferId
+		);
+
+		OpenGL_BindFramebuffer(
+			GL_READ_FRAMEBUFFER,
+			_G.Wayland.Egl.FramebufferIds[I]
+		);
+		OpenGL_BindFramebuffer(GL_DRAW_FRAMEBUFFER, FramebufferId);
+		OpenGL_BlitFramebuffer(
+			0,
+			0,
+			Gbm_BoGetWidth(Bo),
+			Gbm_BoGetHeight(Bo),
+			0,
+			0,
+			Gbm_BoGetWidth(BlitTarget),
+			Gbm_BoGetHeight(BlitTarget),
+			GL_COLOR_BUFFER_BIT,
+			GL_NEAREST
+		);
+		OpenGL_Finish();
+
+		u32	 Width	 = Gbm_BoGetWidth(BlitTarget);
+		u32	 Height	 = Gbm_BoGetHeight(BlitTarget);
+		u32	 Stride	 = 0;
+		vptr MapData = 0;
+		u32 *Map	 = Gbm_BoMap(
+			BlitTarget,
+			0,
+			0,
+			Width,
+			Height,
+			GBM_BO_TRANSFER_READ,
+			&Stride,
+			&MapData
+		);
+
+		for (usize Y = 0; Y < Height; Y++)
+			for (usize X = 0; X < Width; X++)
+				if (Map[Y * Width + X]) STOP;
+	}
+#endif
 
 	Wayland_Surface_Attach(Window->Surface, Window->Buffers[Index], 0, 0);
 	Wayland_Surface_DamageBuffer(

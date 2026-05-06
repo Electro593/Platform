@@ -236,6 +236,19 @@ enum egl_image_attrib {
 	EGL_IMAGE_ATTRIB_SAMPLE_RANGE_HINT				   = 0x327C,
 	EGL_IMAGE_ATTRIB_YUV_CHROMA_HORIZONTAL_SITING_HINT = 0x327D,
 	EGL_IMAGE_ATTRIB_YUV_CHROMA_VERTICAL_SITING_HINT   = 0x327E,
+
+	// EGL_EXT_image_dma_buf_import_modifiers
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_LO = 0x3443,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_HI = 0x3444,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_MODIFIER_LO = 0x3445,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_MODIFIER_HI = 0x3446,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_MODIFIER_LO = 0x3447,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_MODIFIER_HI = 0x3448,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_FD			= 0x3440,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_OFFSET		= 0x3441,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_PITCH		= 0x3442,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_MODIFIER_LO = 0x3449,
+	EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_MODIFIER_HI = 0x344A,
 };
 
 enum egl_image_target {
@@ -321,8 +334,7 @@ struct egl {
 
 	egl_image EglImages[2];
 	u32		  FramebufferIds[2];
-	u32		  RenderbufferIds[2];
-	// u32		  TextureIds[2];
+	u32		  TextureIds[2];
 
 	egl_display Display;
 	egl_context Context;
@@ -400,7 +412,8 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	}
 
 	// Find extensions
-	b08	   HasDmaBufImport = FALSE;
+	b08	   HasEglImageDmaBufImport = FALSE;
+	b08	   HasEglImageStorage	   = FALSE;
 	string Extensions =
 		CString(Egl_QueryString(EglDisplay, EGL_QUERY_EXTENSIONS));
 	FPrintL("- Extensions:\n");
@@ -411,7 +424,10 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 
 		if (String_Cmp(Extension, CStringL("EGL_EXT_image_dma_buf_import"))
 			== 0)
-			HasDmaBufImport = TRUE;
+			HasEglImageDmaBufImport = TRUE;
+
+		else if (String_Cmp(Extension, CStringL("EXT_EGL_image_storage")) == 0)
+			HasEglImageStorage = TRUE;
 	}
 
 	if (Api != EGL_API_OPENGL) {
@@ -420,10 +436,15 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	}
 	FPrintL("Selected EGL OpenGL client api\n");
 
-	if (!HasDmaBufImport) {
+	if (!HasEglImageDmaBufImport) {
 		FPrintL(
 			"Required extension EGL_EXT_image_dma_buf_import is not present\n"
 		);
+		goto error;
+	}
+
+	if (!HasEglImageStorage) {
+		FPrintL("Required extension EGL_EXT_image_storage is not present\n");
 		goto error;
 	}
 
@@ -461,7 +482,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		EGL_CONFIG_SURFACE_TYPE,      EGL_SURFACE_TYPE_WINDOW,
 		EGL_CONFIG_CONFORMANT,        EGL_CONFORMANCE_OPENGL,
 		EGL_CONFIG_RENDERABLE_TYPE,   EGL_RENDERABLE_TYPE_OPENGL,
-		EGL_NONE
+		EGL_CONFIG_NONE
 	};
 	// clang-format on
 
@@ -554,8 +575,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	}
 
 	OpenGL_GenFramebuffers(2, EglOut->FramebufferIds);
-	OpenGL_GenRenderbuffers(2, EglOut->RenderbufferIds);
-	// OpenGL_GenTextures(2, EglOut->TextureIds);
+	OpenGL_GenTextures(2, EglOut->TextureIds);
 
 	egl_image EglImages[2] = { 0 };
 	for (usize I = 0; I < 2; I++) {
@@ -564,18 +584,25 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		u64 Modifier = Gbm_BoGetModifier(Bo);
 
 		// clang-format off
-		egl_attrib ImageAttribs[] = {
+		egl_attrib ImageAttribs[17] = {
 			EGL_IMAGE_ATTRIB_WIDTH,                 Gbm_BoGetWidth(Bo),
 			EGL_IMAGE_ATTRIB_HEIGHT,                Gbm_BoGetHeight(Bo),
 			EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,      Gbm_BoGetFormat(Bo),
 			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,     Gbm_BoGetFd(Bo),
 			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET, 0,
 			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,  Gbm_BoGetStride(Bo),
-			0x3443, Modifier & 0xFFFFFFFF,
-			0x3444, Modifier >> 32,
+			EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
+			EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
 			EGL_IMAGE_ATTRIB_NONE
 		};
 		// clang-format on
+
+		if (Modifier != DRM_FORMAT_MOD_INVALID) {
+			ImageAttribs[12] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_LO;
+			ImageAttribs[13] = Modifier & 0xFFFFFFFF;
+			ImageAttribs[14] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_HI;
+			ImageAttribs[15] = Modifier >> 32;
+		}
 
 		EglOut->EglImages[I] = Egl_CreateImage(
 			EglDisplay,
@@ -594,27 +621,19 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			goto error;
 		}
 
-		// OpenGL_BindFramebuffer(GL_FRAMEBUFFER, EglOut->FramebufferIds[I]);
-		// OpenGL_BindTexture(GL_TEXTURE_2D, EglOut->TextureIds[I]);
-		// OpenGL_EGLImageTargetTexture2DOES(GL_TEXTURE_2D,
-		// EglOut->EglImages[I]); OpenGL_FramebufferTexture2D( 	GL_FRAMEBUFFER,
-		// 	GL_COLOR_ATTACHMENT0,
-		// 	GL_TEXTURE_2D,
-		// 	EglOut->TextureIds[I],
-		// 	0
-		// );
-
 		OpenGL_BindFramebuffer(GL_FRAMEBUFFER, EglOut->FramebufferIds[I]);
-		OpenGL_BindRenderbuffer(GL_RENDERBUFFER, EglOut->RenderbufferIds[I]);
-		OpenGL_EGLImageTargetRenderbufferStorageOES(
-			GL_RENDERBUFFER,
-			EglOut->EglImages[I]
+		OpenGL_BindTexture(GL_TEXTURE_2D, EglOut->TextureIds[I]);
+		OpenGL_EGLImageTargetTexStorageEXT(
+			GL_TEXTURE_2D,
+			EglOut->EglImages[I],
+			NULL
 		);
-		OpenGL_FramebufferRenderbuffer(
+		OpenGL_FramebufferTexture2D(
 			GL_FRAMEBUFFER,
 			GL_COLOR_ATTACHMENT0,
-			GL_RENDERBUFFER,
-			EglOut->RenderbufferIds[I]
+			GL_TEXTURE_2D,
+			EglOut->TextureIds[I],
+			0
 		);
 
 		u32 Status = OpenGL_CheckFramebufferStatus(GL_FRAMEBUFFER);

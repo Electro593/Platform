@@ -32,34 +32,36 @@ typedef enum opengl_error {
 	OPENGL_ERROR_OUT_OF_MEMORY	   = 0x0505,
 } opengl_error;
 
-#define GL_LINE_SMOOTH            0x0B20
-#define GL_SMOOTH_LINE_WIDTH_RANGE 0x0B22
-#define GL_CULL_FACE              0x0B44
-#define GL_DEPTH_TEST             0x0B71
-#define GL_BLEND                  0x0BE2
-#define GL_COLOR_LOGIC_OP         0x0BF2
-#define GL_SCISSOR_TEST           0x0C11
-#define GL_TEXTURE_2D				 0x0DE1
-#define GL_DONT_CARE              0x1100
-#define GL_UNSIGNED_BYTE          0x1401
-#define GL_SHORT                  0x1402
-#define GL_UNSIGNED_SHORT         0x1403
-#define GL_UNSIGNED_INT           0x1405
-#define GL_FLOAT                  0x1406
-#define GL_COPY                   0x1503
-#define GL_INVERT                 0x150A
-#define GL_RGBA                   0x1908
-#define GL_LINE                   0x1B01
-#define GL_FILL                   0x1B02
-#define GL_NEAREST                0x2600
-#define GL_LINEAR                 0x2601
-#define GL_TEXTURE_MAG_FILTER     0x2800
-#define GL_TEXTURE_MIN_FILTER     0x2801
-#define GL_TEXTURE_WRAP_S         0x2802
-#define GL_TEXTURE_WRAP_T         0x2803
-#define GL_UNSIGNED_INT_8_8_8_8   0x8035
-#define GL_CLAMP_TO_EDGE          0x812F
-#define GL_R32UI                  0x8236
+#define GL_LINE_SMOOTH              0x0B20
+#define GL_SMOOTH_LINE_WIDTH_RANGE  0x0B22
+#define GL_CULL_FACE                0x0B44
+#define GL_DEPTH_TEST               0x0B71
+#define GL_BLEND                    0x0BE2
+#define GL_COLOR_LOGIC_OP           0x0BF2
+#define GL_SCISSOR_TEST             0x0C11
+#define GL_TEXTURE_2D				   0x0DE1
+#define GL_DONT_CARE                0x1100
+#define GL_UNSIGNED_BYTE            0x1401
+#define GL_SHORT                    0x1402
+#define GL_UNSIGNED_SHORT           0x1403
+#define GL_UNSIGNED_INT             0x1405
+#define GL_FLOAT                    0x1406
+#define GL_COPY                     0x1503
+#define GL_INVERT                   0x150A
+#define GL_RGBA                     0x1908
+#define GL_LINE                     0x1B01
+#define GL_FILL                     0x1B02
+#define GL_NEAREST                  0x2600
+#define GL_LINEAR                   0x2601
+#define GL_TEXTURE_MAG_FILTER       0x2800
+#define GL_TEXTURE_MIN_FILTER       0x2801
+#define GL_TEXTURE_WRAP_S           0x2802
+#define GL_TEXTURE_WRAP_T           0x2803
+#define GL_UNSIGNED_INT_8_8_8_8     0x8035
+#define GL_RGBA8				         0x8058
+#define GL_CLAMP_TO_EDGE            0x812F
+#define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
+#define GL_R32UI                    0x8236
 
 typedef enum opengl_debug_source {
 	OPENGL_DEBUG_SOURCE_API				= 0x8246,
@@ -94,6 +96,7 @@ typedef enum opengl_debug_severity {
 #define GL_BUFFER_SIZE            0x8764
 #define GL_ARRAY_BUFFER           0x8892
 #define GL_ELEMENT_ARRAY_BUFFER   0x8893
+#define GL_DEPTH24_STENCIL8       0x88F0
 #define GL_STATIC_DRAW            0x88E4
 #define GL_STATIC_READ            0x88E5
 #define GL_DYNAMIC_DRAW           0x88E8
@@ -105,6 +108,8 @@ typedef enum opengl_debug_severity {
 #define GL_TEXTURE_2D_ARRAY       0x8C1A
 #define GL_TEXTURE_BUFFER         0x8C2A
 #define GL_FRAMEBUFFER_BINDING    0x8CA6
+#define GL_READ_FRAMEBUFFER       0x8CA8
+#define GL_DRAW_FRAMEBUFFER       0x8CA9
 #define GL_FRAMEBUFFER_COMPLETE   0x8CD5
 #define GL_COLOR_ATTACHMENT0      0x8CE0
 #define GL_FRAMEBUFFER            0x8D40
@@ -136,11 +141,13 @@ typedef void(API_ENTRY func_OpenGL_DebugProc)(
    IMPORT(u32,  CheckFramebufferStatus,               u32 Target) \
    IMPORT(void, Clear,                                u32 Mask) \
    IMPORT(void, ClearColor,                           r32 Red, r32 Green, r32 Blue, r32 Alpha) \
+   IMPORT(void, ColorMask,                            b08 Red, b08 Green, b08 Blue, b08 Alpha) \
    IMPORT(void, CullFace,                             u32 Mode) \
    IMPORT(void, Disable,                              u32 Capability) \
    IMPORT(void, DrawArrays,                           u32 Mode, s32 First, s32 Count) \
    IMPORT(void, DrawElements,                         u32 Mode, s32 Count, u32 Type, vptr Indices) \
    IMPORT(void, EGLImageTargetRenderbufferStorageOES, u32 Target, void *EglImage) \
+   IMPORT(void, EGLImageTargetTexStorageEXT,          u32 Target, void *EglImage, s32* Attribs) \
    IMPORT(void, EGLImageTargetTexture2DOES,           u32 Target, void *EglImage) \
    IMPORT(void, Enable,                               u32 Capability) \
    IMPORT(void, Finish,                               void) \
@@ -165,6 +172,7 @@ typedef void(API_ENTRY func_OpenGL_DebugProc)(
    IMPORT(void,         BindBufferBase,              u32 Target, u32 Index, u32 Buffer) \
    IMPORT(void,         BindSampler,                 u32 Unit, u32 Sampler) \
    IMPORT(void,         BindVertexArray,             u32 ArrayID) \
+   IMPORT(void,         BlitFramebuffer,             s32 SrcX0, s32 SrcY0, s32 SrcX1, s32 SrcY1, s32 DestX0, s32 DestY0, s32 DestX1, s32 DestY1, u32 Mask, u32 Filter) \
    IMPORT(void,         BufferData,                  u32 Target, s64 Size, vptr Data, u32 Usage) \
    IMPORT(void,         BufferSubData,               u32 Target, s64 Offset, s64 Size, vptr Data) \
    IMPORT(void,         CompileShader,               u32 Shader) \
@@ -191,6 +199,8 @@ typedef void(API_ENTRY func_OpenGL_DebugProc)(
    IMPORT(void,         LinkProgram,                 u32 Program) \
    IMPORT(void,         MultiDrawArrays,             u32 Mode, s32 *First, s32 *Count, s32 PrimitiveCount) \
    IMPORT(void,         MultiDrawElementsBaseVertex, u32 Mode, s32 *Count, u32 Type, vptr *Indices, s32 PrimitiveCount, s32 *BaseVertex) \
+   IMPORT(void,         ReadPixels,                  s32 X, s32 Y, ssize Width, ssize Height, u32 Format, u32 Type, vptr Data) \
+   IMPORT(void,         RenderbufferStorage,         u32 Target, u32 InternalFormat, ssize Width, ssize Height) \
    IMPORT(void,         TexBuffer,                   u32 Target, u32 InternalFormat, u32 Buffer) \
    IMPORT(void,         TexImage3D,                  u32 Target, s32 Level, s32 InternalFormat, s32 Width, s32 Height, s32 Depth, s32 Border, u32 Format, u32 Type, vptr Pixels) \
    IMPORT(void,         SamplerParameteri,           u32 Sampler, u32 Name, s32 Param) \

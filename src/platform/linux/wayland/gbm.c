@@ -21,6 +21,12 @@ typedef enum gbm_bo_flags : u32 {
 	GBM_BO_USE_LINEAR	 = (1 << 4),
 } gbm_bo_flags;
 
+typedef enum gbm_bo_transfer_flags : u32 {
+	GBM_BO_TRANSFER_READ	   = (1 << 0),
+	GBM_BO_TRANSFER_WRITE	   = (1 << 1),
+	GBM_BO_TRANSFER_READ_WRITE = (GBM_BO_TRANSFER_READ | GBM_BO_TRANSFER_WRITE),
+} gbm_bo_transfer_flags;
+
 typedef struct gbm {
 	gbm_device	*Device;
 	gbm_surface *Surface;
@@ -43,6 +49,7 @@ typedef struct gbm {
 	IMPORT(u64,          Gbm, gbm_bo_get_modifier,          Gbm_BoGetModifier,         gbm_bo *BufferObject) \
 	IMPORT(u32,          Gbm, gbm_bo_get_stride,            Gbm_BoGetStride,           gbm_bo *BufferObject) \
 	IMPORT(u32,          Gbm, gbm_bo_get_width,             Gbm_BoGetWidth,            gbm_bo *BufferObject) \
+	IMPORT(vptr,         Gbm, gbm_bo_map,                   Gbm_BoMap,                 gbm_bo *BufferObject, u32 X, u32 Y, u32 Width, u32 Height, gbm_bo_transfer_flags Flags, u32 *Stride, vptr *MapData) \
 	IMPORT(gbm_device*,  Gbm, gbm_create_device,            Gbm_CreateDevice,          s32 DrmFd) \
 	IMPORT(gbm_surface*, Gbm, gbm_surface_create,           Gbm_SurfaceCreate,         gbm_device *GbmDevice, u32 Width, u32 Height, drm_format Format, u32 Flags) \
 	//
