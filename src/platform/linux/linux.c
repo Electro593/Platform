@@ -305,6 +305,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(72,  FileControl,  s32,     s32 FileDescriptor, s32 Op) \
 	SYSCALL(76,  Truncate,     s32,     c08 *Path, usize Length) \
 	SYSCALL(77,  FTruncate,    s32,     s32 FileDescriptor, usize Length) \
+	SYSCALL(79,  GetCwd,       s32,     c08 *Buffer, ssize Size) \
 	SYSCALL(186, GetTid,       s32,     void) \
 	SYSCALL(202, Futex,        s32,     u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
 	SYSCALL(228, GetClockTime, s32,     s32 ClockID, sys_timespec *Timespec) \

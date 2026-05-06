@@ -326,7 +326,7 @@ Wayland_GetObjectName(wayland_interface *Object)
 {
 	if (!Object) return CStringL("null");
 	return FStringL(
-		"%s-v%d#%d",
+		"%s-v%u#%#x",
 		CString(Object->Prototype->Name),
 		Object->Version,
 		Object->Id

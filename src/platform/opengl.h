@@ -104,6 +104,7 @@ typedef enum opengl_debug_severity {
 #define GL_INFO_LOG_LENGTH        0x8B84
 #define GL_TEXTURE_2D_ARRAY       0x8C1A
 #define GL_TEXTURE_BUFFER         0x8C2A
+#define GL_FRAMEBUFFER_BINDING    0x8CA6
 #define GL_FRAMEBUFFER_COMPLETE   0x8CD5
 #define GL_COLOR_ATTACHMENT0      0x8CE0
 #define GL_FRAMEBUFFER            0x8D40
@@ -147,6 +148,7 @@ typedef void(API_ENTRY func_OpenGL_DebugProc)(
    IMPORT(void, FramebufferTexture2D,                 u32 Target, u32 Attachment, u32 TextureTarget, u32 TextureId, s32 Level) \
    IMPORT(void, GetFloatv,                            u32 Name, r32 *Data) \
    IMPORT(void, GenFramebuffers,                      s32 Count, u32 *Ids) \
+   IMPORT(void, GetIntegerv,                          u32 Name, s32 *Data) \
    IMPORT(void, GenRenderbuffers,                     s32 Count, u32 *Ids) \
    IMPORT(void, GenTextures,                          s32 Count, u32 *Ids) \
    IMPORT(void, LineWidth,                            r32 Width) \

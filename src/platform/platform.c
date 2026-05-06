@@ -565,6 +565,7 @@ Platform_LoadModule(string Name)
 		Module = Heap_AllocateA(
 			_G.Heap,
 			sizeof(platform_module)
+				+ 2
 				+ Name.Length
 				+ sizeof(PLATFORM_DYNLIB_SUFFIX)
 		);
@@ -572,15 +573,16 @@ Platform_LoadModule(string Name)
 		HashMap_Add(&_G.ModuleTable, &Name, &Module);
 
 		Module->FileName = (c08 *) (Module + 1);
-		Mem_Cpy(Module->FileName, Name.Text, Name.Length);
+		Mem_Cpy(Module->FileName, "./", 2);
+		Mem_Cpy(Module->FileName + 2, Name.Text, Name.Length);
 		Mem_Cpy(
-			Module->FileName + Name.Length,
+			Module->FileName + 2 + Name.Length,
 			PLATFORM_DYNLIB_SUFFIX,
 			sizeof(PLATFORM_DYNLIB_SUFFIX)
 		);
 	} else {
 		Module			 = &_UtilModule;
-		Module->FileName = "util" PLATFORM_DYNLIB_SUFFIX;
+		Module->FileName = "./util" PLATFORM_DYNLIB_SUFFIX;
 		Module->IsUtil	 = TRUE;
 	}
 

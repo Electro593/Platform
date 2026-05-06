@@ -368,7 +368,9 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats(
 	u16	 *IndicesData = (u16 *) Indices.Data;
 	usize IndexCount  = Indices.Size / sizeof(u16);
 	for (usize I = 0; I < IndexCount; I++) {
-		wayland_dmabuf_format_entry Format = _G.Wayland.DrmFormats[I];
+		u16 Index = IndicesData[I];
+
+		wayland_dmabuf_format_entry Format = _G.Wayland.DrmFormats[Index];
 
 		b08 FormatMatches	= Format.Format == DRM_FORMAT_XRGB8888
 						   || Format.Format == DRM_FORMAT_XBGR8888
@@ -706,7 +708,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 			Gbm_BoGetFd(_G.Wayland.Gbm.BufferObjects[I]),
 			0,
 			0,
-			Width,
+			Gbm_BoGetStride(_G.Wayland.Gbm.BufferObjects[I]),
 			_G.Wayland.DrmFormatModifier >> 32,
 			_G.Wayland.DrmFormatModifier & 0xFFFFFFFF
 		);
