@@ -298,7 +298,9 @@ Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 
 internal void
 Platform_SwapBuffers(void)
-{ }
+{
+	// TODO
+}
 
 internal vptr
 Platform_AllocateMemory(u64 Size)
@@ -558,19 +560,29 @@ Platform_CreateThread(
 	s32 (*Callback)(vptr UserData),
 	vptr UserData
 )
-{ return FALSE; }
+{
+	// TODO
+	return FALSE;
+}
 
 internal b08
 Platform_JoinThread(thread_handle ThreadHandle)
-{ return FALSE; }
+{
+	// TODO
+	return FALSE;
+}
 
 internal void
 Platform_LockMutex(u32 *Mutex)
-{ }
+{
+	// TODO
+}
 
 internal void
 Platform_UnlockMutex(u32 *Mutex)
-{ }
+{
+	// TODO
+}
 
 internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)

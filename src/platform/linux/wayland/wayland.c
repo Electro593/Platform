@@ -51,8 +51,7 @@ typedef struct wayland_state {
 	wayland_zwp_linux_dmabuf_v1 *ZwpLinuxDmabufV1;
 	u32							 ZwpLinuxDmabufV1Name;
 
-	s32							 DrmFormatsFd;
-	usize						 DrmFormatCount;
+	usize						 DrmFormatsSize;
 	wayland_dmabuf_format_entry *DrmFormats;
 
 	wayland_window_state Window;
@@ -301,6 +300,10 @@ Wayland_ZwpLinuxDmabufFeedbackV1_Done(
 			_G.Wayland.DrmFormatModifier
 		);
 	}
+
+	Sys_MemUnmap(_G.Wayland.DrmFormats, _G.Wayland.DrmFormatsSize);
+	_G.Wayland.DrmFormats	  = NULL;
+	_G.Wayland.DrmFormatsSize = 0;
 }
 
 internal void
@@ -315,9 +318,9 @@ Wayland_ZwpLinuxDmabufFeedbackV1_FormatTable(
 	vptr FormatData =
 		Sys_MemMap(NULL, Size, SYS_PROT_READ, SYS_MAP_PRIVATE, Fd, 0);
 	Assert(FormatData && (usize) FormatData <= (usize) -4096);
+	Sys_Close(Fd);
 
-	_G.Wayland.DrmFormatsFd	  = Fd;
-	_G.Wayland.DrmFormatCount = Size / sizeof(wayland_dmabuf_format_entry);
+	_G.Wayland.DrmFormatsSize = Size;
 	_G.Wayland.DrmFormats	  = FormatData;
 }
 

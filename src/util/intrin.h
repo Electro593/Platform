@@ -147,6 +147,13 @@ typedef __builtin_va_list va_list;
 #define VA_Copy(Dest, Src) __builtin_va_copy(Dest, Src)
 #define VA_End(Args) __builtin_va_end(Args)
 
+intrin u32
+Intrin_Exchange32(u32 *Data, u32 Value)
+{
+	__asm__("lock xchg %1, %2" : "+r"(Value) : "m"(*Data));
+	return Value;
+}
+
 intrin u08
 Intrin_CompareExchange08(u08 *Mutex, u08 Target, u08 NewValue)
 {

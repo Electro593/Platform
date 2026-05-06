@@ -181,14 +181,24 @@ Platform_LockMutex(u32 *Mutex)
 
 	s32 WaitCount = 0;
 	while (1) {
+		// If it's unlocked, lock it and return.
 		s32 OldValue = Intrin_CompareExchange32(Mutex, 0, 1);
 		if (OldValue == 0) break;
+
+		// Attempt to set it to contended. If it was unlocked between then and
+		// now, go back and attempt to re-lock it.
+		OldValue = Intrin_CompareExchange32(Mutex, 1, 2);
+		if (OldValue == 0) continue;
 
 		if (WaitCount < 10) Platform_LogMutex(Tid, Mutex, "Waiting to lock");
 		WaitCount++;
 
-		s32 Result = Sys_Futex(Mutex, SYS_FUTEX_WAIT, 0, NULL, NULL, 0);
-		if (Result < 0) Assert(Result == -11);
+		// The lock is contended, so we'll sleep on it. If it was unlocked (and
+		// potentially re-locked) between then and now, futex will return EAGAIN
+		// immediately and we'll try again. Otherwise, we'll sleep until WAKE is
+		// signalled, at which point we'll try again.
+		s32 Result = Sys_Futex(Mutex, SYS_FUTEX_WAIT, 2, NULL, NULL, 0);
+		if (Result < 0) Assert(Result == -SYS_EAGAIN);
 	}
 
 	Platform_LogMutex(Tid, Mutex, "Locked");
@@ -202,11 +212,13 @@ Platform_UnlockMutex(u32 *Mutex)
 	s32 Tid = Sys_GetTid();
 	Platform_LogMutex(Tid, Mutex, "Attempting to unlock");
 
-	s32 OldValue = Intrin_CompareExchange32(Mutex, 1, 0);
-	if (OldValue == 0) Platform_LogMutex(Tid, Mutex, "Already unlocked");
-	else Platform_LogMutex(Tid, Mutex, "Unlocked");
+	// Unlock the mutex.
+	s32 OldValue = Intrin_Exchange32(Mutex, 0);
+	Assert(OldValue != 0);
+	Platform_LogMutex(Tid, Mutex, "Unlocked");
 
-	Sys_Futex(Mutex, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
+	// If it was contended, wake up a sleeping thread that was waiting on it.
+	if (OldValue == 2) Sys_Futex(Mutex, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
 }
 
 internal b08
@@ -301,6 +313,7 @@ Platform_GetFileTime(
 	datetime *LastWriteTime
 )
 {
+	// TODO
 	// 	sys_stat Stat;
 	//
 	// 	file_handle FileHandle;
@@ -312,11 +325,17 @@ Platform_GetFileTime(
 
 internal r64
 Platform_GetTime(void)
-{ return 0; }
+{
+	// TODO
+	return 0;
+}
 
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
-{ return 0; }
+{
+	// TODO
+	return 0;
+}
 
 internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
