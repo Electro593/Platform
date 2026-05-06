@@ -412,8 +412,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	}
 
 	// Find extensions
-	b08	   HasEglImageDmaBufImport = FALSE;
-	b08	   HasEglImageStorage	   = FALSE;
+	b08	   HasEglExtImageDmaBufImport = FALSE;
 	string Extensions =
 		CString(Egl_QueryString(EglDisplay, EGL_QUERY_EXTENSIONS));
 	FPrintL("- Extensions:\n");
@@ -424,10 +423,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 
 		if (String_Cmp(Extension, CStringL("EGL_EXT_image_dma_buf_import"))
 			== 0)
-			HasEglImageDmaBufImport = TRUE;
-
-		else if (String_Cmp(Extension, CStringL("EXT_EGL_image_storage")) == 0)
-			HasEglImageStorage = TRUE;
+			HasEglExtImageDmaBufImport = TRUE;
 	}
 
 	if (Api != EGL_API_OPENGL) {
@@ -436,15 +432,10 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	}
 	FPrintL("Selected EGL OpenGL client api\n");
 
-	if (!HasEglImageDmaBufImport) {
+	if (!HasEglExtImageDmaBufImport) {
 		FPrintL(
 			"Required extension EGL_EXT_image_dma_buf_import is not present\n"
 		);
-		goto error;
-	}
-
-	if (!HasEglImageStorage) {
-		FPrintL("Required extension EGL_EXT_image_storage is not present\n");
 		goto error;
 	}
 
@@ -571,6 +562,25 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			"Failed to make egl context current: code %#x\n",
 			Egl_GetError()
 		);
+		goto error;
+	}
+
+	// Check OpenGL extensions
+	s32 ExtensionCount = 0;
+	FPrintL("- OpenGL Extensions:\n");
+	OpenGL_GetIntegerv(GL_NUM_EXTENSIONS, &ExtensionCount);
+
+	b08 HasGlExtEglImageStorage = FALSE;
+	for (s32 I = 0; I < ExtensionCount; I++) {
+		string Extension = CString(OpenGL_GetStringi(GL_EXTENSIONS, I));
+		FPrintL("  - %s\n", Extension);
+
+		if (String_Cmp(Extension, CStringL("GL_EXT_EGL_image_storage")) == 0)
+			HasGlExtEglImageStorage = TRUE;
+	}
+
+	if (!HasGlExtEglImageStorage) {
+		FPrintL("Required extension GL_EXT_EGL_image_storage is not present\n");
 		goto error;
 	}
 

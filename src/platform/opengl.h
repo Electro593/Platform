@@ -51,6 +51,7 @@ typedef enum opengl_error {
 #define GL_RGBA                     0x1908
 #define GL_LINE                     0x1B01
 #define GL_FILL                     0x1B02
+#define GL_EXTENSIONS			      0x1F03
 #define GL_NEAREST                  0x2600
 #define GL_LINEAR                   0x2601
 #define GL_TEXTURE_MAG_FILTER       0x2800
@@ -61,6 +62,7 @@ typedef enum opengl_error {
 #define GL_RGBA8				         0x8058
 #define GL_CLAMP_TO_EDGE            0x812F
 #define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
+#define GL_NUM_EXTENSIONS           0x821D
 #define GL_R32UI                    0x8236
 
 typedef enum opengl_debug_source {
@@ -157,6 +159,7 @@ typedef void(API_ENTRY func_OpenGL_DebugProc)(
    IMPORT(void, GenFramebuffers,                      s32 Count, u32 *Ids) \
    IMPORT(void, GetIntegerv,                          u32 Name, s32 *Data) \
    IMPORT(void, GenRenderbuffers,                     s32 Count, u32 *Ids) \
+   IMPORT(c08*, GetStringi,                           u32 Name, u32 Index) \
    IMPORT(void, GenTextures,                          s32 Count, u32 *Ids) \
    IMPORT(void, LineWidth,                            r32 Width) \
    IMPORT(void, LogicOp,                              u32 OpCode) \
