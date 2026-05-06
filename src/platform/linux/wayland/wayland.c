@@ -612,6 +612,10 @@ Wayland_SwapBuffers(void)
 		Window->Width,
 		Window->Height
 	);
+	Wayland_Surface_SetBufferTransform(
+		Window->Surface,
+		WAYLAND_OUTPUT_TRANSFORM_FLIPPED_180
+	);
 	Wayland_Surface_Commit(Window->Surface);
 
 	OpenGL_BindFramebuffer(

@@ -89,8 +89,10 @@ struct platform_state {
 
 	hashmap EnvTable;
 
+#if defined(_LINUX)
 	wayland_api_state WaylandApi;
 	wayland_state	  Wayland;
+#endif
 };
 
 typedef struct platform_funcs {

@@ -838,9 +838,9 @@ Platform_Entry(void)
 	)
 	{
 		stack Stack;
-		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		if (_G.UtilIsLoaded) Stack = *Stack_Get();
 		Module->Init(&_G);
-		if (_G.UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 	}
 
 	s64 CountsPerSecond;
@@ -862,9 +862,9 @@ Platform_Entry(void)
 		)
 		{
 			stack Stack;
-			if (_G.UtilIsLoaded) Stack = Stack_Get();
+			if (_G.UtilIsLoaded) Stack = *Stack_Get();
 			Platform_ReloadModule(Module);
-			if (_G.UtilIsLoaded) Stack_Set(Stack);
+			if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		}
 
 		win32_message Message;
@@ -910,9 +910,9 @@ Platform_Entry(void)
 		)
 		{
 			stack Stack;
-			if (_G.UtilIsLoaded) Stack = Stack_Get();
+			if (_G.UtilIsLoaded) Stack = *Stack_Get();
 			Module->Update(&_G);
-			if (_G.UtilIsLoaded) Stack_Set(Stack);
+			if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		}
 
 		if (_G.WindowedApp) Win32_SwapBuffers(DeviceContext);
@@ -939,9 +939,9 @@ Platform_Entry(void)
 		if (Module->IsUtil) continue;
 
 		stack Stack;
-		if (_G.UtilIsLoaded) Stack = Stack_Get();
+		if (_G.UtilIsLoaded) Stack = *Stack_Get();
 		Module->Deinit(&_G);
-		if (_G.UtilIsLoaded) Stack_Set(Stack);
+		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		Platform_UnloadModule(Module);
 	}
 
