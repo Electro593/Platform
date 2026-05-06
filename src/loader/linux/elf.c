@@ -291,9 +291,9 @@ typedef struct elf64_section_header {
 #define ELF_SEGMENT_TYPE_PHDR    6
 #define ELF_SEGMENT_TYPE_TLS     7
 
-#define ELF_SEGMENT_TYPE_GNU_EH_FRAME 0x6474e550
-#define ELF_SEGMENT_TYPE_GNU_STACK    0x6474e551
-#define ELF_SEGMENT_TYPE_GNU_RELRO    0x6474e552
+#define ELF_SEGMENT_TYPE_GNU_EH_FRAME 0x6474E550
+#define ELF_SEGMENT_TYPE_GNU_STACK    0x6474E551
+#define ELF_SEGMENT_TYPE_GNU_RELRO    0x6474E552
 
 #define ELF_SEGMENT_FLAG_EXEC  0x1
 #define ELF_SEGMENT_FLAG_WRITE 0x2
@@ -467,7 +467,7 @@ typedef struct elf64_relocation_a {
 #define ELF_DYNAMIC_TAG_RELR            36
 #define ELF_DYNAMIC_TAG_RELRENT         37
 
-#define ELF_DYNAMIC_TAG_GNU_HASH        0x6ffffef5
+#define ELF_DYNAMIC_TAG_GNU_HASH        0x6FFFFEF5
 
 #define ELF_DYNAMIC_FLAG_ORIGIN     0x01
 #define ELF_DYNAMIC_FLAG_SYMBOLIC   0x02
@@ -1044,10 +1044,10 @@ Elf_HandleLazyRelocation(elf_state *State, usize RelocIndex)
 
 	usize SymbolValue = 0;
 	if (SymbolIndex) {
-		elf_symbol *Symbol = State->Dynamic.SymTab
-						   + State->Dynamic.SymTabEntrySize * SymbolIndex;
-		c08 *SymbolName = State->Dynamic.StrTab + Symbol->Name;
-		SymbolValue		= Elf_ResolveSymbol(State, SymbolName, Symbol);
+		elf_symbol *Symbol	   = State->Dynamic.SymTab
+							   + State->Dynamic.SymTabEntrySize * SymbolIndex;
+		c08		   *SymbolName = State->Dynamic.StrTab + Symbol->Name;
+		SymbolValue			   = Elf_ResolveSymbol(State, SymbolName, Symbol);
 	}
 
 	usize Value =
