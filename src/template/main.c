@@ -62,7 +62,7 @@ $module$_funcs _F;
 external void
 Load(platform_state *Platform, platform_module *Module)
 {
-	_F = ($module$_funcs) {
+	_F = ($module$_funcs){
 #define EXPORT(R, N, ...) N,
 #define X $MODULE$_FUNCS
 #include <x.h>

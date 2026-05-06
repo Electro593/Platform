@@ -340,7 +340,7 @@ Font_LoadcmapTable(font *Font)
 			}
 			Data			  += 4 * Encoding->Type4.SegCountX2;
 			u32 RemainingSize  = Encoding->Header->Length
-							  - (u32) ((u64) Data - (u64) Encoding->Header);
+							   - (u32) ((u64) Data - (u64) Encoding->Header);
 			for (u32 I = 0; I < RemainingSize / 2; I++)
 				SWAPENDIAN16(Encoding->Type4.GlyphIdArray[I]);
 		}
@@ -436,8 +436,10 @@ Font_LoadhmtxTable(font *Font)
 	Font->hmtx.ExtraBearings =
 		(ttf_fword *) ((u08 *) hmtx
 					   + Font->hhea->HMetricCount * sizeof(struct ttf_hmetric));
-	for (u32 I = 0; I < (u32) Font->maxp->GlyphCount - Font->hhea->HMetricCount;
-		 I++)
+	for (
+		u32 I = 0; I < (u32) Font->maxp->GlyphCount - Font->hhea->HMetricCount;
+		I++
+	)
 		SWAPENDIAN16(Font->hmtx.ExtraBearings[I]);
 }
 
@@ -516,8 +518,8 @@ Font_GetGlyphIndex(font Font, u32 Codepoint)
 				if (Offset) {
 					u32 CodepointOffset = Codepoint - Table->StartCodes[Index];
 					GlyphIndex			= *(
-						 Table->RangeOffsets + Index + Offset + CodepointOffset
-					 );
+						Table->RangeOffsets + Index + Offset + CodepointOffset
+					);
 					if (GlyphIndex) GlyphIndex += Table->Deltas[Index];
 				} else {
 					GlyphIndex = Codepoint + Table->Deltas[Index];
@@ -723,7 +725,7 @@ Font_GetGlyph(font Font, u32 Codepoint, r32 Scale)
 
 	if (NextOffset == Offset) {
 		Glyph.Bearing.Y = 0;
-		Glyph.Size		= (v2r32) { 0 };
+		Glyph.Size		= (v2r32){ 0 };
 	} else {
 		Glyph.Shape.Bounds.X = GlyphData->XMin;
 		Glyph.Shape.Bounds.Y = GlyphData->YMin;
@@ -734,7 +736,7 @@ Font_GetGlyph(font Font, u32 Codepoint, r32 Scale)
 		r32 EX				 = Glyph.Shape.Bounds.Z * Scale;
 		r32 EY				 = -Glyph.Shape.Bounds.Y * Scale;
 		Glyph.Bearing.Y		 = -EY;
-		Glyph.Size			 = (v2r32) { EX - SX, EY - SY };
+		Glyph.Size			 = (v2r32){ EX - SX, EY - SY };
 
 		Glyph.Shape.ContourCount = GlyphData->ContourCount;
 		Font_FindSegments(&Glyph.Shape, GlyphData->Data);

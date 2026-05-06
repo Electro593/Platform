@@ -29,9 +29,11 @@ File_Read(c08 *FileName, u64 Length, u64 Offset)
 	c08 *Text		= Stack_Allocate(Length + 1);
 	u64	 BytesRead	= Platform_ReadFile(FileHandle, Text, Length, Offset);
 	Text[BytesRead] = 0;
-	string String	= { .Length	  = BytesRead,
-						.Encoding = STRING_ENCODING_ASCII,
-						.Text	  = Text };
+	string String	= {
+		.Length	  = BytesRead,
+		.Encoding = STRING_ENCODING_ASCII,
+		.Text	  = Text,
+	};
 
 	Platform_CloseFile(FileHandle);
 

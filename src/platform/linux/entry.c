@@ -95,9 +95,7 @@ Platform_AllocateMemory(u64 Size)
 
 internal void
 Platform_FreeMemory(vptr Base, u64 Size)
-{
-	VALIDATE(Sys_MemUnmap(Base, Size), "Failed to unmap memory");
-}
+{ VALIDATE(Sys_MemUnmap(Base, Size), "Failed to unmap memory"); }
 
 internal u64
 Platform_GetFileLength(file_handle FileHandle)
@@ -137,9 +135,11 @@ Platform_CreateThread(
 	sys_pid ProcessId = Sys_Clone(Flags, StackTop, NULL, 0, NULL);
 	if (ProcessId < 0) return FALSE;
 
-	*ThreadHandle = (thread_handle) { .ThreadId	 = ProcessId,
-									  .Stack	 = Stack,
-									  .StackSize = StackSize };
+	*ThreadHandle = (thread_handle){
+		.ThreadId  = ProcessId,
+		.Stack	   = Stack,
+		.StackSize = StackSize,
+	};
 	return TRUE;
 }
 
@@ -226,11 +226,11 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 	if (OpenMode & FILE_CREATE) {
 		Flags |= SYS_OPEN_CREATE;
 		Mode  |= SYS_CREATE_USER_READ
-			  | SYS_CREATE_USER_WRITE
-			  | SYS_CREATE_GROUP_READ
-			  | SYS_CREATE_GROUP_WRITE
-			  | SYS_CREATE_OTHERS_READ
-			  | SYS_CREATE_OTHERS_WRITE;
+			   | SYS_CREATE_USER_WRITE
+			   | SYS_CREATE_GROUP_READ
+			   | SYS_CREATE_GROUP_WRITE
+			   | SYS_CREATE_OTHERS_READ
+			   | SYS_CREATE_OTHERS_WRITE;
 	}
 
 	if ((OpenMode & FILE_APPEND) == FILE_APPEND) Flags |= SYS_OPEN_APPEND;
@@ -289,9 +289,7 @@ Platform_WriteError(string Message, u32 Exit)
 
 internal void
 Platform_CloseFile(file_handle FileHandle)
-{
-	VALIDATE(Sys_Close(FileHandle.FileDescriptor), "Failed to close the file");
-}
+{ VALIDATE(Sys_Close(FileHandle.FileDescriptor), "Failed to close the file"); }
 
 // TODO Make this use a file handle
 
@@ -314,15 +312,11 @@ Platform_GetFileTime(
 
 internal r64
 Platform_GetTime(void)
-{
-	return 0;
-}
+{ return 0; }
 
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
-{
-	return 0;
-}
+{ return 0; }
 
 internal void
 Platform_GetProcAddress(platform_module *Module, c08 *Name, vptr *ProcOut)
@@ -343,9 +337,7 @@ Platform_GetThreadId(thread_handle *ThreadHandle)
 
 internal b08
 Platform_IsModuleBackendOpened(platform_module *Module)
-{
-	return Module->ELF != NULL;
-}
+{ return Module->ELF != NULL; }
 
 internal void
 Platform_OpenModuleBackend(platform_module *Module)
@@ -440,7 +432,7 @@ Platform_LoadDependencies(void)
 external void
 Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
-	_F = (platform_funcs) {
+	_F = (platform_funcs){
 #define EXPORT(R, N, ...) N,
 #define X PLATFORM_FUNCS
 #include <x.h>
@@ -455,7 +447,7 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	usize EnvCount = 0;
 	for (; EnvParams[EnvCount]; EnvCount++);
 
-	_G.WindowSize = (v2u32) { 800, 600 };
+	_G.WindowSize = (v2u32){ 800, 600 };
 
 	Platform_LoadModule(UTIL_MODULE_NAME);
 	Platform_SetupArgTable(ArgCount, Args);

@@ -40,9 +40,7 @@ r128 _mm_set_ps(r32, r32, r32, r32);
 
 inline r32
 Intrin_Sqrt_R32(r32 Value)
-{
-	return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(Value)));
-}
+{ return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(Value))); }
 
 typedef u08 *va_list;
 void		 __va_start(va_list *Args, ...);

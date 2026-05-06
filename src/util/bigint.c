@@ -143,9 +143,7 @@ BigInt_IsZero(bigint A)
 
 internal b08
 BigInt_IsNegative(bigint A)
-{
-	return (A.WordCount ? A.SWords[A.WordCount - 1] : A.Word) < 0;
-}
+{ return (A.WordCount ? A.SWords[A.WordCount - 1] : A.Word) < 0; }
 
 global shalf BigIntBackingZero		  = 0;
 global shalf BigIntBackingNegativeOne = -1;
@@ -281,9 +279,7 @@ BigInt_SXor(bigint A, bigint B)
 
 internal bigint
 BigInt_SInvert(bigint A)
-{
-	return BigInt_SXor(A, BigInt(-1));
-}
+{ return BigInt_SXor(A, BigInt(-1)); }
 
 internal bigint
 BigInt_SShift(bigint A, ssize ShiftBy)
@@ -470,9 +466,7 @@ BigInt_SNegate(bigint A)
 
 internal bigint
 BigInt_SAbs(bigint A)
-{
-	return BigInt_IsNegative(A) ? BigInt_SNegate(A) : A;
-}
+{ return BigInt_IsNegative(A) ? BigInt_SNegate(A) : A; }
 
 internal bigint
 BigInt_SMul(bigint A, bigint B)
@@ -641,8 +635,8 @@ BigInt_DivideUnsignedMultiWord(
 		// Estimate a quotient based on the biggest two digits of A and the
 		// biggest of B. Refine the estimate by checking the next least
 		// significant digits.
-		usize UW = ((usize) U.Words[DigitIndex] << UHALF_BITS)
-				 | (usize) U.Words[DigitIndex - 1];
+		usize UW   = ((usize) U.Words[DigitIndex] << UHALF_BITS)
+				   | (usize) U.Words[DigitIndex - 1];
 		usize VW   = (usize) V.Words[V.WordCount - 1];
 		usize QHat = UW / VW;
 		usize RHat = UW % VW;
@@ -662,8 +656,8 @@ BigInt_DivideUnsignedMultiWord(
 		for (usize J = 0; J < V.WordCount; J++) {
 			usize P = QHat * V.Words[J];
 			T		= U.Words[DigitIndex - V.WordCount + J]
-			  - K
-			  - (P & (usize) UHALF_MAX);
+					- K
+					- (P & (usize) UHALF_MAX);
 			U.Words[DigitIndex - V.WordCount + J] = T;
 			K = (P >> UHALF_BITS) - (T >> UHALF_BITS);
 		}
@@ -839,9 +833,8 @@ BigInt_Print(bigint A)
 
 	if (A.WordCount) {
 		Printf("%#x", A.Words[A.WordCount - 1]);
-		for (usize I = 1; I < A.WordCount; I++) {
+		for (usize I = 1; I < A.WordCount; I++)
 			Printf("_%.8x", A.Words[A.WordCount - I - 1]);
-		}
 	} else {
 		Printf("%#x", AP.Word);
 	}
@@ -977,7 +970,7 @@ BigInt_Print(bigint A)
 	))                                                                        \
 	TEST(BigInt_SAnd, ANDsCorrectly, (                                        \
 		bigint A = BigInt_SInit(2, 0x29482715, 0x80192747);                   \
-		bigint B = BigInt_SInit(3, 0x81acd923, 0x1a1a1a1a, 0x20400970);       \
+		bigint B = BigInt_SInit(3, 0x81ACD923, 0x1A1A1A1A, 0x20400970);       \
 		bigint Result = BigInt_SAnd(A, B);                                    \
 		Assert(Result.WordCount == 3);                                        \
 		Assert(Result.SWords[0] == (A.SWords[0] & B.SWords[0]));              \
@@ -986,7 +979,7 @@ BigInt_Print(bigint A)
 	))                                                                        \
 	TEST(BigInt_SOr, ORsCorrectly, (                                          \
 		bigint A = BigInt_SInit(2, 0x29482715, 0x80192747);                   \
-		bigint B = BigInt_SInit(3, 0x81acd923, 0x1a1a1a1a, 0x20400970);       \
+		bigint B = BigInt_SInit(3, 0x81ACD923, 0x1A1A1A1A, 0x20400970);       \
 		bigint Result = BigInt_SOr(A, B);                                     \
 		Assert(Result.WordCount == 2);                                        \
 		Assert(Result.SWords[0] == (A.SWords[0] | B.SWords[0]));              \
@@ -1066,19 +1059,19 @@ BigInt_Print(bigint A)
 		Assert(Result.SWords[1] == 0);                                        \
 	))                                                                        \
 	TEST(BigInt_SShift, HandlesFullWordSignedOverflow, (                      \
-		bigint A = BigInt_SInit(2, 0x8ac722fe, 0);                            \
+		bigint A = BigInt_SInit(2, 0x8AC722FE, 0);                            \
 		bigint Result = BigInt_SShift(A, SHALF_BITS);                         \
 		Assert(Result.WordCount == 3);                                        \
 		Assert(Result.SWords[0] == 0);                                        \
-		Assert(Result.SWords[1] == 0x8ac722fe);                               \
+		Assert(Result.SWords[1] == 0x8AC722FE);                               \
 		Assert(Result.SWords[2] == 0);                                        \
 	))                                                                        \
 	TEST(BigInt_SShift, HandlesPartialWordSignedOverflow, (                   \
-		bigint A = BigInt_SInit(2, 0x8ac722feu >> 1, 0);                      \
+		bigint A = BigInt_SInit(2, 0x8AC722FEu >> 1, 0);                      \
 		bigint Result = BigInt_SShift(A, SHALF_BITS + 1);                     \
 		Assert(Result.WordCount == 3);                                        \
 		Assert(Result.SWords[0] == 0);                                        \
-		Assert(Result.SWords[1] == 0x8ac722fe);                               \
+		Assert(Result.SWords[1] == 0x8AC722FE);                               \
 		Assert(Result.SWords[2] == 0);                                        \
 	))                                                                        \
 	TEST(BigInt_SAdd, AddsSmallNumbers, (                                     \

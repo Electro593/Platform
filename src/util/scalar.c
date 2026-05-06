@@ -61,7 +61,7 @@
 
 #define R32_SIGN_MASK      0x80000000
 #define R32_EXPONENT_MASK  0x7F800000
-#define R32_MANTISSA_MASK  0x007fffff
+#define R32_MANTISSA_MASK  0x007FFFFF
 #define R32_MANTISSA_BITS  23
 #define R32_SIGN_SHIFT     31
 #define R32_EXPONENT_SHIFT 23
@@ -144,6 +144,7 @@ typedef struct random {
 
 #ifdef INCLUDE_SOURCE
 
+// clang-format off
 global r32 SinLookupTable[] = {
 	0.00000000000, 0.01745240644, 0.03489949670, 0.05233595626, 0.06975647374,
 	0.08715574277, 0.1045284632,  0.1218693435,	 0.1391731010,	0.1564344651,
@@ -209,6 +210,7 @@ global r32 ArccosLookupTable[] = {
 	0.2362513061, 0.2112108803, 0.1828287169, 0.1492095735, 0.1054581174,
 	0.0000000000, 0.0000000000
 };
+// clang-format on
 
 internal r32
 R32_Floor(r32 N)
@@ -245,9 +247,7 @@ R32_Sign(r32 N)
 
 internal r32
 R32_Round(r32 N)
-{
-	return (r32) (s32) (N + R32_Sign(N) * 0.5);
-}
+{ return (r32) (s32) (N + R32_Sign(N) * 0.5); }
 
 internal s32
 R32_Exponent(r32 N)
@@ -262,39 +262,27 @@ R32_Exponent(r32 N)
 // TODO make defines for these (like with the vectors)
 internal r32
 R32_Max(r32 A, r32 B)
-{
-	return (A < B) ? B : A;
-}
+{ return (A < B) ? B : A; }
 
 internal r32
 R32_Min(r32 A, r32 B)
-{
-	return (A < B) ? A : B;
-}
+{ return (A < B) ? A : B; }
 
 internal r32
 R32_Median(r32 A, r32 B, r32 C)
-{
-	return R32_Max(R32_Min(A, B), R32_Min(R32_Max(A, B), C));
-}
+{ return R32_Max(R32_Min(A, B), R32_Min(R32_Max(A, B), C)); }
 
 internal r32
 R32_Lerp(r32 S, r32 E, r32 t)
-{
-	return S + t * (E - S);
-}
+{ return S + t * (E - S); }
 
 internal r32
 R32_Remainder(r32 Dividend, r32 Divisor)
-{
-	return Dividend - ((s32) (Dividend / Divisor) * Divisor);
-}
+{ return Dividend - ((s32) (Dividend / Divisor) * Divisor); }
 
 internal b08
 R32_Within(r32 Num, r32 Start, r32 End, r32 Epsilon)
-{
-	return Start - Epsilon < Num && Num < End + Epsilon;
-}
+{ return Start - Epsilon < Num && Num < End + Epsilon; }
 
 internal r32
 R32_Clamp(r32 N, r32 S, r32 E)
@@ -306,9 +294,7 @@ R32_Clamp(r32 N, r32 S, r32 E)
 
 internal r32
 R32_sqrt(r32 N)
-{
-	return Intrin_Sqrt_R32(N);
-}
+{ return Intrin_Sqrt_R32(N); }
 
 #define R32_CBRT_ITERATIONS 10
 internal r32
@@ -492,15 +478,11 @@ R32_SolveCubic(r32 C3, r32 C2, r32 C1, r32 C0, r32 *Roots)
 
 internal s32
 S32_Sign(s32 N)
-{
-	return 1 + 2 * (N >> 31);
-}
+{ return 1 + 2 * (N >> 31); }
 
 internal s32
 S32_Abs(s32 N)
-{
-	return N * S32_Sign(N);
-}
+{ return N * S32_Sign(N); }
 
 internal s32
 S32_Clamp(s32 N, s32 S, s32 E)
@@ -512,45 +494,31 @@ S32_Clamp(s32 N, s32 S, s32 E)
 
 internal u08
 U08_Max(u08 A, u08 B)
-{
-	return (A < B) ? B : A;
-}
+{ return (A < B) ? B : A; }
 
 internal u08
 U08_Min(u08 A, u08 B)
-{
-	return (A < B) ? A : B;
-}
+{ return (A < B) ? A : B; }
 
 internal u08
 U08_Median(u08 A, u08 B, u08 C)
-{
-	return U08_Max(U08_Min(A, B), U08_Min(U08_Max(A, B), C));
-}
+{ return U08_Max(U08_Min(A, B), U08_Min(U08_Max(A, B), C)); }
 
 internal u08
 U08_Lerp(u08 A, u08 B, r32 T)
-{
-	return A + (u08) (T * ((r32) B - A));
-}
+{ return A + (u08) (T * ((r32) B - A)); }
 
 internal u32
 U32_Max(u32 A, u32 B)
-{
-	return (A > B) ? A : B;
-}
+{ return (A > B) ? A : B; }
 
 internal u32
 U32_Min(u32 A, u32 B)
-{
-	return (A < B) ? A : B;
-}
+{ return (A < B) ? A : B; }
 
 internal u32
 U32_Abs(u32 N)
-{
-	return N;
-}
+{ return N; }
 
 internal u32
 U32_RoundUpPow2(u32 N)

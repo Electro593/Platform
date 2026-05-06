@@ -380,9 +380,11 @@ inline internal string
 _CString(c08 *Chars)
 {
 	u32 Length = _Mem_BytesUntil(Chars, 0);
-	return (string) { .Text		= Chars,
-					  .Encoding = STRING_ENCODING_ASCII,
-					  .Length	= Length };
+	return (string){
+		.Text	  = Chars,
+		.Encoding = STRING_ENCODING_ASCII,
+		.Length	  = Length,
+	};
 }
 
 inline internal s08
@@ -415,9 +417,11 @@ _BufToStr(_platform_buf *Buf)
 {
 	if (!Buf || !Buf->Data) return EString();
 
-	return (string) { .Text		= Buf->Data,
-					  .Encoding = STRING_ENCODING_ASCII,
-					  .Length	= Buf->Size };
+	return (string){
+		.Text	  = Buf->Data,
+		.Encoding = STRING_ENCODING_ASCII,
+		.Length	  = Buf->Size,
+	};
 }
 
 inline internal void

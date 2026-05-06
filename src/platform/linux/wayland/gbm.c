@@ -55,9 +55,7 @@ extern s32 *__errno_location(void);
 
 internal sys_errno
 Gbm_GetError(void)
-{
-	return *__errno_location();
-}
+{ return *__errno_location(); }
 
 internal b08
 Gbm_Init(

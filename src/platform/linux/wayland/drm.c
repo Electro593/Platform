@@ -16,12 +16,12 @@
 typedef enum drm_format {
 	DRM_FORMAT_XRGB8888	   = DRM_FOURCC_CODE('X', 'R', '2', '4'),
 	DRM_FORMAT_XBGR8888	   = DRM_FOURCC_CODE('X', 'B', '2', '4'),
-	DRM_FORMAT_ARGB8888    = DRM_FOURCC_CODE('A', 'R', '2', '4'),
+	DRM_FORMAT_ARGB8888	   = DRM_FOURCC_CODE('A', 'R', '2', '4'),
 	DRM_FORMAT_RGBX1010102 = DRM_FOURCC_CODE('R', 'X', '3', '0'),
 } drm_format;
 
 typedef enum drm_format_modifier : u64 {
-	DRM_FORMAT_MOD_LINEAR = 0,
+	DRM_FORMAT_MOD_LINEAR  = 0,
 	DRM_FORMAT_MOD_INVALID = 0x00FFFFFFFFFFFFFFull,
 } drm_format_modifier;
 
@@ -32,7 +32,7 @@ typedef enum drm_node_type {
 	DRM_NODE_TYPE_COUNT
 } drm_node_type;
 
-#define DRM_IOC_READ 2U
+#define DRM_IOC_READ 2u
 #define DRM_IOC_SIZEBITS 14
 
 #define DRM_IOC(MODE, BASE, ID, SIZE) \
@@ -60,15 +60,11 @@ Drm_IoCtl(s32 Fd, usize Op, vptr Data)
 
 internal s32
 Drm_OpenDriver(string Name)
-{
-	return Sys_Open(Name.Text, SYS_OPEN_READWRITE, 0);
-}
+{ return Sys_Open(Name.Text, SYS_OPEN_READWRITE, 0); }
 
 internal s32
 Drm_CloseDriver(s32 Fd)
-{
-	return Sys_Close(Fd);
-}
+{ return Sys_Close(Fd); }
 
 internal drm_node_type
 Drm_GetNodeType(s32 Fd)
@@ -90,9 +86,7 @@ Drm_GetNodeType(s32 Fd)
 
 internal s32
 Drm_GetMagicNumber(s32 Fd, u32 *MagicOut)
-{
-	return Drm_IoCtl(Fd, DRM_IOCTL_GET_MAGIC, MagicOut);
-}
+{ return Drm_IoCtl(Fd, DRM_IOCTL_GET_MAGIC, MagicOut); }
 
 internal s32
 Drm_OpenDriverFromVersion(s32 Major, s32 Minor)

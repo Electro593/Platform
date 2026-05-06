@@ -518,7 +518,7 @@ internal b08
 Wayland_ConnectToSocket(string Name)
 {
 	if (_G.WaylandApi.Connected) return TRUE;
-	if (Name.Length >= sizeof((sys_sockaddr_unix) {}.Data)) return FALSE;
+	if (Name.Length >= sizeof((sys_sockaddr_unix){}.Data)) return FALSE;
 
 	s32 FileDescriptor =
 		Sys_Socket(SYS_ADDRESS_FAMILY_UNIX, SYS_SOCKET_STREAM, 0);
@@ -606,9 +606,11 @@ Wayland_WaitUntilCanSend(s32 Timeout)
 {
 	if (!_G.WaylandApi.Connected) return FALSE;
 
-	sys_pollfd PollFd = { .FileDescriptor  = _G.WaylandApi.Socket,
-						  .RequestedEvents = SYS_POLLOUT,
-						  .ReturnedEvents  = 0 };
+	sys_pollfd PollFd = {
+		.FileDescriptor	 = _G.WaylandApi.Socket,
+		.RequestedEvents = SYS_POLLOUT,
+		.ReturnedEvents	 = 0,
+	};
 
 	s32 Result = Sys_Poll(&PollFd, 1, Timeout);
 	return Result == 1 && (PollFd.ReturnedEvents & SYS_POLLOUT);
@@ -640,9 +642,11 @@ Wayland_WaitUntilCanReceive(s32 Timeout)
 {
 	if (!_G.WaylandApi.Connected) return FALSE;
 
-	sys_pollfd PollFd = { .FileDescriptor  = _G.WaylandApi.Socket,
-						  .RequestedEvents = SYS_POLLIN,
-						  .ReturnedEvents  = 0 };
+	sys_pollfd PollFd = {
+		.FileDescriptor	 = _G.WaylandApi.Socket,
+		.RequestedEvents = SYS_POLLIN,
+		.ReturnedEvents	 = 0,
+	};
 
 	s32 Result = Sys_Poll(&PollFd, 1, Timeout);
 	return Result == 1 && (PollFd.ReturnedEvents & SYS_POLLIN);
@@ -890,9 +894,7 @@ Wayland_DestroyDestructorParams(wayland_prepared_method PreparedMethod)
 
 internal void
 Wayland_DestroyPreparedMethod(wayland_prepared_method PreparedMethod)
-{
-	Heap_FreeA(PreparedMethod.Params);
-}
+{ Heap_FreeA(PreparedMethod.Params); }
 
 internal void
 Wayland_SerializeParam(

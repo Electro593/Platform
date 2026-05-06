@@ -68,7 +68,7 @@ MSDF_SegmentDir(msdf_segment Segment, r32 t)
 			return V2r32_Norm(V2r32_Add(V2r32_MulS(P2m2C1pP1, 2 * t), C1mP1t2));
 		}
 	}
-	return (v2r32) { 0 };
+	return (v2r32){ 0 };
 }
 
 internal v2r32
@@ -91,7 +91,7 @@ MSDF_SegmentPoint(msdf_segment Segment, r32 t)
 			return V2r32_Add(V2r32_Add(Part1, Part2), Part3);
 		}
 	}
-	return (v2r32) { 0 };
+	return (v2r32){ 0 };
 }
 
 internal s08
@@ -243,9 +243,12 @@ MSDF_DistanceColor(v4r32 Dists, r32 Range)
 	Dists = V4r32_AddS(Dists, 0.5);
 	Dists = V4r32_Clamp(Dists, 0, 1);
 	Dists = V4r32_MulS(Dists, 255);
-	return (
-		v4u08
-	) { (u08) Dists.X, (u08) Dists.Y, (u08) Dists.Z, (u08) Dists.W };
+	return (v4u08){
+		(u08) Dists.X,
+		(u08) Dists.Y,
+		(u08) Dists.Z,
+		(u08) Dists.W,
+	};
 }
 
 internal b08
@@ -283,18 +286,18 @@ MSDF_FindErrors(u08 *ErrorMap, v4r32 *FloatMap, v2u32 Size, r32 Threshold)
 
 			P = FloatMap[INDEX_2D(X, Y, Size.X)];
 
-			L  = HasL ? FloatMap[INDEX_2D(X - 1, Y, Size.X)] : (v4r32) { 0 };
-			B  = HasB ? FloatMap[INDEX_2D(X, Y - 1, Size.X)] : (v4r32) { 0 };
-			R  = HasR ? FloatMap[INDEX_2D(X + 1, Y, Size.X)] : (v4r32) { 0 };
-			T  = HasT ? FloatMap[INDEX_2D(X, Y + 1, Size.X)] : (v4r32) { 0 };
-			LB = HasLB ? FloatMap[INDEX_2D(X - 1, Y - 1, Size.X)]
-					   : (v4r32) { 0 };
-			LT = HasLT ? FloatMap[INDEX_2D(X - 1, Y + 1, Size.X)]
-					   : (v4r32) { 0 };
-			RB = HasRB ? FloatMap[INDEX_2D(X + 1, Y - 1, Size.X)]
-					   : (v4r32) { 0 };
-			RT = HasRT ? FloatMap[INDEX_2D(X + 1, Y + 1, Size.X)]
-					   : (v4r32) { 0 };
+			L = HasL ? FloatMap[INDEX_2D(X - 1, Y, Size.X)] : (v4r32){ 0 };
+			B = HasB ? FloatMap[INDEX_2D(X, Y - 1, Size.X)] : (v4r32){ 0 };
+			R = HasR ? FloatMap[INDEX_2D(X + 1, Y, Size.X)] : (v4r32){ 0 };
+			T = HasT ? FloatMap[INDEX_2D(X, Y + 1, Size.X)] : (v4r32){ 0 };
+			LB =
+				HasLB ? FloatMap[INDEX_2D(X - 1, Y - 1, Size.X)] : (v4r32){ 0 };
+			LT =
+				HasLT ? FloatMap[INDEX_2D(X - 1, Y + 1, Size.X)] : (v4r32){ 0 };
+			RB =
+				HasRB ? FloatMap[INDEX_2D(X + 1, Y - 1, Size.X)] : (v4r32){ 0 };
+			RT =
+				HasRT ? FloatMap[INDEX_2D(X + 1, Y + 1, Size.X)] : (v4r32){ 0 };
 
 			LE = HasL && MSDF_HasSideError(P, L, Threshold);
 			BE = HasB && MSDF_HasSideError(P, B, Threshold);
@@ -321,7 +324,7 @@ MSDF_FixErrors(u08 *ErrorMap, v4r32 *FloatMap, v2u32 Size)
 			v4r32 F = FloatMap[I];
 			if (ErrorMap[I] & MSDF_PIXEL_HAS_ERROR) {
 				r32 M		= R32_Median(F.X, F.Y, F.Z);
-				FloatMap[I] = (v4r32) { M, M, M, F.W };
+				FloatMap[I] = (v4r32){ M, M, M, F.W };
 			}
 		}
 	}
@@ -345,8 +348,8 @@ MSDF_DrawShape(
 	v2u32 SlotSize	= *_SlotSize;
 	v4s16 Bounds	= Shape.Bounds;
 	v2r32 Offset	= { 1, 1 };
-	*_SlotPos		= V2u32_Add(*_SlotPos, (v2u32) { 1, 1 });
-	*_SlotSize		= V2u32_Sub(*_SlotSize, (v2u32) { 2, 2 });
+	*_SlotPos		= V2u32_Add(*_SlotPos, (v2u32){ 1, 1 });
+	*_SlotSize		= V2u32_Sub(*_SlotSize, (v2u32){ 2, 2 });
 	v2r32 SlotSizeR = { SlotSize.X, SlotSize.Y };
 	v2r32 Size		= V2r32_Sub(SlotSizeR, V2r32_MulS(Offset, 2));
 	v2r32 MaxBounds = { Bounds.Z - Bounds.X, Bounds.W - Bounds.Y };
@@ -358,19 +361,23 @@ MSDF_DrawShape(
 	for (u32 Y = 0; Y < SlotSize.Y; Y++) {
 		for (u32 X = 0; X < SlotSize.X; X++) {
 			v2r32 P = { (X - Offset.X + 0.5) / Scale.X + Bounds.X,
-						(Y - Offset.Y + 0.5) / Scale.Y + Bounds.Y };
+				(Y - Offset.Y + 0.5) / Scale.Y + Bounds.Y };
 
 			msdf_dist Dists[3] = {
 				{ R32_MAX, 1 },
 				{ R32_MAX, 1 },
 				{ R32_MAX, 1 }
 			};
-			msdf_edge	 Edges[3]	 = { Shape.Contours[0].Edges[0],
-										 Shape.Contours[0].Edges[0],
-										 Shape.Contours[0].Edges[0] };
-			msdf_segment Segments[3] = { Edges[0].Segments[0],
-										 Edges[0].Segments[0],
-										 Edges[0].Segments[0] };
+			msdf_edge Edges[3] = {
+				Shape.Contours[0].Edges[0],
+				Shape.Contours[0].Edges[0],
+				Shape.Contours[0].Edges[0],
+			};
+			msdf_segment Segments[3] = {
+				Edges[0].Segments[0],
+				Edges[0].Segments[0],
+				Edges[0].Segments[0],
+			};
 
 			for (u32 C = 0; C < Shape.ContourCount; C++) {
 				msdf_contour Contour = Shape.Contours[C];

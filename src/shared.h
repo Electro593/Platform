@@ -181,10 +181,12 @@ TYPES
 inline internal type
 MakeMemberType(type_id TypeID, u32 Offset, u16 Size)
 {
-	return (type) { TYPEID_MEMBER
-						| ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK)
-						| TypeID,
-					Size };
+	return (type){
+		TYPEID_MEMBER
+			| ((Offset << TYPEID_EXTRA_EXP) & TYPEID_MOD_MASK)
+			| TypeID,
+		Size,
+	};
 }
 
 typedef s08 (*cmp_func)(vptr A, vptr B, vptr Param);
@@ -198,7 +200,5 @@ s32 _fltused;
 #ifdef __MINGW32__
 s32
 DllMainCRTStartup()
-{
-	return TRUE;
-}
+{ return TRUE; }
 #endif

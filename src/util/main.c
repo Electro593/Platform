@@ -110,7 +110,7 @@ Load(platform_state *Platform, platform_module *Module)
 	}
 
 	if (!_F.Initialized) {
-		_F = (util_funcs) {
+		_F = (util_funcs){
 #define EXPORT(R, N, ...) N,
 #define X UTIL_FUNCS
 #include <x.h>

@@ -938,9 +938,7 @@ String_GetCount(string *String)
 /// provided encoding.
 internal usize
 String_GetCodepointLength(u32 Codepoint, string_encoding Encoding)
-{
-	return String_WriteCodepoint((string) { .Encoding = Encoding }, Codepoint);
-}
+{ return String_WriteCodepoint((string){ .Encoding = Encoding }, Codepoint); }
 
 /// @brief Query what the length of a string would be if it was transcoded into
 /// another format.
@@ -1525,11 +1523,11 @@ FString_ParseFormatString(
 				// the first place.
 				b08 First = FormatList.FormatCount == 0;
 				Status	  = FString_ParseFormat(
-					   FormatCursor,
-					   &Format,
-					   &UseIndexes,
-					   First
-				   );
+					FormatCursor,
+					&Format,
+					&UseIndexes,
+					First
+				);
 				if (Status != FSTRING_FORMAT_VALID) goto end;
 
 				FormatList.FormatCount++;
@@ -1983,8 +1981,8 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 	if (PadCodepoint == '0' && Format->Width > ContentCount) {
 		usize PadDigits	 = Format->Width - ContentCount;
 		PadDigits		-= ((PadDigits - 1) / (GroupSize + GroupString.Count))
-				   * GroupString.Count;
-		MinDigits = MAX(MinDigits, PadDigits);
+						 * GroupString.Count;
+		MinDigits		 = MAX(MinDigits, PadDigits);
 	}
 
 	usize ValueDivisor = 1;
@@ -2029,9 +2027,9 @@ FString_WriteUnsigned(fstring_format *Format, string Buffer)
 			ValueDivisor /= Radix;
 
 			Codepoint =
-				(Digit < 10 ? '0' + Digit
-				 : IsUpper	? 'A' + (Digit - 10)
-							: 'a' + (Digit - 10));
+				(Digit < 10	  ? '0' + Digit
+					: IsUpper ? 'A' + (Digit - 10)
+							  : 'a' + (Digit - 10));
 		}
 
 		String_BumpBytes(&Buffer, String_WriteCodepoint(Buffer, Codepoint));
@@ -4026,7 +4024,7 @@ FPrint(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_WriteUnsigned, HandlesAlignmentAndPadding, (                                               \
 		string Buffer = LString(13);                                                                        \
-		fstring_format Format = { .Width = 12, .Precision = -1, .Value = { .Unsigned = 0x2cdeba } };        \
+		fstring_format Format = { .Width = 12, .Precision = -1, .Value = { .Unsigned = 0x2CDEBA } };        \
 		Format.Type = FSTRING_FORMAT_FLAG_INT_HEX;                                                          \
 		Format.Type |= FSTRING_FORMAT_FLAG_SPECIFY_RADIX;                                                   \
 		Format.Type |= FSTRING_FORMAT_FLAG_SEPARATE_GROUPS;                                                 \
@@ -4177,7 +4175,7 @@ FPrint(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_WriteHexFloat, HandlesUppercase, (                                                         \
 		string		   Buffer = LString(30);                                                                \
-		fstring_format Format = { .Value = { .Float = R64_CREATE(1, 0, 0x123456789abcdull) } };             \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(1, 0, 0x123456789ABCDull) } };             \
 		Format.Type = FSTRING_FORMAT_FLAG_UPPERCASE;                                                        \
 		Format.Precision = -1;                                                                              \
 		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
@@ -4187,7 +4185,7 @@ FPrint(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_WriteHexFloat, HandlesPrefixSpace, (                                                       \
 		string		   Buffer = LString(30);                                                                \
-		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 0, 0x123456789abcdull) } };             \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 0, 0x123456789ABCDull) } };             \
 		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SPACE;                                                     \
 		Format.Precision = -1;                                                                              \
 		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \
@@ -4197,7 +4195,7 @@ FPrint(string Format, ...)
 	))                                                                                                      \
 	TEST(FString_WriteHexFloat, HandlesPrefixSign, (                                                        \
 		string		   Buffer = LString(30);                                                                \
-		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 0, 0x123456789abcdull) } };             \
+		fstring_format Format = { .Value = { .Float = R64_CREATE(0, 0, 0x123456789ABCDull) } };             \
 		Format.Type = FSTRING_FORMAT_FLAG_PREFIX_SIGN | FSTRING_FORMAT_FLAG_PREFIX_SPACE;                   \
 		Format.Precision = -1;                                                                              \
 		fstring_format_status Status = FString_WriteHexFloat(&Format, Buffer);                              \

@@ -184,9 +184,7 @@ Heap_GetHeap(heap_handle *Handle)
 
 internal heap_handle *
 Heap_GetHandleA(vptr Data)
-{
-	return *((heap_handle **) Data - 1);
-}
+{ return *((heap_handle **) Data - 1); }
 
 internal heap *
 Heap_Init(vptr MemBase, u64 Size)
@@ -195,7 +193,7 @@ Heap_Init(vptr MemBase, u64 Size)
 
 	Assert(MemBase);
 	Assert(Size > HeaderSize);
-	Assert(Size - HeaderSize < (1ULL << 46));
+	Assert(Size - HeaderSize < (1ull << 46));
 
 	heap *Heap	= MemBase;
 	Heap->Mutex = 0;
@@ -335,9 +333,7 @@ _Heap_Allocate(heap *Heap, u32 Size, b08 Anchored)
 
 internal heap_handle *
 Heap_Allocate(heap *Heap, u64 Size)
-{
-	return _Heap_Allocate(Heap, Size, FALSE);
-}
+{ return _Heap_Allocate(Heap, Size, FALSE); }
 
 internal vptr
 Heap_AllocateA(heap *Heap, u64 Size)
@@ -428,9 +424,7 @@ Heap_Free(heap_handle *Handle)
 
 internal void
 Heap_FreeA(vptr Data)
-{
-	Heap_Free(Heap_GetHandleA(Data));
-}
+{ Heap_Free(Heap_GetHandleA(Data)); }
 
 internal void
 Heap_Dump(heap *Heap)
@@ -472,12 +466,12 @@ Heap_Dump(heap *Heap)
 			string PlusStr = IsValid ? CStringL("+") : NoneStr;
 			string PipeStr = IsValid ? CStringL("|") : NoneStr;
 			string Seg1	   = FStringL(
-				   ".%*s%s%2$-*s.",
-				   SizeWidth,
-				   NoneStr,
-				   PlusStr,
-				   OffsetWidth
-			   );
+				".%*s%s%2$-*s.",
+				SizeWidth,
+				NoneStr,
+				PlusStr,
+				OffsetWidth
+			);
 			string Seg2 = FStringL(
 				":%*s%s%2$-*s:",
 				SizeWidth,
@@ -669,7 +663,7 @@ internal stack *
 Stack_Init(vptr Mem, usize Size)
 {
 	stack *Result = Mem;
-	*Result		  = (stack) { 0 };
+	*Result		  = (stack){ 0 };
 
 	Result->Size		= Size - sizeof(stack);
 	Result->FirstMarker = NULL;
@@ -691,9 +685,7 @@ Stack_Push(void)
 
 internal vptr
 Stack_GetCursor(void)
-{
-	return Stack_Get()->Cursor;
-}
+{ return Stack_Get()->Cursor; }
 
 internal void
 Stack_SetCursor(vptr Cursor)

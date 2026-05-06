@@ -20,12 +20,10 @@ Platform_LoadWin32(void)
 	win32_list_entry *Entry = TEB->PEB->Ldr->MemoryOrderList.Next;
 	u32 Offset = OFFSET_OF(win32_ldr_data_table_entry, MemoryOrderLinks);
 	Entry	   = Entry->Next->Next;
-	win32_ldr_data_table_entry *TableEntry =
-		(win32_ldr_data_table_entry *) ((u08 *) Entry
-										- OFFSET_OF(
-											win32_ldr_data_table_entry,
-											MemoryOrderLinks
-										));
+	win32_ldr_data_table_entry *TableEntry = (win32_ldr_data_table_entry
+			*) ((u08 *) Entry
+				- OFFSET_OF(win32_ldr_data_table_entry, MemoryOrderLinks));
+
 	win32_module Kernel32 = TableEntry->DllBase;
 
 	win32_image_dos_header *DOSHeader = (win32_image_dos_header *) Kernel32;
@@ -34,7 +32,7 @@ Platform_LoadWin32(void)
 	win32_image_export_directory *ExportDirectory =
 		(win32_image_export_directory *) ((u08 *) DOSHeader
 										  + NTHeaders->OptionalHeader
-												.ExportTable.VirtualAddress);
+											  .ExportTable.VirtualAddress);
 	u32 *ExportNameTable =
 		(u32 *) ((u08 *) DOSHeader + ExportDirectory->AddressOfNames);
 	u16 *ExportOrdinalTable =
@@ -153,27 +151,29 @@ Platform_LoadOpenGL(void)
 {
 	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
 
-	s32 PixelFormatAttribs[] = { WGL_DRAW_TO_WINDOW_ARB,
-								 TRUE,
-								 WGL_SUPPORT_OPENGL_ARB,
-								 TRUE,
-								 WGL_DOUBLE_BUFFER_ARB,
-								 TRUE,
-								 WGL_ACCELERATION_ARB,
-								 WGL_FULL_ACCELERATION_ARB,
-								 WGL_PIXEL_TYPE_ARB,
-								 WGL_TYPE_RGBA_ARB,
-								 WGL_COLOR_BITS_ARB,
-								 32,
-								 WGL_DEPTH_BITS_ARB,
-								 24,
-								 WGL_STENCIL_BITS_ARB,
-								 8,
-								 WGL_SAMPLE_BUFFERS_ARB,
-								 1,
-								 WGL_SAMPLES_ARB,
-								 4,
-								 0 };
+	s32 PixelFormatAttribs[] = {
+		WGL_DRAW_TO_WINDOW_ARB,
+		TRUE,
+		WGL_SUPPORT_OPENGL_ARB,
+		TRUE,
+		WGL_DOUBLE_BUFFER_ARB,
+		TRUE,
+		WGL_ACCELERATION_ARB,
+		WGL_FULL_ACCELERATION_ARB,
+		WGL_PIXEL_TYPE_ARB,
+		WGL_TYPE_RGBA_ARB,
+		WGL_COLOR_BITS_ARB,
+		32,
+		WGL_DEPTH_BITS_ARB,
+		24,
+		WGL_STENCIL_BITS_ARB,
+		8,
+		WGL_SAMPLE_BUFFERS_ARB,
+		1,
+		WGL_SAMPLES_ARB,
+		4,
+		0,
+	};
 
 	win32_pixel_format_descriptor PixelFormatDescriptor;
 	s32							  PixelFormat;
@@ -200,15 +200,17 @@ Platform_LoadOpenGL(void)
 #endif
 
 	Win32_SetPixelFormat(DeviceContext, PixelFormat, &PixelFormatDescriptor);
-	s32 AttribList[] = { WGL_CONTEXT_MAJOR_VERSION_ARB,
-						 4,
-						 WGL_CONTEXT_MINOR_VERSION_ARB,
-						 6,
-						 WGL_CONTEXT_FLAGS_ARB,
-						 DebugBit | WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-						 WGL_CONTEXT_PROFILE_MASK_ARB,
-						 WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-						 0 };
+	s32 AttribList[] = {
+		WGL_CONTEXT_MAJOR_VERSION_ARB,
+		4,
+		WGL_CONTEXT_MINOR_VERSION_ARB,
+		6,
+		WGL_CONTEXT_FLAGS_ARB,
+		DebugBit | WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		WGL_CONTEXT_PROFILE_MASK_ARB,
+		WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		0,
+	};
 
 	win32_opengl_render_context RenderContext =
 		WGL_CreateContextAttribsARB(DeviceContext, 0, AttribList);
@@ -285,10 +287,10 @@ Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 	RawInputDevice.Flags	 = 0;
 	RawInputDevice.Target	 = PrimaryWindow;
 	b32 Res					 = Win32_RegisterRawInputDevices(
-		 &RawInputDevice,
-		 1,
-		 sizeof(win32_raw_input_device)
-	 );
+		&RawInputDevice,
+		1,
+		sizeof(win32_raw_input_device)
+	);
 	Assert(Res == TRUE);
 
 	_G.WindowedApp = TRUE;
@@ -309,9 +311,7 @@ Platform_AllocateMemory(u64 Size)
 
 internal void
 Platform_FreeMemory(vptr Base, u64 Size)
-{
-	Win32_VirtualFree(Base, 0, MEM_RELEASE);
-}
+{ Win32_VirtualFree(Base, 0, MEM_RELEASE); }
 
 internal u64
 Platform_GetFileLength(file_handle FileHandle)
@@ -397,7 +397,7 @@ Platform_ReadFile(file_handle FileHandle, vptr Dest, u64 Length, u64 Offset)
 	u64 TotalBytesRead = 0;
 	while (Length) {
 		u32 BytesRead;
-		u32 BytesToRead = Length % (U32_MAX + 1ULL);
+		u32 BytesToRead = Length % (U32_MAX + 1ull);
 		b08 Success		= Win32_ReadFile(
 			FileHandle.Handle,
 			Dest,
@@ -430,14 +430,14 @@ Platform_WriteFile(file_handle FileHandle, vptr Src, u64 Length, u64 Offset)
 	u32 TotalBytesWritten = 0;
 	while (Length) {
 		u32 BytesWritten;
-		u32 BytesToWrite = Length % (U32_MAX + 1ULL);
+		u32 BytesToWrite = Length % (U32_MAX + 1ull);
 		b08 Success		 = Win32_WriteFile(
-			 FileHandle.Handle,
-			 Src,
-			 BytesToWrite,
-			 &BytesWritten,
-			 &Overlapped
-		 );
+			FileHandle.Handle,
+			Src,
+			BytesToWrite,
+			&BytesWritten,
+			&Overlapped
+		);
 
 		if (!Success) {
 			u32 DEBUG_Err = Win32_GetLastError();
@@ -483,9 +483,7 @@ Platform_WriteError(string Message, u32 Exit)
 
 internal void
 Platform_CloseFile(file_handle FileHandle)
-{
-	Win32_CloseHandle(FileHandle.Handle);
-}
+{ Win32_CloseHandle(FileHandle.Handle); }
 
 internal void
 Platform_GetFileTime(
@@ -528,11 +526,25 @@ Platform_GetTime(void)
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
 {
-	u16 AVals[] = { A.Year,	  A.Month,	A.Day,		  A.Hour,
-					A.Minute, A.Second, A.Millisecond };
-	u16 BVals[] = { B.Year,	  B.Month,	B.Day,		  B.Hour,
-					B.Minute, B.Second, B.Millisecond };
-	u32 Count	= sizeof(AVals) / sizeof(AVals[0]);
+	u16 AVals[] = {
+		A.Year,
+		A.Month,
+		A.Day,
+		A.Hour,
+		A.Minute,
+		A.Second,
+		A.Millisecond,
+	};
+	u16 BVals[] = {
+		B.Year,
+		B.Month,
+		B.Day,
+		B.Hour,
+		B.Minute,
+		B.Second,
+		B.Millisecond,
+	};
+	u32 Count = sizeof(AVals) / sizeof(AVals[0]);
 	for (u32 I = 0; I < Count; I++) {
 		if (AVals[I] < BVals[I]) return LESS;
 		if (AVals[I] > BVals[I]) return GREATER;
@@ -546,15 +558,11 @@ Platform_CreateThread(
 	s32 (*Callback)(vptr UserData),
 	vptr UserData
 )
-{
-	return FALSE;
-}
+{ return FALSE; }
 
 internal b08
 Platform_JoinThread(thread_handle ThreadHandle)
-{
-	return FALSE;
-}
+{ return FALSE; }
 
 internal void
 Platform_LockMutex(u32 *Mutex)
@@ -581,15 +589,11 @@ Platform_GetThreadId(thread_handle *ThreadHandle)
 
 internal b08
 Platform_IsModuleBackendOpened(platform_module *Module)
-{
-	return !!Module->DLL;
-}
+{ return !!Module->DLL; }
 
 internal void
 Platform_OpenModuleBackend(platform_module *Module)
-{
-	Module->DLL = Win32_LoadLibraryA(Module->FileName);
-}
+{ Module->DLL = Win32_LoadLibraryA(Module->FileName); }
 
 internal void
 Platform_CloseModuleBackend(platform_module *Module)
@@ -679,28 +683,28 @@ Platform_WindowCallback(
 			u32					   Size;
 			win32_raw_input_handle Handle = (vptr) LParam;
 			u32					   Res	  = Win32_GetRawInputData(
-				  Handle,
-				  RID_INPUT,
-				  NULL,
-				  &Size,
-				  sizeof(win32_raw_input_header)
-			  );
+				Handle,
+				RID_INPUT,
+				NULL,
+				&Size,
+				sizeof(win32_raw_input_header)
+			);
 			Assert(Res == 0);
 			win32_raw_input *Data = Stack_Allocate(sizeof(win32_raw_mouse));
 			Res					  = Win32_GetRawInputData(
-				  Handle,
-				  RID_INPUT,
-				  Data,
-				  &Size,
-				  sizeof(win32_raw_input_header)
-			  );
+				Handle,
+				RID_INPUT,
+				Data,
+				&Size,
+				sizeof(win32_raw_input_header)
+			);
 			Assert(Res == sizeof(win32_raw_input));
 
 			if (Data->Mouse.Flags & MOUSE_MOVE_ABSOLUTE) {
 				Assert(FALSE, "Absolute mouse movement not supported.");
 			} else {
-				_G.CursorPos = (v2s32) { _G.CursorPos.X + Data->Mouse.LastX,
-										 _G.CursorPos.Y - Data->Mouse.LastY };
+				_G.CursorPos = (v2s32){ _G.CursorPos.X + Data->Mouse.LastX,
+					_G.CursorPos.Y - Data->Mouse.LastY };
 			}
 
 			// Automatically goes through RI_MOUSE_BUTTON_1_DOWN/UP,
@@ -781,15 +785,15 @@ Platform_ParseCommandLine(void)
 	for (u32 I = 0; I < _G.ArgCount; I++) {
 		_G.Args[I] = CLEString(Cursor, Sizes[I], STRING_ENCODING_ASCII);
 		u32 S	   = Win32_WideCharToMultiByte(
-			 CP_UTF8,
-			 0,
-			 Args[I],
-			 -1,
-			 _G.Args[I].Text,
-			 Sizes[I],
-			 NULL,
-			 NULL
-		 );
+			CP_UTF8,
+			0,
+			Args[I],
+			-1,
+			_G.Args[I].Text,
+			Sizes[I],
+			NULL,
+			NULL
+		);
 		Assert(S == Sizes[I]);
 		Cursor += Sizes[I];
 	}
@@ -808,7 +812,7 @@ Platform_Exit(u32 ExitCode)
 external void
 Platform_Entry(void)
 {
-	_F = (platform_funcs) {
+	_F = (platform_funcs){
 #define EXPORT(R, N, ...) N,
 #define X PLATFORM_FUNCS
 #include <x.h>
