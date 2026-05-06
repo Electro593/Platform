@@ -24,7 +24,7 @@ typedef struct wayland_window_state {
 	s32 Width;
 	s32 Height;
 
-	u32				  FrontBufferIndex;
+	u32				  BackBufferIndex;
 	wayland_buffer	 *Buffers[2];
 	wayland_callback *FrameCallback;
 } wayland_window_state;
@@ -517,24 +517,7 @@ Wayland_Frame(wayland_callback *This, u32 CallbackData)
 	FrameCallback->Done				= Wayland_Frame;
 	Window->FrameCallback			= FrameCallback;
 
-	u32 Index				 = Window->FrontBufferIndex;
-	Window->FrontBufferIndex = (Index + 1) % 2;
-
-	OpenGL_BindFramebuffer(
-		GL_FRAMEBUFFER,
-		_G.Wayland.Egl.FramebufferIds[Index]
-	);
-	OpenGL_Finish();
-
-	Wayland_Surface_Attach(Window->Surface, Window->Buffers[Index], 0, 0);
-	Wayland_Surface_DamageBuffer(
-		Window->Surface,
-		0,
-		0,
-		Window->Width,
-		Window->Height
-	);
-	Wayland_Surface_Commit(Window->Surface);
+	Wayland_SwapBuffers();
 }
 
 internal s32
@@ -615,100 +598,11 @@ Wayland_SwapBuffers(void)
 {
 	wayland_window_state *Window = &_G.Wayland.Window;
 
-	u32 Index				 = Window->FrontBufferIndex;
-	u32 NextIndex			 = (Index + 1) % 2;
-	Window->FrontBufferIndex = NextIndex;
+	u32 Index				= Window->BackBufferIndex;
+	u32 NextIndex			= (Index + 1) % 2;
+	Window->BackBufferIndex = NextIndex;
 
 	OpenGL_Finish();
-
-#if 0
-	for (usize I = 0; I < 2; I++) {
-		gbm_bo *Bo = _G.Wayland.Gbm.BufferObjects[I];
-
-		gbm_bo *BlitTarget = Gbm_BoCreate(
-			_G.Wayland.Gbm.Device,
-			Gbm_BoGetWidth(Bo),
-			Gbm_BoGetHeight(Bo),
-			Gbm_BoGetFormat(Bo),
-			GBM_BO_USE_LINEAR
-		);
-
-		// clang-format off
-		egl_attrib ImageAttribs[] = {
-			EGL_IMAGE_ATTRIB_WIDTH,                 Gbm_BoGetWidth(BlitTarget),
-			EGL_IMAGE_ATTRIB_HEIGHT,                Gbm_BoGetHeight(BlitTarget),
-			EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,      Gbm_BoGetFormat(BlitTarget),
-			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,     Gbm_BoGetFd(BlitTarget),
-			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET, 0,
-			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,  Gbm_BoGetStride(BlitTarget),
-			0x3443, Gbm_BoGetModifier(BlitTarget) & 0xFFFFFFFF,
-			0x3444, Gbm_BoGetModifier(BlitTarget) >> 32,
-			EGL_IMAGE_ATTRIB_NONE
-		};
-		// clang-format on
-
-		egl_image EglImage = Egl_CreateImage(
-			_G.Wayland.Egl.Display,
-			EGL_NO_CONTEXT,
-			EGL_IMAGE_TARGET_LINUX_DMA_BUF,
-			NULL,
-			ImageAttribs
-		);
-
-		u32 RenderbufferId;
-		OpenGL_GenRenderbuffers(1, &RenderbufferId);
-		OpenGL_BindRenderbuffer(GL_RENDERBUFFER, RenderbufferId);
-		OpenGL_EGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, EglImage);
-
-		u32 FramebufferId;
-		OpenGL_GenFramebuffers(1, &FramebufferId);
-		OpenGL_BindFramebuffer(GL_FRAMEBUFFER, FramebufferId);
-		OpenGL_FramebufferRenderbuffer(
-			GL_FRAMEBUFFER,
-			GL_COLOR_ATTACHMENT0,
-			GL_RENDERBUFFER,
-			RenderbufferId
-		);
-
-		OpenGL_BindFramebuffer(
-			GL_READ_FRAMEBUFFER,
-			_G.Wayland.Egl.FramebufferIds[I]
-		);
-		OpenGL_BindFramebuffer(GL_DRAW_FRAMEBUFFER, FramebufferId);
-		OpenGL_BlitFramebuffer(
-			0,
-			0,
-			Gbm_BoGetWidth(Bo),
-			Gbm_BoGetHeight(Bo),
-			0,
-			0,
-			Gbm_BoGetWidth(BlitTarget),
-			Gbm_BoGetHeight(BlitTarget),
-			GL_COLOR_BUFFER_BIT,
-			GL_NEAREST
-		);
-		OpenGL_Finish();
-
-		u32	 Width	 = Gbm_BoGetWidth(BlitTarget);
-		u32	 Height	 = Gbm_BoGetHeight(BlitTarget);
-		u32	 Stride	 = 0;
-		vptr MapData = 0;
-		u32 *Map	 = Gbm_BoMap(
-			BlitTarget,
-			0,
-			0,
-			Width,
-			Height,
-			GBM_BO_TRANSFER_READ,
-			&Stride,
-			&MapData
-		);
-
-		for (usize Y = 0; Y < Height; Y++)
-			for (usize X = 0; X < Width; X++)
-				if (Map[Y * Width + X]) STOP;
-	}
-#endif
 
 	Wayland_Surface_Attach(Window->Surface, Window->Buffers[Index], 0, 0);
 	Wayland_Surface_DamageBuffer(
@@ -812,20 +706,22 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 			Wayland_ZwpLinuxDmabufV1_CreateParams(_G.Wayland.ZwpLinuxDmabufV1);
 		BufferParams[I]->Created = Wayland_ZwpLinuxBufferParamsV1_Created;
 		BufferParams[I]->Failed	 = Wayland_ZwpLinuxBufferParamsV1_Failed;
+
+		gbm_bo *Bo = _G.Wayland.Gbm.BufferObjects[I];
 		Wayland_ZwpLinuxBufferParamsV1_Add(
 			BufferParams[I],
-			Gbm_BoGetFd(_G.Wayland.Gbm.BufferObjects[I]),
+			Gbm_BoGetFd(Bo),
 			0,
 			0,
-			Gbm_BoGetStride(_G.Wayland.Gbm.BufferObjects[I]),
-			_G.Wayland.DrmFormatModifier >> 32,
-			_G.Wayland.DrmFormatModifier & 0xFFFFFFFF
+			Gbm_BoGetStride(Bo),
+			Gbm_BoGetModifier(Bo) >> 32,
+			Gbm_BoGetModifier(Bo) & 0xFFFFFFFF
 		);
 		Wayland_ZwpLinuxBufferParamsV1_Create(
 			BufferParams[I],
-			Width,
-			Height,
-			_G.Wayland.DrmFormat,
+			Gbm_BoGetWidth(Bo),
+			Gbm_BoGetHeight(Bo),
+			Gbm_BoGetFormat(Bo),
 			0
 		);
 	}
@@ -854,7 +750,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	// Wait for the configure events to pass
 	Wayland_SyncAndHandleEvents();
 
-	Window->FrontBufferIndex = 0;
+	Window->BackBufferIndex = 0;
 	Wayland_SwapBuffers();
 
 	return Surface;

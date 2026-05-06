@@ -470,7 +470,6 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		EGL_CONFIG_SAMPLE_BUFFERS,    1,
 		EGL_CONFIG_SAMPLES,           4,
 
-		EGL_CONFIG_SURFACE_TYPE,      EGL_SURFACE_TYPE_WINDOW,
 		EGL_CONFIG_CONFORMANT,        EGL_CONFORMANCE_OPENGL,
 		EGL_CONFIG_RENDERABLE_TYPE,   EGL_RENDERABLE_TYPE_OPENGL,
 		EGL_CONFIG_NONE
@@ -591,7 +590,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	for (usize I = 0; I < 2; I++) {
 		gbm_bo *Bo = Gbm->BufferObjects[I];
 
-		u64 Modifier = Gbm_BoGetModifier(Bo);
+		drm_format_modifier Modifier = Gbm_BoGetModifier(Bo);
 
 		// clang-format off
 		egl_attrib ImageAttribs[17] = {
