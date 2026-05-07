@@ -528,13 +528,28 @@ Wayland_EventHandlerThread(vptr Data)
 {
 	wayland_event Event;
 
+	usize PollsSinceLastEvent = 0;
 	while (Wayland_IsConnected()) {
 		Platform_LockMutex(&_G.Wayland.SyncLock);
+
 		if (Wayland_PollEventQueue(20, &Event)) {
 			Wayland_DispatchEvent(Event);
 			Wayland_DestroyEvent(Event);
+
+			PollsSinceLastEvent = 0;
+		} else {
+			PollsSinceLastEvent++;
 		}
+
 		Platform_UnlockMutex(&_G.Wayland.SyncLock);
+
+		if (PollsSinceLastEvent) {
+			usize BackoffExponent = MIN(PollsSinceLastEvent, 10);
+			usize NanosecondDelay = 1000 << BackoffExponent;
+
+			sys_timespec Delay = { .Seconds = 0, .Nano = NanosecondDelay };
+			Sys_NanoSleep(&Delay, NULL);
+		}
 	}
 
 	return 0;
@@ -544,6 +559,7 @@ internal void
 Wayland_SyncAndHandleEvents(void)
 {
 	wayland_event Event;
+
 	Platform_LockMutex(&_G.Wayland.SyncLock);
 
 	wayland_callback *SyncCallback = Wayland_Display_Sync(_G.Wayland.Display);
