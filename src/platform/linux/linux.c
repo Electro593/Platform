@@ -123,8 +123,6 @@ typedef enum sys_errno {
 
 #define SYS_SOCKET_STREAM 1
 
-#define SYS_CLOCK_REALTIME 0
-
 #define SYS_DEV_MAJOR(ID) (((ID & 0x00000000000FFF00ull) >> 8) | ((ID & 0xFFFFF00000000000ull) >> 32))
 #define SYS_DEV_MINOR(ID) (((ID & 0x00000000000000FFull) >> 0) | ((ID & 0x00000FFFFFF00000ull) >> 12))
 
@@ -183,6 +181,16 @@ typedef struct sys_cmsghdr {
 	u08			   Data[];
 } sys_cmsghdr;
 
+typedef enum sys_clock {
+	SYS_CLOCK_REALTIME	= 0,
+	SYS_CLOCK_MONOTONIC = 1,
+} sys_clock;
+
+typedef struct sys_timespec {
+	u64 Seconds;
+	u64 Nano;
+} sys_timespec;
+
 typedef struct sys_stat {
 	u64 DeviceId;
 	u64 Inode;
@@ -198,19 +206,89 @@ typedef struct sys_stat {
 	s64 BlockSize;
 	s64 BlockCount;
 
-	u64 LastAccess;
-	u64 LastAccessNano;
-	u64 LastContentChange;
-	u64 LastContentChangeNano;
-	u64 LastStatusChange;
-	u64 LastStatusChangeNano;
+	sys_timespec LastAccess;
+	sys_timespec LastContentChange;
+	sys_timespec LastStatusChange;
+
 	s64 _Padding1[3];
 } sys_stat;
 
-typedef struct sys_timespec {
+typedef enum sys_statx_mask_flags {
+	SYS_STATX_MASK_TYPE			 = 0x00000001u,
+	SYS_STATX_MASK_MODE			 = 0x00000002u,
+	SYS_STATX_MASK_NLINK		 = 0x00000004u,
+	SYS_STATX_MASK_UID			 = 0x00000008u,
+	SYS_STATX_MASK_GID			 = 0x00000010u,
+	SYS_STATX_MASK_ATIME		 = 0x00000020u,
+	SYS_STATX_MASK_MTIME		 = 0x00000040u,
+	SYS_STATX_MASK_CTIME		 = 0x00000080u,
+	SYS_STATX_MASK_INO			 = 0x00000100u,
+	SYS_STATX_MASK_SIZE			 = 0x00000200u,
+	SYS_STATX_MASK_BLOCKS		 = 0x00000400u,
+	SYS_STATX_MASK_BASIC_STATS	 = 0x000007FFu,
+	SYS_STATX_MASK_BTIME		 = 0x00000800u,
+	SYS_STATX_MASK_MNT_ID		 = 0x00001000u,
+	SYS_STATX_MASK_DIOALIGN		 = 0x00002000u,
+	SYS_STATX_MASK_MNT_ID_UNIQUE = 0x00004000u,
+	SYS_STATX_MASK_SUBVOL		 = 0x00008000u,
+	SYS_STATX_MASK_WRITE_ATOMIC	 = 0x00010000u,
+} sys_statx_mask_flags;
+
+typedef enum sys_statx_flags {
+	SYS_STATX_FLAG_EMPTY_PATH = 0x1000
+} sys_statx_flags;
+
+typedef struct sys_statx_timestamp {
 	s64 Seconds;
-	s64 Nano;
-} sys_timespec;
+	u32 Nanoseconds;
+	s32 _Padding0;
+} sys_statx_timestamp;
+
+typedef struct sys_statx {
+	sys_statx_mask_flags Mask;
+
+	u32 BlockSize;
+	u64 Attributes;
+	u32 HardLinkCount;
+	u32 UserId;
+	u32 GgroupId;
+	u16 Mode;
+	u16 _Padding0;
+
+	u64 InodeId;
+	u64 Size;
+	u64 BlockCount;
+	u64 AttributesMask;
+
+	sys_statx_timestamp LastAccessTime;
+	sys_statx_timestamp CreationTime;
+	sys_statx_timestamp LastStatusChangeTime;
+	sys_statx_timestamp LastWriteTime;
+
+	u32 DevMajorId;
+	u32 DevMinorId;
+
+	u32 FilesystemDeviceMajorId;
+	u32 FilesystemDeviceMinorId;
+
+	u64 MountId;
+
+	u32 DirectIoMemAlign;
+	u32 DirectIoOffsetAlign;
+
+	u64 SubvolumeId;
+
+	u32 AtomicWriteUnitMin;
+	u32 AtomicWriteUnitMax;
+	u32 AtomicWriteSegmentsMax;
+
+	u32 DirectIoReadOffsetAlign;
+
+	u32 AtomicWriteUnitMaxOpt;
+	u32 _Padding1;
+
+	u64 _Padding2[9];
+} sys_statx;
 
 typedef ssize sys_time;
 typedef ssize sys_suseconds;
@@ -308,9 +386,10 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(79,  GetCwd,       s32,     c08 *Buffer, ssize Size) \
 	SYSCALL(186, GetTid,       s32,     void) \
 	SYSCALL(202, Futex,        s32,     u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
-	SYSCALL(228, GetClockTime, s32,     s32 ClockID, sys_timespec *Timespec) \
-	SYSCALL(229, GetClockRes,  s32,     s32 ClockID, sys_timespec *Timespec) \
+	SYSCALL(228, GetClockTime, s32,     sys_clock Clock, sys_timespec *Timespec) \
+	SYSCALL(229, GetClockRes,  s32,     sys_clock Clock, sys_timespec *Timespec) \
 	SYSCALL(319, MemfdCreate,  s32,     c08 *Name, u32 Flags) \
+	SYSCALL(332, StatX,        s32,     s32 Fd, c08 *Path, sys_statx_flags Flags, sys_statx_mask_flags Mask, sys_statx *Stat) \
 	//
 
 #endif	// defined(_X64)

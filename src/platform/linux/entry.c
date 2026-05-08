@@ -153,33 +153,12 @@ Platform_JoinThread(thread_handle ThreadHandle)
 }
 
 internal void
-Platform_LogMutex(s32 Tid, u32 *Mutex, c08 *Message)
-{
-#if 0 && defined(_DEBUG)
-	s32 Value = *Mutex;
-	_BufInit(Buf, 2048);
-	_StrToBuf(&Buf, "[");
-	_IntToBuf(&Buf, Tid, 10);
-	_StrToBuf(&Buf, "] ");
-	_StrToBuf(&Buf, Message);
-	_StrToBuf(&Buf, " ");
-	_IntToBuf(&Buf, (usize) Mutex, 16);
-	_StrToBuf(&Buf, " (");
-	_IntToBuf(&Buf, Value, 10);
-	_StrToBuf(&Buf, ")\n");
-	Platform_WriteConsole(_BufToStr(&Buf));
-#endif
-}
-
-internal void
 Platform_LockMutex(u32 *Mutex)
 {
 	Assert(Mutex);
 
 	s32 Tid = Sys_GetTid();
-	Platform_LogMutex(Tid, Mutex, "Attempting to lock");
 
-	s32 WaitCount = 0;
 	while (1) {
 		// If it's unlocked, lock it and return.
 		s32 OldValue = Intrin_CompareExchange32(Mutex, 0, 1);
@@ -190,9 +169,6 @@ Platform_LockMutex(u32 *Mutex)
 		OldValue = Intrin_CompareExchange32(Mutex, 1, 2);
 		if (OldValue == 0) continue;
 
-		if (WaitCount < 10) Platform_LogMutex(Tid, Mutex, "Waiting to lock");
-		WaitCount++;
-
 		// The lock is contended, so we'll sleep on it. If it was unlocked (and
 		// potentially re-locked) between then and now, futex will return EAGAIN
 		// immediately and we'll try again. Otherwise, we'll sleep until WAKE is
@@ -200,22 +176,17 @@ Platform_LockMutex(u32 *Mutex)
 		s32 Result = Sys_Futex(Mutex, SYS_FUTEX_WAIT, 2, NULL, NULL, 0);
 		if (Result < 0) Assert(Result == -SYS_EAGAIN);
 	}
-
-	Platform_LogMutex(Tid, Mutex, "Locked");
 }
 
 internal void
 Platform_UnlockMutex(u32 *Mutex)
 {
 	Assert(Mutex);
-
 	s32 Tid = Sys_GetTid();
-	Platform_LogMutex(Tid, Mutex, "Attempting to unlock");
 
 	// Unlock the mutex.
 	s32 OldValue = Intrin_Exchange32(Mutex, 0);
 	Assert(OldValue != 0);
-	Platform_LogMutex(Tid, Mutex, "Unlocked");
 
 	// If it was contended, wake up a sleeping thread that was waiting on it.
 	if (OldValue == 2) Sys_Futex(Mutex, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
@@ -303,8 +274,6 @@ internal void
 Platform_CloseFile(file_handle FileHandle)
 { VALIDATE(Sys_Close(FileHandle.FileDescriptor), "Failed to close the file"); }
 
-// TODO Make this use a file handle
-
 internal void
 Platform_GetFileTime(
 	c08		 *FileName,
@@ -313,28 +282,50 @@ Platform_GetFileTime(
 	datetime *LastWriteTime
 )
 {
-	// TODO
-	// 	sys_stat Stat;
-	//
-	// 	file_handle FileHandle;
-	// 	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
-	// 	s32 Result = Sys_FileStat(FileHandle.FileDescriptor, &Stat);
-	// 	Platform_CloseFile(FileHandle);
-	// 	VALIDATE(Result, "Failed to stat the file");
+	sys_statx Stat;
+
+	file_handle FileHandle;
+	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
+	s32 Result = Sys_StatX(
+		FileHandle.FileDescriptor,
+		"",
+		SYS_STATX_FLAG_EMPTY_PATH,
+		SYS_STATX_MASK_ATIME | SYS_STATX_MASK_BTIME | SYS_STATX_MASK_CTIME,
+		&Stat
+	);
+	Platform_CloseFile(FileHandle);
+	VALIDATE(Result, "Failed to stat the file");
+
+	if (CreationTime) *CreationTime = Stat.CreationTime;
+	if (LastAccessTime) *LastAccessTime = Stat.LastAccessTime;
+	if (LastWriteTime) *LastWriteTime = Stat.LastWriteTime;
+}
+
+internal timestamp
+Platform_GetTimestamp(void)
+{
+	sys_timespec Time;
+	Sys_GetClockTime(SYS_CLOCK_MONOTONIC, &Time);
+	return Time;
 }
 
 internal r64
-Platform_GetTime(void)
+Platform_GetSecondsElapsed(timestamp From, timestamp To)
 {
-	// TODO
-	return 0;
+	r64 DeltaSeconds = (r64) To.Seconds - From.Seconds;
+	r64 DeltaNano	 = (r64) To.Nano - From.Nano;
+
+	return DeltaSeconds + DeltaNano / 1000000000;
 }
 
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
 {
-	// TODO
-	return 0;
+	if (A.Seconds < B.Seconds) return LESS;
+	if (A.Seconds > B.Seconds) return GREATER;
+	if (A.Nanoseconds < B.Nanoseconds) return LESS;
+	if (A.Nanoseconds > B.Nanoseconds) return GREATER;
+	return EQUAL;
 }
 
 internal void
@@ -475,6 +466,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	Platform_LoadDependencies();
 
 	Platform_LoadModule(CStringL("base"));
+
+	timestamp StartTime = Platform_GetTimestamp();
 
 	HASHMAP_FOREACH (
 		I,

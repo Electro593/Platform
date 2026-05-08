@@ -9,17 +9,6 @@
 
 #ifdef INCLUDE_HEADER
 
-typedef struct datetime {
-	u16 Year;
-	u08 Month;
-	u08 Day;
-	u08 DayOfWeek;
-	u08 Hour;
-	u08 Minute;
-	u08 Second;
-	u16 Millisecond;
-} datetime;
-
 typedef struct platform_module platform_module;
 typedef struct opengl_funcs	   opengl_funcs;
 
@@ -34,6 +23,9 @@ typedef void func_Module_Unload(platform_state *State);
 #define TEXTURES_DIR "assets/textures/"
 
 #if defined(_WIN32)
+typedef win32_file_time datetime;
+typedef s64				timestamp;
+
 typedef struct file_handle {
 	win32_handle Handle;
 } file_handle;
@@ -45,6 +37,9 @@ typedef struct thread_handle {
 #define NULL_FILE_HANDLE (file_handle){ .Handle = INVALID_HANDLE_VALUE }
 
 #elif defined(_LINUX)
+typedef sys_statx_timestamp datetime;
+typedef sys_timespec		timestamp;
+
 typedef struct file_handle {
 	u32 FileDescriptor;
 } file_handle;
@@ -296,7 +291,8 @@ typedef enum file_mode {
 	EXPORT(void,             Platform_FreeMemory,            vptr Base, u64 Size) \
 	EXPORT(u64,              Platform_GetFileLength,         file_handle FileHandle) \
 	EXPORT(void,             Platform_GetFileTime,           c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
-	EXPORT(r64,              Platform_GetTime,               void) \
+	EXPORT(timestamp,        Platform_GetTimestamp,          void) \
+	EXPORT(r64,              Platform_GetSecondsElapsed,     timestamp From, timestamp To) \
 	EXPORT(void,             Platform_UnloadModule,          platform_module *Module) \
 	EXPORT(b08,              Platform_ReloadModule,          platform_module *Module) \
 	EXPORT(platform_module*, Platform_LoadModule,            string Name) \

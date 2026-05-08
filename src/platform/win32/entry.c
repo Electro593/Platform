@@ -495,62 +495,38 @@ Platform_GetFileTime(
 	datetime *LastWriteTime
 )
 {
-	file_handle		FileHandle;
-	win32_file_time _Times[3];
-	datetime	   *Times[3] = { CreationTime, LastAccessTime, LastWriteTime };
+	file_handle FileHandle;
 	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
-	Win32_GetFileTime(FileHandle.Handle, _Times + 0, _Times + 1, _Times + 2);
+	Win32_GetFileTime(
+		FileHandle.Handle,
+		CreationTime,
+		LastAccessTime,
+		LastWriteTime
+	);
 	Platform_CloseFile(FileHandle);
+}
 
-	win32_system_time SystemTime;
-	for (u32 I = 0; I < 3; I++) {
-		if (!Times[I]) continue;
-		Win32_FileTimeToSystemTime(_Times + I, &SystemTime);
-		Times[I]->Year		  = SystemTime.Year;
-		Times[I]->Month		  = SystemTime.Month;
-		Times[I]->Day		  = SystemTime.Day;
-		Times[I]->DayOfWeek	  = SystemTime.DayOfWeek;
-		Times[I]->Hour		  = SystemTime.Hour;
-		Times[I]->Minute	  = SystemTime.Minute;
-		Times[I]->Second	  = SystemTime.Second;
-		Times[I]->Millisecond = SystemTime.Milliseconds;
-	}
+internal timestamp
+Platform_GetTimestamp(void)
+{
+	s64 Ticks;
+	Win32_QueryPerformanceCounter(&Ticks);
+	return Ticks;
 }
 
 internal r64
-Platform_GetTime(void)
+Platform_GetSecondsElapsed(timestamp From, timestamp To)
 {
-	s64 Counts = 0;
-	Win32_QueryPerformanceCounter(&Counts);
-	return (r64) Counts / CounterFrequency;
+	return (r64) (To - From) / CounterFrequency;
 }
 
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
 {
-	u16 AVals[] = {
-		A.Year,
-		A.Month,
-		A.Day,
-		A.Hour,
-		A.Minute,
-		A.Second,
-		A.Millisecond,
-	};
-	u16 BVals[] = {
-		B.Year,
-		B.Month,
-		B.Day,
-		B.Hour,
-		B.Minute,
-		B.Second,
-		B.Millisecond,
-	};
-	u32 Count = sizeof(AVals) / sizeof(AVals[0]);
-	for (u32 I = 0; I < Count; I++) {
-		if (AVals[I] < BVals[I]) return LESS;
-		if (AVals[I] > BVals[I]) return GREATER;
-	}
+	if (A.HighDateTime < B.HighDateTime) return LESS;
+	if (A.HighDateTime > B.HighDateTime) return GREATER;
+	if (A.LowDateTime < B.LowDateTime) return LESS;
+	if (A.LowDateTime > B.LowDateTime) return GREATER;
 	return EQUAL;
 }
 
