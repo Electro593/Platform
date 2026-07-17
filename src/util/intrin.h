@@ -11,49 +11,6 @@
 
 #ifdef _X64
 
-#ifdef _MSVC
-
-typedef union __declspec(intrin_type) __declspec(align(16)) __m128 {
-	r32 R32[4];
-	r64 R64[2];
-} r128;
-
-void __debugbreak(void);
-void __nop(void);
-u64	 __rdtsc(void);
-u64	 __readgsqword(u32 Offset);
-u64	 __popcnt64(u64 Value);
-u08	 _BitScanForward64(u32 *Index, u64 Mask);
-u08	 _BitScanReverse(u32 *Index, u32 Mask);
-u08	 _BitScanReverse64(u32 *Index, u64 Mask);
-r128 _mm_sqrt_ps(r128);
-r128 _mm_set_ps(r32, r32, r32, r32);
-
-#define Intrin_ReadGSQWord(u32_Offset)                     RETURNS(u64)  __readgsqword(u32_Offset)
-#define Intrin_DebugBreak()                             RETURNS(void) __debugbreak()
-#define Intrin_Nop()                                    RETURNS(void) __nop()
-#define Intrin_Popcount64(u64_Value)                    RETURNS(u64)  __popcnt64(u64_Value)
-#define Intrin_ReadTimeStampCounter()                      RETURNS(u64)  __rdtsc()
-#define Intrin_BitScanForward64(u32_p_Index, u64_Value) RETURNS(b08)  _BitScanForward64(u32_p_Index, u64_Value)
-#define Intrin_BitScanReverse32(u32_p_Index, u32_Value) RETURNS(b08)  _BitScanReverse(u32_p_Index, u32_Value)
-#define Intrin_BitScanReverse64(u32_p_Index, u64_Value) RETURNS(b08)  _BitScanReverse(u32_p_Index, u64_Value)
-
-inline r32
-Intrin_Sqrt_R32(r32 Value)
-{ return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(Value))); }
-
-typedef u08 *va_list;
-void		 __va_start(va_list *Args, ...);
-#define VA_Start(Args, Start) ((void)(__va_start(&Args, Start)))
-#define VA_Next(Args, Type) \
-	((sizeof(Type) > 8 || (sizeof(Type) & (sizeof(Type) - 1)) != 0) /*Pointer or not a power of 2*/ \
-		? **(Type**)((Args += 8) - 8) \
-		:  *(Type* )((Args += 8) - 8))
-#define VA_Copy(Dest, Src) ((Dest) = (Src))
-#define VA_End(Args) ((void)(Args = NULL))
-
-#elif defined(_GCC)
-
 intrin u64
 Intrin_ReadGSQWord(u32 Offset)
 {
@@ -155,35 +112,33 @@ Intrin_Exchange32(u32 *Data, u32 Value)
 }
 
 intrin u08
-Intrin_CompareExchange08(u08 *Mutex, u08 Target, u08 NewValue)
+Intrin_CompareExchange08(u08 *Value, u08 Target, u08 NewValue)
 {
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Mutex));
+	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
 	return Target;
 }
 
 intrin u16
-Intrin_CompareExchange16(u16 *Mutex, u16 Target, u16 NewValue)
+Intrin_CompareExchange16(u16 *Value, u16 Target, u16 NewValue)
 {
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Mutex));
+	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
 	return Target;
 }
 
 intrin u32
-Intrin_CompareExchange32(u32 *Mutex, u32 Target, u32 NewValue)
+Intrin_CompareExchange32(u32 *Value, u32 Target, u32 NewValue)
 {
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Mutex));
+	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
 	return Target;
 }
 
 intrin u64
-Intrin_CompareExchange64(u64 *Mutex, u64 Target, u64 NewValue)
+Intrin_CompareExchange64(u64 *Value, u64 Target, u64 NewValue)
 {
 	u64 OldValue = Target;
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Mutex));
+	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
 	return Target;
 }
-
-#endif
 
 #endif
 

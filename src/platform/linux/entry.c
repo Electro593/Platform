@@ -153,43 +153,60 @@ Platform_JoinThread(thread_handle ThreadHandle)
 }
 
 internal void
-Platform_LockMutex(u32 *Mutex)
+Platform_CreateMutex(mutex_handle *Mutex)
+{
+	Assert(Mutex);
+	Mutex->Value = 0;
+}
+
+internal void
+Platform_DestroyMutex(mutex_handle *Mutex)
+{
+	Assert(Mutex);
+	Assert(!Mutex->Value);
+}
+
+internal void
+Platform_LockMutex(mutex_handle *Mutex)
 {
 	Assert(Mutex);
 
-	s32 Tid = Sys_GetTid();
+	s32	 Tid   = Sys_GetTid();
+	u32 *Value = &Mutex->Value;
 
 	while (1) {
 		// If it's unlocked, lock it and return.
-		s32 OldValue = Intrin_CompareExchange32(Mutex, 0, 1);
+		s32 OldValue = Intrin_CompareExchange32(Value, 0, 1);
 		if (OldValue == 0) break;
 
 		// Attempt to set it to contended. If it was unlocked between then and
 		// now, go back and attempt to re-lock it.
-		OldValue = Intrin_CompareExchange32(Mutex, 1, 2);
+		OldValue = Intrin_CompareExchange32(Value, 1, 2);
 		if (OldValue == 0) continue;
 
 		// The lock is contended, so we'll sleep on it. If it was unlocked (and
 		// potentially re-locked) between then and now, futex will return EAGAIN
 		// immediately and we'll try again. Otherwise, we'll sleep until WAKE is
 		// signalled, at which point we'll try again.
-		s32 Result = Sys_Futex(Mutex, SYS_FUTEX_WAIT, 2, NULL, NULL, 0);
+		s32 Result = Sys_Futex(Value, SYS_FUTEX_WAIT, 2, NULL, NULL, 0);
 		if (Result < 0) Assert(Result == -SYS_EAGAIN);
 	}
 }
 
 internal void
-Platform_UnlockMutex(u32 *Mutex)
+Platform_UnlockMutex(mutex_handle *Mutex)
 {
 	Assert(Mutex);
-	s32 Tid = Sys_GetTid();
+
+	s32	 Tid   = Sys_GetTid();
+	u32 *Value = &Mutex->Value;
 
 	// Unlock the mutex.
-	s32 OldValue = Intrin_Exchange32(Mutex, 0);
+	s32 OldValue = Intrin_Exchange32(Value, 0);
 	Assert(OldValue != 0);
 
 	// If it was contended, wake up a sleeping thread that was waiting on it.
-	if (OldValue == 2) Sys_Futex(Mutex, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
+	if (OldValue == 2) Sys_Futex(Value, SYS_FUTEX_WAKE, 1, NULL, NULL, 0);
 }
 
 internal b08
@@ -296,24 +313,24 @@ Platform_GetFileTime(
 	Platform_CloseFile(FileHandle);
 	VALIDATE(Result, "Failed to stat the file");
 
-	if (CreationTime) *CreationTime = Stat.CreationTime;
-	if (LastAccessTime) *LastAccessTime = Stat.LastAccessTime;
-	if (LastWriteTime) *LastWriteTime = Stat.LastWriteTime;
+	if (CreationTime) CreationTime->Value = Stat.CreationTime;
+	if (LastAccessTime) LastAccessTime->Value = Stat.LastAccessTime;
+	if (LastWriteTime) LastWriteTime->Value = Stat.LastWriteTime;
 }
 
 internal timestamp
 Platform_GetTimestamp(void)
 {
-	sys_timespec Time;
-	Sys_GetClockTime(SYS_CLOCK_MONOTONIC, &Time);
-	return Time;
+	timestamp Timestamp;
+	Sys_GetClockTime(SYS_CLOCK_MONOTONIC, &Timestamp.Value);
+	return Timestamp;
 }
 
 internal r64
 Platform_GetSecondsElapsed(timestamp From, timestamp To)
 {
-	r64 DeltaSeconds = (r64) To.Seconds - From.Seconds;
-	r64 DeltaNano	 = (r64) To.Nano - From.Nano;
+	r64 DeltaSeconds = (r64) To.Value.Seconds - From.Value.Seconds;
+	r64 DeltaNano	 = (r64) To.Value.Nano - From.Value.Nano;
 
 	return DeltaSeconds + DeltaNano / 1000000000;
 }
@@ -321,10 +338,10 @@ Platform_GetSecondsElapsed(timestamp From, timestamp To)
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
 {
-	if (A.Seconds < B.Seconds) return LESS;
-	if (A.Seconds > B.Seconds) return GREATER;
-	if (A.Nanoseconds < B.Nanoseconds) return LESS;
-	if (A.Nanoseconds > B.Nanoseconds) return GREATER;
+	if (A.Value.Seconds < B.Value.Seconds) return LESS;
+	if (A.Value.Seconds > B.Value.Seconds) return GREATER;
+	if (A.Value.Nanoseconds < B.Value.Nanoseconds) return LESS;
+	if (A.Value.Nanoseconds > B.Value.Nanoseconds) return GREATER;
 	return EQUAL;
 }
 
@@ -370,11 +387,11 @@ Platform_CloseModuleBackend(platform_module *Module)
 	Module->ELF = NULL;
 }
 
-internal void
+internal void __attribute__((noreturn))
 Platform_Exit(u32 ExitCode)
 {
 	Sys_Exit(ExitCode);
-	UNREACHABLE;
+	while (1);
 }
 
 internal void

@@ -9,6 +9,7 @@
 
 #if !defined(INCLUDE_SOURCE) && !defined(INCLUDE_HEADER)
 #include <shared.h>
+#include <platform/shared.h>
 
 #define INCLUDE_HEADER
 #include <util/main.c>
@@ -29,11 +30,12 @@ global platform_funcs _F;
 
 #include <platform/opengl.h>
 #if defined(_WIN32)
-#include <platform/win32/win32.c>
 #include <platform/platform.c>
 #elif defined(_LINUX)
-#include <platform/linux/linux.c>
 #include <platform/platform.c>
+#ifdef INCLUDE_SOURCE
+#include <platform/linux/linux.c>
+#endif
 #include <platform/linux/wayland/drm.c>
 #include <platform/linux/wayland/gbm.c>
 #include <platform/linux/wayland/egl.c>

@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-check -fno-stack-protector -Werror"
+CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -Werror"
 CompilerSwitches="$CompilerSwitches -Wno-unused-function -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
 CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_WORD_SIZE=64"
@@ -56,6 +56,7 @@ if [[ "$Platform" = "win32" ]]; then
 	CompilerSwitches="$CompilerSwitches -D_WIN32"
 	ExeSuffix=".exe"
 	DllSuffix=".dll"
+	DllLinkerSwitches="--entry=0"
 elif [[ "$Platform" = "linux" ]]; then
 	echo "Building for linux"
 	CompilerSwitches="$CompilerSwitches -D_LINUX"
@@ -98,7 +99,7 @@ else
 fi
 
 DllCompilerSwitches="$DllCompilerSwitches $CompilerSwitches -fPIC"
-DLLLinkerSwitches="$DLLLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
+DllLinkerSwitches="$DllLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
 
 if [[ -d build ]]; then rm -rf build > /dev/null; fi
 mkdir build > /dev/null
@@ -107,6 +108,15 @@ if [[ -e build/*.pdb ]]; then rm *.pdb > /dev/null 2> /dev/null; fi
 if [[ -e build/*.i ]]; then rm *.i > /dev/null; fi
 
 Result=0
+
+print_dump() {
+	objdump --source-comment -M intel "build/$1$2" > "build/$1.dump.asm"
+	if [ "$Platform" = "win32" ]; then
+		objdump -x "build/$1$2" > "build/$1.dump.dat"
+	else
+		readelf -a -x .data -x .got.plt "build/$1$2" > "build/$1.dump.dat"
+	fi
+}
 
 build_module() {
 	ModuleName=$(basename $Module)
@@ -117,11 +127,10 @@ build_module() {
 	elif [ "$ModuleName" = "loader" ]; then
 		if [ "$UseLoader" = "true" ]; then
 			echo Building $Module as a library
-			gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
-			gcc $DllCompilerSwitches $DLLLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
+			gcc $DllCompilerSwitches $DllLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+			gcc $DllCompilerSwitches $DllLinkerSwitches -eLoader_Entry -Wl,-z,now,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 			if [[ -e "build/$ModuleName$DllSuffix" ]]; then
-				objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
-				readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
+				print_dump $ModuleName $DllSuffix
 			else
 				echo Setting result after module $Module
 				Result=1
@@ -132,19 +141,17 @@ build_module() {
 		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -Wl,-rpath,. -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}linux/entry.c"
 		gcc $ExeCompilerSwitches $ExeLinkerSwitches -ePlatform_Entry -Wl,-rpath,. -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$ExeSuffix" "${Module}${Platform}/entry.c"
 		if [[ -e "build/$ModuleName$ExeSuffix" ]]; then
-			objdump --source-comment -M intel "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.asm"
-			readelf -a -x .data -x .got.plt "build/$ModuleName$ExeSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
+			print_dump $ModuleName $ExeSuffix
 		else
 			echo Setting result after module $Module
 			Result=1
 		fi
 	else
 		echo Building $Module as a library
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
-		gcc $DllCompilerSwitches $DLLLinkerSwitches -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
+		gcc $DllCompilerSwitches $DllLinkerSwitches -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
+		gcc $DllCompilerSwitches $DllLinkerSwitches -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName$DllSuffix" "${Module}main.c"
 		if [[ -e "build/$ModuleName$DllSuffix" ]]; then
-			objdump --source-comment -M intel "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.asm"
-			readelf -a -x .data -x .got.plt "build/$ModuleName$DllSuffix" > "build/$ModuleName.dump.dat" 2> /dev/null
+			print_dump $ModuleName $DllSuffix
 		else
 			echo Setting result after module $Module
 			Result=1

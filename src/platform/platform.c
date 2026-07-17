@@ -9,9 +9,6 @@
 
 #ifdef INCLUDE_HEADER
 
-typedef struct platform_module platform_module;
-typedef struct opengl_funcs	   opengl_funcs;
-
 typedef void func_Module_Load(platform_state *State, platform_module *Module);
 typedef void func_Module_Init(platform_state *State);
 typedef void func_Module_Update(platform_state *State);
@@ -21,39 +18,6 @@ typedef void func_Module_Unload(platform_state *State);
 #define FONTS_DIR    "assets/fonts/"
 #define SHADERS_DIR  "assets/shaders/"
 #define TEXTURES_DIR "assets/textures/"
-
-#if defined(_WIN32)
-typedef win32_file_time datetime;
-typedef s64				timestamp;
-
-typedef struct file_handle {
-	win32_handle Handle;
-} file_handle;
-
-typedef struct thread_handle {
-	s32 ThreadId;
-} thread_handle;
-
-#define NULL_FILE_HANDLE (file_handle){ .Handle = INVALID_HANDLE_VALUE }
-
-#elif defined(_LINUX)
-typedef sys_statx_timestamp datetime;
-typedef sys_timespec		timestamp;
-
-typedef struct file_handle {
-	u32 FileDescriptor;
-} file_handle;
-
-typedef struct thread_handle {
-	s32	  ThreadId;
-	vptr  Stack;
-	usize StackSize;
-} thread_handle;
-
-#define NULL_FILE_HANDLE (file_handle){ .FileDescriptor = SYS_FILE_NONE }
-#else
-#error Unsupported platform
-#endif
 
 struct platform_module {
 	c08 *FileName;
@@ -304,8 +268,10 @@ typedef enum file_mode {
 	INTERN(void,             Platform_CloseModuleBackend,    platform_module *Module) \
 	EXPORT(b08,              Platform_CreateThread,          thread_handle *ThreadHandle, s32 (*Callback)(vptr UserParam), vptr UserParam) \
 	EXPORT(b08,              Platform_JoinThread,            thread_handle ThreadHandle) \
-	EXPORT(void,             Platform_LockMutex,             u32 *Mutex) \
-	EXPORT(void,             Platform_UnlockMutex,           u32 *Mutex) \
+	EXPORT(void,             Platform_CreateMutex,           mutex_handle *Mutex) \
+	EXPORT(void,             Platform_DestroyMutex,          mutex_handle *Mutex) \
+	EXPORT(void,             Platform_LockMutex,             mutex_handle *Mutex) \
+	EXPORT(void,             Platform_UnlockMutex,           mutex_handle *Mutex) \
 	EXPORT(string,           Platform_GetEnvParam,           string Name) \
 	EXPORT(s08,              Platform_CmpFileTime,           datetime A, datetime B) \
 	EXPORT(b08,              Platform_OpenFile,              file_handle *FileHandle, c08 *FileName, file_mode OpenMode) \

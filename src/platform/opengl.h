@@ -125,7 +125,7 @@ typedef enum opengl_debug_severity {
 #define GL_STENICL_BUFFER_BIT 0x00000400
 #define GL_COLOR_BUFFER_BIT   0x00004000
 
-typedef void(API_ENTRY func_OpenGL_DebugProc)(
+typedef void(func_OpenGL_DebugProc)(
 	u32	 Source,
 	u32	 Type,
 	u32	 ID,

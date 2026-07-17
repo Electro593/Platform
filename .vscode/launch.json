@@ -8,24 +8,17 @@
             "name": "Debug Program (Windows)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/platform",
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
+            "program": "gdb",
+            "args": [
+                "build/platform.exe",
+                "-x",
+                "Platform/scripts/.gdbinit"
+            ],
+            "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build Program (MS)",
             "environment": [],
             "MIMode": "gdb",
             "externalConsole": true,
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                },
-                {
-                    "text": "source ${workspaceFolder}/Platform/scripts/windows.gdbinit",
-                    "ignoreFailures": false
-                }
-            ]
         },
         {
             "name": "Debug Program (Linux)",
@@ -37,14 +30,7 @@
                 ">",
                 "output.log"
 			],
-            "sourceFileMap": {
-                "${workspaceFolder}": {
-                    "editorPath": "${workspaceFolder}",
-                    "useForBreakpoints": true
-                }
-            },
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
+            "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build Program (SH)",
             "environment": [],
             "MIMode": "gdb",
@@ -55,7 +41,7 @@
                     "ignoreFailures": true
                 },
                 {
-                    "text": "source ${workspaceFolder}/Platform/scripts/linux.gdbinit",
+                    "text": "source ${workspaceFolder}/Platform/scripts/.gdbinit",
                     "ignoreFailures": false
                 }
             ]

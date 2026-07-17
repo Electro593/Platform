@@ -151,6 +151,8 @@ Platform_LoadOpenGL(void)
 {
 	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
 
+	Platform_LoadWGL();
+
 	s32 PixelFormatAttribs[] = {
 		WGL_DRAW_TO_WINDOW_ARB,
 		TRUE,
@@ -298,9 +300,7 @@ Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 
 internal void
 Platform_SwapBuffers(void)
-{
-	// TODO
-}
+{ Win32_SwapBuffers(DeviceContext); }
 
 internal vptr
 Platform_AllocateMemory(u64 Size)
@@ -516,9 +516,7 @@ Platform_GetTimestamp(void)
 
 internal r64
 Platform_GetSecondsElapsed(timestamp From, timestamp To)
-{
-	return (r64) (To - From) / CounterFrequency;
-}
+{ return (r64) (To - From) / CounterFrequency; }
 
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
@@ -538,6 +536,7 @@ Platform_CreateThread(
 )
 {
 	// TODO
+	Assert(FALSE);
 	return FALSE;
 }
 
@@ -545,19 +544,33 @@ internal b08
 Platform_JoinThread(thread_handle ThreadHandle)
 {
 	// TODO
+	Assert(FALSE);
 	return FALSE;
 }
 
+internal mutex
+Platform_CreateMutex(void)
+{ return Win32_CreateMutex(NULL, FALSE, NULL); }
+
 internal void
-Platform_LockMutex(u32 *Mutex)
+Platform_DestroyMutex(mutex *Mutex)
 {
-	// TODO
+	Assert(Mutex);
+	Win32_CloseHandle(*Mutex);
 }
 
 internal void
-Platform_UnlockMutex(u32 *Mutex)
+Platform_LockMutex(mutex *Mutex)
 {
-	// TODO
+	Assert(Mutex);
+	Win32_WaitForSingleObject(*Mutex, 0);
+}
+
+internal void
+Platform_UnlockMutex(mutex *Mutex)
+{
+	Assert(Mutex);
+	Win32_ReleaseMutex(*Mutex);
 }
 
 internal void
@@ -771,8 +784,12 @@ Platform_ParseCommandLine(void)
 
 	c08 *Cursor = (c08 *) (_G.Args + _G.ArgCount);
 	for (u32 I = 0; I < _G.ArgCount; I++) {
-		_G.Args[I] = CLEString(Cursor, Sizes[I], STRING_ENCODING_ASCII);
-		u32 S	   = Win32_WideCharToMultiByte(
+		_G.Args[I] = (string){
+			.Text	  = Cursor,
+			.Length	  = Sizes[I],
+			.Encoding = STRING_ENCODING_ASCII,
+		};
+		u32 S = Win32_WideCharToMultiByte(
 			CP_UTF8,
 			0,
 			Args[I],
@@ -790,11 +807,11 @@ Platform_ParseCommandLine(void)
 	Platform_FreeMemory(Sizes, _G.ArgCount * sizeof(u32));
 }
 
-internal void
+internal void __attribute__((noreturn))
 Platform_Exit(u32 ExitCode)
 {
 	Win32_ExitProcess(ExitCode);
-	UNREACHABLE;
+	while (1);
 }
 
 external void
@@ -902,8 +919,6 @@ Platform_Entry(void)
 			Module->Update(&_G);
 			if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		}
-
-		if (_G.WindowedApp) Win32_SwapBuffers(DeviceContext);
 
 		s64 EndTime;
 		Win32_QueryPerformanceCounter(&EndTime);

@@ -163,8 +163,8 @@ typedef struct wayland_api_state {
 	heap *Heap;
 	usize HeapSize;
 
-	s32 Socket;
-	u32 Lock;
+	s32			 Socket;
+	mutex_handle Lock;
 
 	b08 Attempted;
 	b08 Connected;

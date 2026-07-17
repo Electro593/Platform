@@ -29,16 +29,16 @@ typedef struct heap_handle {
 } heap_handle;
 
 typedef struct {
-	u32 Mutex;
+	mutex_handle Mutex;
 
 	heap_handle Handles[];
 } heap;
 
 typedef struct stack {
-	u32	  Mutex;
-	usize Size;
-	u08	 *Cursor;
-	vptr *FirstMarker;
+	mutex_handle Mutex;
+	usize		 Size;
+	u08			*Cursor;
+	vptr		*FirstMarker;
 } stack;
 
 #define MEMORY_FUNCS \
@@ -195,8 +195,8 @@ Heap_Init(vptr MemBase, u64 Size)
 	Assert(Size > HeaderSize);
 	Assert(Size - HeaderSize < (1ull << 46));
 
-	heap *Heap	= MemBase;
-	Heap->Mutex = 0;
+	heap *Heap = MemBase;
+	Platform_CreateMutex(&Heap->Mutex);
 
 	heap_handle *NullUsedHandle = Heap->Handles;
 	NullUsedHandle->Data		= (u08 *) NullUsedHandle;
@@ -668,6 +668,7 @@ Stack_Init(vptr Mem, usize Size)
 	Result->Size		= Size - sizeof(stack);
 	Result->FirstMarker = NULL;
 	Result->Cursor		= (u08 *) Mem + sizeof(stack);
+	Platform_CreateMutex(&Result->Mutex);
 
 	return Result;
 }

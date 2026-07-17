@@ -7,72 +7,8 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#if defined(_MSVC)
-#define API_ENTRY  __stdcall
-#define API_IMPORT __declspec(dllimport)
-#define API_EXPORT __declspec(dllexport)
-#define UNREACHABLE __assume(false)
-#elif defined(_GCC)
-#define API_ENTRY
-#define API_IMPORT
-#define API_EXPORT
-#define UNREACHABLE __builtin_unreachable();
-#endif
-
-#define global   static
-#define persist  static
-#define internal static
-#define intrin   static inline
-#define external API_EXPORT
-
-#define RETURNS(...)
-
-#define FORCE_CAST(OldType, Constant, NewType) (((union { OldType A; NewType B; }){ .A = (Constant) }).B)
-#define OFFSET_OF(Type, Element) ((u64)&(((Type*)0)->Element))
-#define INDEX_2D(X, Y, MaxX) ((X) + ((Y) * (MaxX)))
-#define INDEX_3D(X, Y, Z, MaxX, MaxY) ((X) + ((Y) * (MaxX)) + ((Z) * (MaxX) * (MaxY)))
-#define SWAP(A, B, Type) do { Type _A = A; A = B; B = _A; } while(0)
-#define MIN(A, B) ((A) < (B) ? (A) : (B))
-#define MAX(A, B) ((A) > (B) ? (A) : (B))
-#define FLAG_SET(Value, Flag) (((Value) & (Flag)) == (Flag))
-#define ALIGN_UP(Value, Size) (((Value) + ((Size) - 1)) & ~((Size) - 1))
-
-#include <macro.h>
-
-#define Error(Message) do {                                                   \
-	Platform_Assert(__FILE__, __LINE__, "", Message);                         \
-	STOP;                                                                     \
-} while(0)
-
-#define Printf(Format, ...) do {                                              \
-	Stack_Push();                                                             \
-	string Fmt = CString(Format);                                             \
-	Platform_WriteConsole(FString(Fmt __VA_OPT__(,) __VA_ARGS__));            \
-	Stack_Pop();                                                              \
-} while(0)
-
-#ifdef _DEBUG
-#define Assert(Expression, ...)                                               \
-    do {                                                                      \
-        if (!(Expression)) {                                                  \
-			Platform_Assert(__FILE__, __LINE__, #Expression, "" __VA_ARGS__); \
-			STOP;                                                             \
-		}                                                                     \
-    } while(0)
-#define STOP Intrin_DebugBreak()
-#define NOP Intrin_Nop()
-#else
-#define Assert(...) while(0) { }
-#define STOP Platform_Exit(-1)
-#define NOP while(0) { }
-#endif
-
-#define NULL ((vptr)0)
-#define FALSE 0
-#define TRUE  1
-#define LESS  (-1)
-#define EQUAL   0
-#define GREATER 1
+#ifndef _SHARED_H
+#define _SHARED_H
 
 typedef signed char	  s08;
 typedef unsigned char u08;
@@ -127,7 +63,60 @@ typedef char c08;
 typedef u16	 c16;
 typedef u32	 c32;
 
-typedef struct platform_state platform_state;
+#define global   static
+#define persist  static
+#define internal static
+#define intrin   static inline
+#define external
+
+#define RETURNS(...)
+
+#define FORCE_CAST(OldType, Constant, NewType) (((union { OldType A; NewType B; }){ .A = (Constant) }).B)
+#define OFFSET_OF(Type, Element) ((u64)&(((Type*)0)->Element))
+#define INDEX_2D(X, Y, MaxX) ((X) + ((Y) * (MaxX)))
+#define INDEX_3D(X, Y, Z, MaxX, MaxY) ((X) + ((Y) * (MaxX)) + ((Z) * (MaxX) * (MaxY)))
+#define SWAP(A, B, Type) do { Type _A = A; A = B; B = _A; } while(0)
+#define MIN(A, B) ((A) < (B) ? (A) : (B))
+#define MAX(A, B) ((A) > (B) ? (A) : (B))
+#define FLAG_SET(Value, Flag) (((Value) & (Flag)) == (Flag))
+#define ALIGN_UP(Value, Size) (((Value) + ((Size) - 1)) & ~((Size) - 1))
+
+#include <macro.h>
+
+#define Error(Message) do {                                                   \
+	Platform_Assert(__FILE__, __LINE__, "", Message);                         \
+	STOP;                                                                     \
+} while(0)
+
+#define Printf(Format, ...) do {                                              \
+	Stack_Push();                                                             \
+	string Fmt = CString(Format);                                             \
+	Platform_WriteConsole(FString(Fmt __VA_OPT__(,) __VA_ARGS__));            \
+	Stack_Pop();                                                              \
+} while(0)
+
+#ifdef _DEBUG
+#define Assert(Expression, ...)                                               \
+    do {                                                                      \
+        if (!(Expression)) {                                                  \
+			Platform_Assert(__FILE__, __LINE__, #Expression, "" __VA_ARGS__); \
+			STOP;                                                             \
+		}                                                                     \
+    } while(0)
+#define STOP Intrin_DebugBreak()
+#define NOP Intrin_Nop()
+#else
+#define Assert(...) while(0) { }
+#define STOP Platform_Exit(-1)
+#define NOP while(0) { }
+#endif
+
+#define NULL ((vptr)0)
+#define FALSE 0
+#define TRUE  1
+#define LESS  (-1)
+#define EQUAL   0
+#define GREATER 1
 
 #define TYPES \
     ENUM(S08,  s08) \
@@ -201,4 +190,6 @@ s32 _fltused;
 s32
 DllMainCRTStartup()
 { return TRUE; }
+#endif
+
 #endif

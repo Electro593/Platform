@@ -9,6 +9,7 @@
 
 #if !defined(INCLUDE_HEADER) && !defined(INCLUDE_SOURCE)
 #include <shared.h>
+#include <platform/shared.h>
 
 #define INCLUDE_HEADER
 #include <util/main.c>

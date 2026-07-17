@@ -39,7 +39,7 @@ typedef struct wayland_state {
 
 	thread_handle EventThread;
 
-	u32 SyncLock;
+	mutex_handle SyncLock;
 
 	wayland_display	 *Display;
 	wayland_registry *Registry;
