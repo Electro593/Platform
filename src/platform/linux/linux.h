@@ -7,8 +7,8 @@
 *                                                                            *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#ifndef _PLATFORM_LINUX_H
-#define _PLATFORM_LINUX_H
+#ifndef _PLATFORM_LINUX_LINUX_H
+#define _PLATFORM_LINUX_LINUX_H
 
 #if _X64
 
@@ -395,4 +395,4 @@ extern s32	dlclose(vptr Handle);
 
 #endif	// defined(_X64)
 
-#endif	// !defined(_PLATFORM_LINUX_H)
+#endif	// !defined(_PLATFORM_LINUX_LINUX_H)

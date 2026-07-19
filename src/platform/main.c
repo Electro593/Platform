@@ -29,10 +29,12 @@ global platform_funcs _F;
 #endif
 
 #include <platform/opengl.h>
+#include <platform/platform.c>
 #if defined(_WIN32)
-#include <platform/platform.c>
+#ifdef INCLUDE_SOURCE
+#include <platform/win32/win32.c>
+#endif
 #elif defined(_LINUX)
-#include <platform/platform.c>
 #ifdef INCLUDE_SOURCE
 #include <platform/linux/linux.c>
 #endif

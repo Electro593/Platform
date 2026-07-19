@@ -106,6 +106,8 @@ typedef enum fstring_format_status {
 /// `FSTRING_FORMAT_SIZE_*` are used internally for the type parser state
 /// machine; only `TYPE_*` and `FLAG_*` values are relevant beyond that case.
 typedef enum fstring_format_type {
+	FSTRING_FORMAT_NONE = 0,
+
 	FSTRING_FORMAT_SIZE_INITIAL	  = 1,
 	FSTRING_FORMAT_SIZE_HALFHALF  = 2,
 	FSTRING_FORMAT_SIZE_HALF	  = 3,
@@ -360,6 +362,7 @@ typedef struct fstring_format_list {
 #define STRING_FUNCS \
 	EXPORT(string, CLEString, vptr Text, usize Length, string_encoding Encoding) \
 	EXPORT(string, CString,   c08 *Text) \
+	EXPORT(string, CNString,  c08 *Text) \
 	EXPORT(string, HString,   heap *Heap, c08 *Text) \
 	EXPORT(string, LString,   usize Length) \
 	\
@@ -455,6 +458,19 @@ CString(c08 *Text)
 {
 	if (!Text) return EString();
 	usize Length = Mem_BytesUntil((u08 *) Text, 0);
+	return CLEString(Text, Length, STRING_ENCODING_ASCII);
+}
+
+/// @brief Constructs a new string given a null-terminated ASCII C string. The
+/// string's length is the number of bytes up to and including the first null
+/// byte encountered. This may segfault if there isn't a null terminator.
+/// @param Text A pointer to the C string to use. Will be interpreted as ASCII.
+/// @return The newly constructed string.
+internal string
+CNString(c08 *Text)
+{
+	if (!Text) return EString();
+	usize Length = Mem_BytesUntil((u08 *) Text, 0) + 1;
 	return CLEString(Text, Length, STRING_ENCODING_ASCII);
 }
 
@@ -802,8 +818,9 @@ String_NextCodepoint(string *String)
 		default: Assert(FALSE, "Unknown encoding format"); return 0;
 	}
 
+	usize Count = String->Count > 0 ? String->Count - 1 : 0;
 	String_BumpBytes(String, Delta);
-	if (String->Count) String->Count--;
+	String->Count = Count;
 	return Codepoint;
 }
 
@@ -1408,7 +1425,8 @@ FString_ParseFormat(
 	);
 	if (Status == FSTRING_FORMAT_INDEX_NOT_PRESENT) {
 		// This can still be valid if the number is actually a width.
-		Format.Width = Format.ValueIndex;
+		Format.Width	  = Format.ValueIndex;
+		Format.ValueIndex = 0;
 		goto precision;
 	}
 	if (Status != FSTRING_FORMAT_VALID) return Status;
@@ -1497,14 +1515,13 @@ FString_ParseFormatString(
 	fstring_format_list *FormatListOut
 )
 {
-	if (FormatListOut) Mem_Set(FormatListOut, 0, sizeof(fstring_format_list));
+	fstring_format_list FormatList = { 0 };
+	if (FormatListOut) *FormatListOut = FormatList;
 	if (!FormatCursor || !FormatCursor->Text || !FormatCursor->Length)
 		return FSTRING_FORMAT_VALID;
 
-	fstring_format_status Status	 = FSTRING_FORMAT_VALID;
-	fstring_format_list	  FormatList = { 0 };
-	Mem_Set(&FormatList, 0, sizeof(fstring_format_list));
-	FormatList.FormatString = *FormatCursor;
+	fstring_format_status Status = FSTRING_FORMAT_VALID;
+	FormatList.FormatString		 = *FormatCursor;
 
 	// First we have to iterate through to determine the number of formats and
 	// params.
@@ -1519,7 +1536,7 @@ FString_ParseFormatString(
 				fstring_format Format;
 
 				// As an optimization, we only need to parse the formats if
-				// indexes or used, or to determine whether params are used in
+				// indexes are used, or to determine whether params are used in
 				// the first place.
 				b08 First = FormatList.FormatCount == 0;
 				Status	  = FString_ParseFormat(
@@ -1666,24 +1683,23 @@ FVString_UpdateParamReferences(fstring_format_list *FormatList, va_list Args)
 		// Architectures can depend on the size of args you provide to determine
 		// the next ones, so redefining a type can make later param types
 		// ambiguous.
-		if (Params[Format->ValueIndex - 1].Type
-			&& (Params[Format->ValueIndex - 1].Type & Mask) != Format->Type)
-			goto redefined;
-		Params[Format->ValueIndex - 1].Type = Format->Type;
+		fstring_format_type *ValueType = &Params[Format->ValueIndex - 1].Type;
+		if (*ValueType && (*ValueType & Mask) != Format->Type) goto redefined;
+		*ValueType = Format->Type;
 
 		if (Format->Type & FSTRING_FORMAT_FLAG_PARAM_WIDTH) {
-			if (Params[Format->WidthIndex - 1].Type
-				&& (Params[Format->WidthIndex - 1].Type & Mask) != IndexType)
-				goto redefined;
-			Params[Format->WidthIndex - 1].Type = IndexType;
+			fstring_format_type *WidthType =
+				&Params[Format->WidthIndex - 1].Type;
+			if (*WidthType && (*WidthType & Mask) != IndexType) goto redefined;
+			*WidthType = IndexType;
 		}
 
 		if (Format->Type & FSTRING_FORMAT_FLAG_PARAM_PRECISION) {
-			if (Params[Format->PrecisionIndex - 1].Type
-				&& (Params[Format->PrecisionIndex - 1].Type & Mask)
-					   != IndexType)
+			fstring_format_type *PrecisionType =
+				&Params[Format->PrecisionIndex - 1].Type;
+			if (*PrecisionType && (*PrecisionType & Mask) != IndexType)
 				goto redefined;
-			Params[Format->PrecisionIndex - 1].Type = IndexType;
+			*PrecisionType = IndexType;
 		}
 
 		continue;
@@ -4830,6 +4846,11 @@ FPrint(string Format, ...)
 		Assert(Result.Encoding == STRING_ENCODING_UTF32);                                                   \
 		Assert(String_Cmp(Result, Expected) == 0);                                                          \
 		Assert(Query == 148);                                                                               \
+	))                                                                                                      \
+	TEST(FString, HandlesNullTerminator, (                                                                  \
+		string Format = CNStringL("%d");                                                                    \
+		string Result = FString(Format, 1);                                                                 \
+		Assert(String_Cmp(Result, CNStringL("1")) == 0);                                                    \
 	))                                                                                                      \
 	TEST(FString, HandlesNoFormats, (                                                                       \
 		string Format = CStringL("Hello! Your have no lucky number today. :(");                             \

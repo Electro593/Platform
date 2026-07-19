@@ -22,7 +22,7 @@ typedef struct thread_handle thread_handle;
 
 #if defined(_WIN32)
 
-#include <platform/win32/win32.c>
+#include <platform/win32/win32.h>
 
 struct datetime {
 	win32_file_time Value;

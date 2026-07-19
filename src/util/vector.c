@@ -53,10 +53,13 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
 #define DEFINE_VECTOR_CROSS(N, T)     DEFINE_VECTOR_CROSS_##N(T)
 
 #define VECTOR_FUNCS \
+   DEFINE_VECTOR_INIT(2, s32) \
+   DEFINE_VECTOR_ADD(2, s32) \
+   DEFINE_VECTOR_SUB(2, s32) \
+   \
    DEFINE_VECTOR_ADD(2, r32) \
    DEFINE_VECTOR_ADD(2, u32) \
    DEFINE_VECTOR_ADD(2, s16) \
-   DEFINE_VECTOR_ADD(2, s32) \
    DEFINE_VECTOR_ADD(3, r32) \
    DEFINE_VECTOR_ADD(3, s32) \
    \
@@ -66,7 +69,6 @@ DECLARE_MATRIX_TYPE(4, 4, r32);
    DEFINE_VECTOR_SUB(2, r32) \
    DEFINE_VECTOR_SUB(3, r32) \
    DEFINE_VECTOR_SUB(2, s16) \
-   DEFINE_VECTOR_SUB(2, s32) \
    DEFINE_VECTOR_SUB(2, u32) \
    \
    DEFINE_VECTOR_SUBS(3, r32) \
@@ -540,7 +542,7 @@ RayRectIntersectionA(
 }
 #endif
 
-#define DEFINE_VECTOR_INIT(N, T)      EXPORT(v##N##T,   V##N##T##_Init,        MAC_FOR(T, N, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC))
+#define DEFINE_VECTOR_INIT(N, T)      EXPORT(v##N##T,   V##N##T,               MAC_FOR(T, N, MAC_FOR_OP_SEQ, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC))
 #define DEFINE_VECTOR_ADD(N, T)       EXPORT(v##N##T,   V##N##T##_Add,         v##N##T, v##N##T)
 #define DEFINE_VECTOR_ADDS(N, T)      EXPORT(v##N##T,   V##N##T##_AddS,        v##N##T, T)
 #define DEFINE_VECTOR_SUB(N, T)       EXPORT(v##N##T,   V##N##T##_Sub,         v##N##T, v##N##T)

@@ -111,16 +111,16 @@ Platform_LoadWGL(void)
 	vptr DummyDeviceContext = Win32_GetDC(DummyWindow);
 
 	win32_pixel_format_descriptor PixelFormatDescriptor = { 0 };
-	PixelFormatDescriptor.Size		= sizeof(win32_pixel_format_descriptor);
-	PixelFormatDescriptor.Version	= 1;
-	PixelFormatDescriptor.PixelType = PFD_TYPE_RGBA;
+	PixelFormatDescriptor.Size	  = sizeof(win32_pixel_format_descriptor);
+	PixelFormatDescriptor.Version = 1;
 	PixelFormatDescriptor.Flags =
 		PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLE_BUFFER;
+	PixelFormatDescriptor.PixelType	  = PFD_TYPE_RGBA;
 	PixelFormatDescriptor.ColorBits	  = 32;
 	PixelFormatDescriptor.AlphaBits	  = 8;
-	PixelFormatDescriptor.LayerType	  = PFD_MAIN_PLANE;
 	PixelFormatDescriptor.DepthBits	  = 24;
 	PixelFormatDescriptor.StencilBits = 8;
+	PixelFormatDescriptor.LayerType	  = PFD_MAIN_PLANE;
 
 	s32 PixelFormat =
 		Win32_ChoosePixelFormat(DummyDeviceContext, &PixelFormatDescriptor);
@@ -133,8 +133,8 @@ Platform_LoadWGL(void)
 	WGL_MakeCurrent(DummyDeviceContext, DummyRenderContext);
 
 #define IMPORT(ReturnType, Name, ...) \
-      WGL_##Name = (func_WGL_##Name*)WGL_GetProcAddress("wgl" #Name); \
-      Assert(WGL_##Name);
+    WGL_##Name = (func_WGL_##Name*)WGL_GetProcAddress("wgl" #Name); \
+	Assert(WGL_##Name);
 #define X WGL_FUNCS_TYPE_2
 #include <x.h>
 
@@ -333,7 +333,9 @@ Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 	string Name;
 	if (_G.UtilIsLoaded) {
 		Stack_Push();
-		Name = FNStringL("%s", FileName);
+		Name	  = CNString(FileName);
+		Name.Text = Stack_Allocate(Name.Length);
+		Mem_Cpy(Name.Text, FileName, Name.Length);
 	} else {
 		Name.Length = _Mem_BytesUntil(FileName, 0);
 		Name.Text	= Platform_AllocateMemory(Name.Length);
@@ -499,9 +501,9 @@ Platform_GetFileTime(
 	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
 	Win32_GetFileTime(
 		FileHandle.Handle,
-		CreationTime,
-		LastAccessTime,
-		LastWriteTime
+		&CreationTime->Value,
+		&LastAccessTime->Value,
+		&LastWriteTime->Value
 	);
 	Platform_CloseFile(FileHandle);
 }
@@ -509,22 +511,22 @@ Platform_GetFileTime(
 internal timestamp
 Platform_GetTimestamp(void)
 {
-	s64 Ticks;
-	Win32_QueryPerformanceCounter(&Ticks);
-	return Ticks;
+	timestamp Timestamp;
+	Win32_QueryPerformanceCounter(&Timestamp.Value);
+	return Timestamp;
 }
 
 internal r64
 Platform_GetSecondsElapsed(timestamp From, timestamp To)
-{ return (r64) (To - From) / CounterFrequency; }
+{ return (r64) (To.Value - From.Value) / CounterFrequency; }
 
 internal s08
 Platform_CmpFileTime(datetime A, datetime B)
 {
-	if (A.HighDateTime < B.HighDateTime) return LESS;
-	if (A.HighDateTime > B.HighDateTime) return GREATER;
-	if (A.LowDateTime < B.LowDateTime) return LESS;
-	if (A.LowDateTime > B.LowDateTime) return GREATER;
+	if (A.Value.HighDateTime < B.Value.HighDateTime) return LESS;
+	if (A.Value.HighDateTime > B.Value.HighDateTime) return GREATER;
+	if (A.Value.LowDateTime < B.Value.LowDateTime) return LESS;
+	if (A.Value.LowDateTime > B.Value.LowDateTime) return GREATER;
 	return EQUAL;
 }
 
@@ -548,29 +550,32 @@ Platform_JoinThread(thread_handle ThreadHandle)
 	return FALSE;
 }
 
-internal mutex
-Platform_CreateMutex(void)
-{ return Win32_CreateMutex(NULL, FALSE, NULL); }
-
 internal void
-Platform_DestroyMutex(mutex *Mutex)
+Platform_CreateMutex(mutex_handle *Mutex)
 {
 	Assert(Mutex);
-	Win32_CloseHandle(*Mutex);
+	Mutex->Handle = Win32_CreateMutexA(NULL, FALSE, NULL);
 }
 
 internal void
-Platform_LockMutex(mutex *Mutex)
+Platform_DestroyMutex(mutex_handle *Mutex)
 {
 	Assert(Mutex);
-	Win32_WaitForSingleObject(*Mutex, 0);
+	Win32_CloseHandle(Mutex->Handle);
 }
 
 internal void
-Platform_UnlockMutex(mutex *Mutex)
+Platform_LockMutex(mutex_handle *Mutex)
 {
 	Assert(Mutex);
-	Win32_ReleaseMutex(*Mutex);
+	Win32_WaitForSingleObject(Mutex->Handle, 0);
+}
+
+internal void
+Platform_UnlockMutex(mutex_handle *Mutex)
+{
+	Assert(Mutex);
+	Win32_ReleaseMutex(Mutex->Handle);
 }
 
 internal void
@@ -608,13 +613,17 @@ Platform_HideCursor(win32_window Window)
 {
 	Win32_SetCursor(NULL);
 
-	Win32_GetCursorPos(&_G.RestoreCursorPos);
-	Win32_ScreenToClient(Window, &_G.RestoreCursorPos);
+	win32_point Cursor;
+	Win32_GetCursorPos((win32_point *) &Cursor);
+	Win32_ScreenToClient(Window, &Cursor);
+	_G.RestoreCursorPos = V2s32(Cursor.X, Cursor.Y);
 
 	win32_rect ClipRect;
 	Win32_GetClientRect(Window, &ClipRect);
-	Win32_ClientToScreen(Window, (v2s32 *) &ClipRect.Left);
-	Win32_ClientToScreen(Window, (v2s32 *) &ClipRect.Right);
+	win32_point Start = { .X = ClipRect.Left, .Y = ClipRect.Top };
+	win32_point End	  = { .X = ClipRect.Right, .Y = ClipRect.Bottom };
+	Win32_ClientToScreen(Window, &Start);
+	Win32_ClientToScreen(Window, &End);
 	Win32_ClipCursor(&ClipRect);
 }
 
@@ -623,7 +632,11 @@ Platform_ShowCursor(win32_window Window)
 {
 	Win32_ClipCursor(NULL);
 
-	Win32_ClientToScreen(Window, &_G.RestoreCursorPos);
+	win32_point Cursor = {
+		.X = _G.RestoreCursorPos.X,
+		.Y = _G.RestoreCursorPos.Y,
+	};
+	Win32_ClientToScreen(Window, &Cursor);
 	Win32_SetCursorPos(_G.RestoreCursorPos.X, _G.RestoreCursorPos.Y);
 
 	Win32_SetCursor(Win32_LoadCursorA(NULL, IDC_ARROW));
@@ -758,8 +771,10 @@ Platform_WindowCallback(
 }
 
 internal void
-Platform_ParseCommandLine(void)
+Platform_SetupArgTable(void)
 {
+	// TODO: Can this be retrieved from the TIB?
+
 	// Get and split the CLI arguments
 	c16	 *CmdLine = Win32_GetCommandLineW();
 	c16 **Args	  = Win32_CommandLineToArgvW(CmdLine, (s32 *) &_G.ArgCount);
@@ -807,6 +822,46 @@ Platform_ParseCommandLine(void)
 	Platform_FreeMemory(Sizes, _G.ArgCount * sizeof(u32));
 }
 
+static void
+Platform_SetupEnvTable(void)
+{
+	c16 *Variables = Win32_GetEnvironmentStringsW();
+
+	_G.EnvTable = HashMap_InitCustom(
+		_G.Heap,
+		sizeof(string),
+		sizeof(string),
+		128,
+		0.5f,
+		2.0f,
+		(hash_func) String_HashPtr,
+		NULL,
+		(cmp_func) String_CmpPtr,
+		NULL
+	);
+
+	// TODO: Convert these to unicode
+
+	c16 *C = Variables;
+	while (*C) {
+		c16 *Key = C;
+		while (*C != L'=') C++;
+		usize  KeyLen = (usize) C - (usize) Key;
+		string KeyStr = CLEString(Key, KeyLen, STRING_ENCODING_UTF16);
+		C++;
+
+		c16 *Value = C;
+		while (*C) C++;
+		usize  ValueLen = (usize) C - (usize) Value;
+		string ValueStr = CLEString(Value, ValueLen, STRING_ENCODING_UTF16);
+		C++;
+
+		HashMap_Add(&_G.EnvTable, &KeyStr, &ValueStr);
+	}
+
+	Win32_FreeEnvironmentStringsW(Variables);
+}
+
 internal void __attribute__((noreturn))
 Platform_Exit(u32 ExitCode)
 {
@@ -825,10 +880,12 @@ Platform_Entry(void)
 	_G.Funcs = &_F;
 
 	Platform_LoadWin32();
-	Platform_ParseCommandLine();
 	Win32_QueryPerformanceFrequency(&CounterFrequency);
 
 	platform_module *UtilModule = Platform_LoadModule(UTIL_MODULE_NAME);
+
+	Platform_SetupArgTable();
+	Platform_SetupEnvTable();
 
 	Platform_LoadModule(CStringL("base"));
 
@@ -847,9 +904,6 @@ Platform_Entry(void)
 		Module->Init(&_G);
 		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 	}
-
-	s64 CountsPerSecond;
-	Win32_QueryPerformanceFrequency(&CountsPerSecond);
 
 	s64 StartTime;
 	Win32_QueryPerformanceCounter(&StartTime);
@@ -926,7 +980,7 @@ Platform_Entry(void)
 		s64 ElapsedTime = EndTime - StartTime;
 		StartTime		= EndTime;
 
-		_G.FPS = CountsPerSecond / (r64) ElapsedTime;
+		_G.FPS = CounterFrequency / (r64) ElapsedTime;
 	}
 
 	HASHMAP_FOREACH (
@@ -947,6 +1001,9 @@ Platform_Entry(void)
 		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		Platform_UnloadModule(Module);
 	}
+
+	Heap_FreeA(_G.Args);
+	HashMap_Free(&_G.EnvTable);
 
 	Stack_Pop();
 

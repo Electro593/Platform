@@ -8,17 +8,22 @@
             "name": "Debug Program (Windows)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "gdb",
-            "args": [
-                "build/platform.exe",
-                "-x",
-                "Platform/scripts/.gdbinit"
-            ],
+            "program": "${workspaceFolder}/build/platform.exe",
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build Program (MS)",
             "environment": [],
             "MIMode": "gdb",
-            "externalConsole": true,
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "text": "source ${workspaceFolder}/Platform/scripts/.gdbinit",
+                    "ignoreFailures": false
+                }
+            ]
         },
         {
             "name": "Debug Program (Linux)",

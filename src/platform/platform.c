@@ -33,7 +33,6 @@ struct platform_module {
 
 	vptr Data;
 	vptr Funcs;
-	vptr DebugLoadAddress;
 
 	datetime LastWriteTime;
 
@@ -548,19 +547,7 @@ Platform_LoadModule(string Name)
 		Module->IsUtil	 = TRUE;
 	}
 
-	Module->Name			 = Name.Text;
-	Module->DebugLoadAddress = NULL;
-#ifdef _DEBUG
-	if (_Str_Cmp(Name.Text, "util") == EQUAL)
-		Module->DebugLoadAddress = (vptr) 0x7DB000000000;
-	else if (_Str_Cmp(Name.Text, "base") == EQUAL)
-		Module->DebugLoadAddress = (vptr) 0x7DB100000000;
-	else if (_Str_Cmp(Name.Text, "renderer_opengl") == EQUAL)
-		Module->DebugLoadAddress = (vptr) 0x7DB200000000;
-	else if (_Str_Cmp(Name.Text, "wayland") == EQUAL)
-		Module->DebugLoadAddress = (vptr) 0x7DB300000000;
-#endif
-
+	Module->Name = Name.Text;
 	Platform_ReloadModule(Module);
 
 	if (!UtilIsLoaded) {

@@ -476,10 +476,10 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	_G.WindowSize = (v2u32){ 800, 600 };
 
-	Platform_LoadModule(UTIL_MODULE_NAME);
+	platform_module *UtilModule = Platform_LoadModule(UTIL_MODULE_NAME);
+
 	Platform_SetupArgTable(ArgCount, Args);
 	Platform_SetupEnvTable(EnvCount, EnvParams);
-
 	Platform_LoadDependencies();
 
 	Platform_LoadModule(CStringL("base"));
@@ -532,6 +532,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		&_G.ModuleTable
 	)
 	{
+		if (Module->IsUtil) continue;
+
 		stack Stack;
 		if (_G.UtilIsLoaded) Stack = *Stack_Get();
 		Module->Deinit(&_G);
@@ -543,5 +545,9 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	HashMap_Free(&_G.EnvTable);
 
 	Stack_Pop();
+
+	UtilModule->Deinit(&_G);
+	Platform_UnloadModule(UtilModule);
+
 	Platform_Exit(0);
 }
