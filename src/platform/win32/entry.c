@@ -76,23 +76,33 @@ Platform_LoadWin32(void)
 #include <x.h>
 }
 
-internal void
-Platform_LoadWGL(void)
+opengl_funcs OpenGLFuncs;
+
+internal opengl_funcs *
+Platform_LoadOpenGL(void)
 {
+	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
+	u32 Error = 0;
+
 	win32_module OpenGL32 = Win32_LoadLibraryA("opengl32.dll");
+	Assert(OpenGL32 || !(Error = Win32_GetLastError()));
+
 #define IMPORT(ReturnType, Name, ...) \
-      WGL_##Name = (func_WGL_##Name*)Win32_GetProcAddress(OpenGL32, "wgl" #Name); \
-      Assert(WGL_##Name);
+	WGL_##Name = (func_WGL_##Name*)Win32_GetProcAddress(OpenGL32, "wgl" #Name); \
+	Assert(WGL_##Name || !(Error = Win32_GetLastError()));
 #define X WGL_FUNCS_TYPE_1
 #include <x.h>
 
 	win32_window_class_a DummyWindowClass = { 0 };
 	DummyWindowClass.Callback =
 		(func_Win32_WindowCallback) Win32_DefWindowProcA;
-	DummyWindowClass.Instance  = Win32_GetModuleHandleA(NULL);
 	DummyWindowClass.ClassName = "VoxarcDummyWindowClass";
+	DummyWindowClass.Instance  = Win32_GetModuleHandleA(NULL);
+	Assert(DummyWindowClass.Instance || !(Error = Win32_GetLastError()));
 
-	Win32_RegisterClassA(&DummyWindowClass);
+	win32_atom WindowClass = Win32_RegisterClassA(&DummyWindowClass);
+	Assert(WindowClass || !(Error = Win32_GetLastError()));
+
 	win32_window DummyWindow = Win32_CreateWindowExA(
 		0,
 		DummyWindowClass.ClassName,
@@ -107,8 +117,10 @@ Platform_LoadWGL(void)
 		DummyWindowClass.Instance,
 		NULL
 	);
+	Assert(DummyWindow || !(Error = Win32_GetLastError()));
 
 	vptr DummyDeviceContext = Win32_GetDC(DummyWindow);
+	Assert(DummyDeviceContext || !(Error = Win32_GetLastError()));
 
 	win32_pixel_format_descriptor PixelFormatDescriptor = { 0 };
 	PixelFormatDescriptor.Size	  = sizeof(win32_pixel_format_descriptor);
@@ -124,116 +136,49 @@ Platform_LoadWGL(void)
 
 	s32 PixelFormat =
 		Win32_ChoosePixelFormat(DummyDeviceContext, &PixelFormatDescriptor);
-	Win32_SetPixelFormat(
+	Assert(PixelFormat || !(Error = Win32_GetLastError()));
+
+	b08 Success = Win32_SetPixelFormat(
 		DummyDeviceContext,
 		PixelFormat,
 		&PixelFormatDescriptor
 	);
+	Assert(Success || !(Error = Win32_GetLastError()));
+
 	vptr DummyRenderContext = WGL_CreateContext(DummyDeviceContext);
-	WGL_MakeCurrent(DummyDeviceContext, DummyRenderContext);
+	Assert(DummyRenderContext || !(Error = Win32_GetLastError()));
+
+	Success = WGL_MakeCurrent(DummyDeviceContext, DummyRenderContext);
+	Assert(Success || !(Error = Win32_GetLastError()));
 
 #define IMPORT(ReturnType, Name, ...) \
     WGL_##Name = (func_WGL_##Name*)WGL_GetProcAddress("wgl" #Name); \
-	Assert(WGL_##Name);
+	Assert(WGL_##Name || !(Error = Win32_GetLastError()));
 #define X WGL_FUNCS_TYPE_2
 #include <x.h>
 
-	WGL_MakeCurrent(DummyDeviceContext, 0);
-	WGL_DeleteContext(DummyRenderContext);
-	Win32_ReleaseDC(DummyWindow, DummyDeviceContext);
-	Win32_DestroyWindow(DummyWindow);
-}
-
-opengl_funcs OpenGLFuncs;
-
-internal opengl_funcs *
-Platform_LoadOpenGL(void)
-{
-	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
-
-	Platform_LoadWGL();
-
-	s32 PixelFormatAttribs[] = {
-		WGL_DRAW_TO_WINDOW_ARB,
-		TRUE,
-		WGL_SUPPORT_OPENGL_ARB,
-		TRUE,
-		WGL_DOUBLE_BUFFER_ARB,
-		TRUE,
-		WGL_ACCELERATION_ARB,
-		WGL_FULL_ACCELERATION_ARB,
-		WGL_PIXEL_TYPE_ARB,
-		WGL_TYPE_RGBA_ARB,
-		WGL_COLOR_BITS_ARB,
-		32,
-		WGL_DEPTH_BITS_ARB,
-		24,
-		WGL_STENCIL_BITS_ARB,
-		8,
-		WGL_SAMPLE_BUFFERS_ARB,
-		1,
-		WGL_SAMPLES_ARB,
-		4,
-		0,
-	};
-
-	win32_pixel_format_descriptor PixelFormatDescriptor;
-	s32							  PixelFormat;
-	u32							  FormatCount;
-	WGL_ChoosePixelFormatARB(
-		DeviceContext,
-		PixelFormatAttribs,
-		0,
-		1,
-		&PixelFormat,
-		&FormatCount
-	);
-	Win32_DescribePixelFormat(
-		DeviceContext,
-		PixelFormat,
-		sizeof(win32_pixel_format_descriptor),
-		&PixelFormatDescriptor
-	);
-
-#if defined(_DEBUG)
-	u32 DebugBit = WGL_CONTEXT_DEBUG_BIT_ARB;
-#else
-	u32 DebugBit = 0;
-#endif
-
-	Win32_SetPixelFormat(DeviceContext, PixelFormat, &PixelFormatDescriptor);
-	s32 AttribList[] = {
-		WGL_CONTEXT_MAJOR_VERSION_ARB,
-		4,
-		WGL_CONTEXT_MINOR_VERSION_ARB,
-		6,
-		WGL_CONTEXT_FLAGS_ARB,
-		DebugBit | WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-		WGL_CONTEXT_PROFILE_MASK_ARB,
-		WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-		0,
-	};
-
-	win32_opengl_render_context RenderContext =
-		WGL_CreateContextAttribsARB(DeviceContext, 0, AttribList);
-	WGL_MakeCurrent(DeviceContext, RenderContext);
-
-	win32_handle OpenGL32 = Win32_GetModuleHandleA("opengl32.dll");
-	Assert(OpenGL32);
-
 #define IMPORT(ReturnType, Name, ...) \
-      OpenGLFuncs.OpenGL_##Name = (func_OpenGL_##Name*)Win32_GetProcAddress(OpenGL32, "gl" #Name); \
-      Assert(OpenGLFuncs.OpenGL_##Name);
+	OpenGLFuncs.OpenGL_##Name = (func_OpenGL_##Name*)Win32_GetProcAddress(OpenGL32, "gl" #Name); \
+	Assert(OpenGLFuncs.OpenGL_##Name || !(Error = Win32_GetLastError()));
 #define X OPENGL_FUNCS_TYPE_1
 #include <x.h>
 
 #define IMPORT(ReturnType, Name, ...) \
-      OpenGLFuncs.OpenGL_##Name = (func_OpenGL_##Name*)WGL_GetProcAddress("gl" #Name); \
-      Assert(OpenGLFuncs.OpenGL_##Name);
+	OpenGLFuncs.OpenGL_##Name = (func_OpenGL_##Name*)WGL_GetProcAddress("gl" #Name); \
+	Assert(OpenGLFuncs.OpenGL_##Name || !(Error = Win32_GetLastError()));
 #define X OPENGL_FUNCS_TYPE_2
 #include <x.h>
 
 	OpenGLFuncs.Initialized = TRUE;
+
+	Success = WGL_DeleteContext(DummyRenderContext);
+	Assert(Success || !(Error = Win32_GetLastError()));
+
+	Success = Win32_ReleaseDC(DummyWindow, DummyDeviceContext);
+	Assert(Success || !(Error = Win32_GetLastError()));
+
+	Success = Win32_DestroyWindow(DummyWindow);
+	Assert(Success || !(Error = Win32_GetLastError()));
 
 	return &OpenGLFuncs;
 }
@@ -248,7 +193,8 @@ internal s64 Platform_WindowCallback(
 internal void
 Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 {
-	Platform_LoadWGL();
+	Assert(OpenGLFuncs.Initialized);
+	u32 Error = 0;
 
 	win32_window_class_a WindowClass = { 0 };
 	WindowClass.Callback			 = Platform_WindowCallback;
@@ -294,8 +240,84 @@ Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 		sizeof(win32_raw_input_device)
 	);
 	Assert(Res == TRUE);
-
 	_G.WindowedApp = TRUE;
+
+	s32 PixelFormatAttribs[] = {
+		WGL_DRAW_TO_WINDOW_ARB,
+		TRUE,
+		WGL_SUPPORT_OPENGL_ARB,
+		TRUE,
+		WGL_DOUBLE_BUFFER_ARB,
+		TRUE,
+		WGL_ACCELERATION_ARB,
+		WGL_FULL_ACCELERATION_ARB,
+		WGL_PIXEL_TYPE_ARB,
+		WGL_TYPE_RGBA_ARB,
+		WGL_COLOR_BITS_ARB,
+		32,
+		WGL_DEPTH_BITS_ARB,
+		24,
+		WGL_STENCIL_BITS_ARB,
+		8,
+		WGL_SAMPLE_BUFFERS_ARB,
+		1,
+		WGL_SAMPLES_ARB,
+		4,
+		0,
+	};
+
+	win32_pixel_format_descriptor PixelFormatDescriptor;
+	s32							  PixelFormat;
+	u32							  FormatCount;
+	b08							  Success = WGL_ChoosePixelFormatARB(
+		DeviceContext,
+		PixelFormatAttribs,
+		0,
+		1,
+		&PixelFormat,
+		&FormatCount
+	);
+	Assert(Success || !(Error = Win32_GetLastError()));
+
+	s32 MaxPixelFormat = Win32_DescribePixelFormat(
+		DeviceContext,
+		PixelFormat,
+		sizeof(win32_pixel_format_descriptor),
+		&PixelFormatDescriptor
+	);
+	Assert(MaxPixelFormat || !(Error = Win32_GetLastError()));
+
+#if defined(_DEBUG)
+	u32 DebugBit = WGL_CONTEXT_DEBUG_BIT_ARB;
+#else
+	u32 DebugBit = 0;
+#endif
+
+	Success = Win32_SetPixelFormat(
+		DeviceContext,
+		PixelFormat,
+		&PixelFormatDescriptor
+	);
+	Assert(Success || !(Error = Win32_GetLastError()));
+
+	s32 AttribList[] = {
+		WGL_CONTEXT_MAJOR_VERSION_ARB,
+		4,
+		WGL_CONTEXT_MINOR_VERSION_ARB,
+		6,
+		WGL_CONTEXT_FLAGS_ARB,
+		DebugBit | WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		WGL_CONTEXT_PROFILE_MASK_ARB,
+		WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		0,
+	};
+
+	win32_opengl_render_context RenderContext =
+		WGL_CreateContextAttribsARB(DeviceContext, 0, AttribList);
+	Assert(RenderContext || !(Error = Win32_GetLastError()));
+
+	Success = WGL_MakeCurrent(DeviceContext, RenderContext);
+	Assert(Success || !(Error = Win32_GetLastError()));
 }
 
 internal void

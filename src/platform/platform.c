@@ -244,6 +244,67 @@ typedef enum file_mode {
 	FILE_CLEAR = 0x0010 | FILE_WRITE,
 } file_mode;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress"
+
+inline internal void
+_Mem_Set(vptr D, u08 B, usize Bytes)
+{
+	if (Mem_Set) {
+		Mem_Set(D, B, Bytes);
+		return;
+	}
+	u08 *DB = D;
+	while (Bytes--) *DB++ = B;
+}
+
+vptr
+memset(vptr D, u08 B, usize Bytes)
+{
+	_Mem_Set(D, B, Bytes);
+	return D;
+}
+
+inline internal void
+_Mem_Cpy(vptr D, vptr S, usize Bytes)
+{
+	if (Mem_Cpy) {
+		Mem_Cpy(D, S, Bytes);
+		return;
+	}
+	u08 *DB = D;
+	u08 *SB = S;
+	while (Bytes--) *DB++ = *SB++;
+}
+
+vptr
+memcpy(vptr D, vptr S, usize Bytes)
+{
+	_Mem_Cpy(D, S, Bytes);
+	return D;
+}
+
+inline internal s08
+_Mem_Cmp(vptr A, vptr B, usize Bytes)
+{
+	if (Mem_Cmp) return Mem_Cmp(A, B, Bytes);
+	u08 *AB = A;
+	u08 *BB = B;
+	while (Bytes) {
+		if (*AB > *BB) return GREATER;
+		if (*AB < *BB) return LESS;
+		AB++, BB++, Bytes--;
+	}
+
+	return EQUAL;
+}
+
+s08
+memcmp(vptr A, vptr B, usize Bytes)
+{ return _Mem_Cmp(A, B, Bytes); }
+
+#pragma GCC diagnostic pop
+
 #define PLATFORM_SHARED_FUNCS \
 	EXPORT(void,             Platform_Exit,                  u32 ExitCode) \
 	EXPORT(void,             Platform_CreateWindow,          c08 *Name, u32 Width, u32 Height) \
@@ -289,44 +350,6 @@ Platform_Stub(void)
 
 // These are simple implementations of various util functions that we need
 // to have access to before we load the util module.
-
-inline internal void
-_Mem_Set(vptr D, u08 B, u32 Bytes)
-{
-	if (Mem_Set) {
-		Mem_Set(D, B, Bytes);
-		return;
-	}
-	u08 *DB = D;
-	while (Bytes--) *DB++ = B;
-}
-
-inline internal void
-_Mem_Cpy(vptr D, vptr S, u32 Bytes)
-{
-	if (Mem_Cpy) {
-		Mem_Cpy(D, S, Bytes);
-		return;
-	}
-	u08 *DB = D;
-	u08 *SB = S;
-	while (Bytes--) *DB++ = *SB++;
-}
-
-inline internal s08
-_Mem_Cmp(vptr A, vptr B, usize Bytes)
-{
-	if (Mem_Cmp) return Mem_Cmp(A, B, Bytes);
-	u08 *AB = A;
-	u08 *BB = B;
-	while (Bytes) {
-		if (*AB > *BB) return GREATER;
-		if (*AB < *BB) return LESS;
-		AB++, BB++, Bytes--;
-	}
-
-	return EQUAL;
-}
 
 inline internal u32
 _Mem_BytesUntil(vptr P, c08 B)

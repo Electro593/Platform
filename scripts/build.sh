@@ -94,7 +94,7 @@ ExeLinkerSwitches="$ExeLinkerSwitches $LinkerSwitches"
 if [ "$UseLoader" = "true" ]; then
 	ExeCompilerSwitches="$ExeCompilerSwitches -D_USE_LOADER=1 -L./build -l:loader$DllSuffix"
 	ExeLinkerSwitches="$ExeLinkerSwitches -Wl,--dynamic-linker=./loader$DllSuffix"
-else
+elif [[ "$Platform" = "linux" ]];  then
 	ExeCompilerSwitches="$ExeCompilerSwitches -lc"
 fi
 

@@ -135,88 +135,98 @@ typedef void(func_OpenGL_DebugProc)(
 	vptr UserParam
 );
 
-#define OPENGL_FUNCS_TYPE_1 \
-   IMPORT(void, BindFramebuffer,                      u32 Target, u32 Id) \
-   IMPORT(void, BindRenderbuffer,                     u32 Target, u32 Id) \
-   IMPORT(void, BindTexture,                          u32 Target, u32 Id) \
-   IMPORT(void, BlendFunc,                            u32 SFactor, u32 DFactor) \
-   IMPORT(u32,  CheckFramebufferStatus,               u32 Target) \
-   IMPORT(void, Clear,                                u32 Mask) \
-   IMPORT(void, ClearColor,                           r32 Red, r32 Green, r32 Blue, r32 Alpha) \
-   IMPORT(void, ColorMask,                            b08 Red, b08 Green, b08 Blue, b08 Alpha) \
-   IMPORT(void, CullFace,                             u32 Mode) \
-   IMPORT(void, Disable,                              u32 Capability) \
-   IMPORT(void, DrawArrays,                           u32 Mode, s32 First, s32 Count) \
-   IMPORT(void, DrawElements,                         u32 Mode, s32 Count, u32 Type, vptr Indices) \
+#ifdef _LINUX
+#define OPENGL_FUNCS_EGL \
    IMPORT(void, EGLImageTargetRenderbufferStorageOES, u32 Target, void *EglImage) \
    IMPORT(void, EGLImageTargetTexStorageEXT,          u32 Target, void *EglImage, s32* Attribs) \
    IMPORT(void, EGLImageTargetTexture2DOES,           u32 Target, void *EglImage) \
-   IMPORT(void, Enable,                               u32 Capability) \
-   IMPORT(void, Finish,                               void) \
-   IMPORT(void, FramebufferRenderbuffer,              u32 Target, u32 Attachment, u32 RenderbufferTarget, u32 RenderbufferId) \
-   IMPORT(void, FramebufferTexture2D,                 u32 Target, u32 Attachment, u32 TextureTarget, u32 TextureId, s32 Level) \
-   IMPORT(void, GetFloatv,                            u32 Name, r32 *Data) \
-   IMPORT(void, GenFramebuffers,                      s32 Count, u32 *Ids) \
-   IMPORT(void, GetIntegerv,                          u32 Name, s32 *Data) \
-   IMPORT(void, GenRenderbuffers,                     s32 Count, u32 *Ids) \
-   IMPORT(c08*, GetStringi,                           u32 Name, u32 Index) \
-   IMPORT(void, GenTextures,                          s32 Count, u32 *Ids) \
-   IMPORT(void, LineWidth,                            r32 Width) \
-   IMPORT(void, LogicOp,                              u32 OpCode) \
-   IMPORT(void, PolygonMode,                          u32 Face, u32 Mode) \
-   IMPORT(void, Scissor,                              s32 X, s32 Y, s32 Width, s32 Height) \
-   IMPORT(void, TexParameteri,                        u32 Target, u32 Name, s32 Param) \
-   IMPORT(void, Viewport,                             s32 X, s32 Y, s32 Width, s32 Height)
+   //
+#else
+#define OPENGL_FUNCS_EGL
+#endif
+
+#define OPENGL_FUNCS_TYPE_1 \
+   IMPORT(void, BindTexture,      u32 Target, u32 Id) \
+   IMPORT(void, BlendFunc,        u32 SFactor, u32 DFactor) \
+   IMPORT(void, Clear,            u32 Mask) \
+   IMPORT(void, ClearColor,       r32 Red, r32 Green, r32 Blue, r32 Alpha) \
+   IMPORT(void, ColorMask,        b08 Red, b08 Green, b08 Blue, b08 Alpha) \
+   IMPORT(void, CullFace,         u32 Mode) \
+   IMPORT(void, Disable,          u32 Capability) \
+   IMPORT(void, DrawArrays,       u32 Mode, s32 First, s32 Count) \
+   IMPORT(void, DrawElements,     u32 Mode, s32 Count, u32 Type, vptr Indices) \
+   IMPORT(void, Enable,           u32 Capability) \
+   IMPORT(void, Finish,           void) \
+   IMPORT(opengl_error, GetError, void) \
+   IMPORT(void, GetFloatv,        u32 Name, r32 *Data) \
+   IMPORT(void, GetIntegerv,      u32 Name, s32 *Data) \
+   IMPORT(void, GenTextures,      s32 Count, u32 *Ids) \
+   IMPORT(void, LineWidth,        r32 Width) \
+   IMPORT(void, LogicOp,          u32 OpCode) \
+   IMPORT(void, PolygonMode,      u32 Face, u32 Mode) \
+   IMPORT(void, ReadPixels,       s32 X, s32 Y, ssize Width, ssize Height, u32 Format, u32 Type, vptr Data) \
+   IMPORT(void, Scissor,          s32 X, s32 Y, s32 Width, s32 Height) \
+   IMPORT(void, TexParameteri,    u32 Target, u32 Name, s32 Param) \
+   IMPORT(void, Viewport,         s32 X, s32 Y, s32 Width, s32 Height) \
+   //
 
 #define OPENGL_FUNCS_TYPE_2 \
-   IMPORT(void,         ActiveTexture,               u32 Texture) \
-   IMPORT(void,         AttachShader,                u32 Program, u32 Shader) \
-   IMPORT(void,         BindBuffer,                  u32 Target, u32 Buffer) \
-   IMPORT(void,         BindBufferBase,              u32 Target, u32 Index, u32 Buffer) \
-   IMPORT(void,         BindSampler,                 u32 Unit, u32 Sampler) \
-   IMPORT(void,         BindVertexArray,             u32 ArrayID) \
-   IMPORT(void,         BlitFramebuffer,             s32 SrcX0, s32 SrcY0, s32 SrcX1, s32 SrcY1, s32 DestX0, s32 DestY0, s32 DestX1, s32 DestY1, u32 Mask, u32 Filter) \
-   IMPORT(void,         BufferData,                  u32 Target, s64 Size, vptr Data, u32 Usage) \
-   IMPORT(void,         BufferSubData,               u32 Target, s64 Offset, s64 Size, vptr Data) \
-   IMPORT(void,         CompileShader,               u32 Shader) \
-   IMPORT(u32,          CreateProgram,               void) \
-   IMPORT(u32,          CreateShader,                u32 Type) \
-   IMPORT(void,         DebugMessageCallback,        func_OpenGL_DebugProc Callback, vptr UserParam) \
-   IMPORT(void,         DebugMessageControl,         u32 Source, u32 Type, u32 Severity, s32 Count, u32 *IDs, u08 Enabled) \
-   IMPORT(void,         DeleteBuffers,               u32 Count, u32 *Buffers) \
-   IMPORT(void,         DeleteProgram,               u32 Program) \
-   IMPORT(void,         DeleteShader,                u32 Shader) \
-   IMPORT(void,         DetachShader,                u32 Program, u32 Shader) \
-   IMPORT(void,         DrawElementsBaseVertex,      u32 Mode, s32 Count, u32 Type, vptr *Indices, s32 BaseVertex) \
-   IMPORT(void,         EnableVertexAttribArray,     u32 Index) \
-   IMPORT(void,         GenBuffers,                  s32 Count, u32 *BufferIDs) \
-   IMPORT(void,         GenSamplers,                 s32 Count, u32 *SamplerIDs) \
-   IMPORT(void,         GenVertexArrays,             s32 Count, u32 *ArrayIDs) \
-   IMPORT(void,         GetBufferParameteriv,        u32 Target, u32 Value, s32 *Data) \
-   IMPORT(opengl_error, GetError,                    void) \
-   IMPORT(void,         GetProgramiv,                u32 Program, u32 ParamName, s32 *Param) \
-   IMPORT(void,         GetProgramInfoLog,           u32 Program, s32 BufferSize, s32 *Length, c08 *InfoLog) \
-   IMPORT(void,         GetShaderiv,                 u32 Shader, u32 ParamName, s32 *Param) \
-   IMPORT(void,         GetShaderInfoLog,            u32 Shader, s32 BufferSize, s32 *Length, c08 *InfoLog) \
-   IMPORT(s32,          GetUniformLocation,          u32 Program, c08 *Name) \
-   IMPORT(void,         LinkProgram,                 u32 Program) \
-   IMPORT(void,         MultiDrawArrays,             u32 Mode, s32 *First, s32 *Count, s32 PrimitiveCount) \
-   IMPORT(void,         MultiDrawElementsBaseVertex, u32 Mode, s32 *Count, u32 Type, vptr *Indices, s32 PrimitiveCount, s32 *BaseVertex) \
-   IMPORT(void,         ReadPixels,                  s32 X, s32 Y, ssize Width, ssize Height, u32 Format, u32 Type, vptr Data) \
-   IMPORT(void,         RenderbufferStorage,         u32 Target, u32 InternalFormat, ssize Width, ssize Height) \
-   IMPORT(void,         TexBuffer,                   u32 Target, u32 InternalFormat, u32 Buffer) \
-   IMPORT(void,         TexImage3D,                  u32 Target, s32 Level, s32 InternalFormat, s32 Width, s32 Height, s32 Depth, s32 Border, u32 Format, u32 Type, vptr Pixels) \
-   IMPORT(void,         SamplerParameteri,           u32 Sampler, u32 Name, s32 Param) \
-   IMPORT(void,         ShaderSource,                u32 Shader, s32 Count, c08 **String, s32 *Length) \
-   IMPORT(void,         Uniform1f,                   s32 Location, r32 V0) \
-   IMPORT(void,         Uniform1i,                   s32 Location, s32 V0) \
-   IMPORT(void,         Uniform2ui,                  s32 Location, u32 V0, u32 V1) \
-   IMPORT(void,         Uniform3f,                   s32 Location, r32 V0, r32 V1, r32 V2) \
-   IMPORT(void,         Uniform4f,                   s32 Location, r32 V0, r32 V1, r32 V2, r32 V3) \
-   IMPORT(void,         UniformMatrix4fv,            s32 Location, u32 Count, b08 Transpose, r32 *Value) \
-   IMPORT(void,         UseProgram,                  u32 Program) \
-   IMPORT(void,         VertexAttribPointer,         u32 Index, s32 Size, u32 Type, b08 Normalized, s32 Stride, vptr Offset) \
-   IMPORT(void,         VertexAttribIPointer,        u32 Index, s32 Size, u32 Type, s32 Stride, vptr Offset)
+   OPENGL_FUNCS_EGL \
+   IMPORT(void, ActiveTexture,               u32 Texture) \
+   IMPORT(void, AttachShader,                u32 Program, u32 Shader) \
+   IMPORT(void, BindBuffer,                  u32 Target, u32 Buffer) \
+   IMPORT(void, BindBufferBase,              u32 Target, u32 Index, u32 Buffer) \
+   IMPORT(void, BindFramebuffer,             u32 Target, u32 Id) \
+   IMPORT(void, BindRenderbuffer,            u32 Target, u32 Id) \
+   IMPORT(void, BindSampler,                 u32 Unit, u32 Sampler) \
+   IMPORT(void, BindVertexArray,             u32 ArrayID) \
+   IMPORT(void, BlitFramebuffer,             s32 SrcX0, s32 SrcY0, s32 SrcX1, s32 SrcY1, s32 DestX0, s32 DestY0, s32 DestX1, s32 DestY1, u32 Mask, u32 Filter) \
+   IMPORT(void, BufferData,                  u32 Target, s64 Size, vptr Data, u32 Usage) \
+   IMPORT(void, BufferSubData,               u32 Target, s64 Offset, s64 Size, vptr Data) \
+   IMPORT(u32,  CheckFramebufferStatus,      u32 Target) \
+   IMPORT(void, CompileShader,               u32 Shader) \
+   IMPORT(u32,  CreateProgram,               void) \
+   IMPORT(u32,  CreateShader,                u32 Type) \
+   IMPORT(void, DebugMessageCallback,        func_OpenGL_DebugProc Callback, vptr UserParam) \
+   IMPORT(void, DebugMessageControl,         u32 Source, u32 Type, u32 Severity, s32 Count, u32 *IDs, u08 Enabled) \
+   IMPORT(void, DeleteBuffers,               u32 Count, u32 *Buffers) \
+   IMPORT(void, DeleteProgram,               u32 Program) \
+   IMPORT(void, DeleteShader,                u32 Shader) \
+   IMPORT(void, DetachShader,                u32 Program, u32 Shader) \
+   IMPORT(void, DrawElementsBaseVertex,      u32 Mode, s32 Count, u32 Type, vptr *Indices, s32 BaseVertex) \
+   IMPORT(void, EnableVertexAttribArray,     u32 Index) \
+   IMPORT(void, FramebufferRenderbuffer,     u32 Target, u32 Attachment, u32 RenderbufferTarget, u32 RenderbufferId) \
+   IMPORT(void, FramebufferTexture2D,        u32 Target, u32 Attachment, u32 TextureTarget, u32 TextureId, s32 Level) \
+   IMPORT(void, GenBuffers,                  s32 Count, u32 *BufferIDs) \
+   IMPORT(void, GenFramebuffers,             s32 Count, u32 *Ids) \
+   IMPORT(void, GenRenderbuffers,            s32 Count, u32 *Ids) \
+   IMPORT(void, GenSamplers,                 s32 Count, u32 *SamplerIDs) \
+   IMPORT(void, GenVertexArrays,             s32 Count, u32 *ArrayIDs) \
+   IMPORT(void, GetBufferParameteriv,        u32 Target, u32 Value, s32 *Data) \
+   IMPORT(void, GetProgramiv,                u32 Program, u32 ParamName, s32 *Param) \
+   IMPORT(void, GetProgramInfoLog,           u32 Program, s32 BufferSize, s32 *Length, c08 *InfoLog) \
+   IMPORT(void, GetShaderiv,                 u32 Shader, u32 ParamName, s32 *Param) \
+   IMPORT(void, GetShaderInfoLog,            u32 Shader, s32 BufferSize, s32 *Length, c08 *InfoLog) \
+   IMPORT(c08*, GetStringi,                  u32 Name, u32 Index) \
+   IMPORT(s32,  GetUniformLocation,          u32 Program, c08 *Name) \
+   IMPORT(void, LinkProgram,                 u32 Program) \
+   IMPORT(void, MultiDrawArrays,             u32 Mode, s32 *First, s32 *Count, s32 PrimitiveCount) \
+   IMPORT(void, MultiDrawElementsBaseVertex, u32 Mode, s32 *Count, u32 Type, vptr *Indices, s32 PrimitiveCount, s32 *BaseVertex) \
+   IMPORT(void, RenderbufferStorage,         u32 Target, u32 InternalFormat, ssize Width, ssize Height) \
+   IMPORT(void, TexBuffer,                   u32 Target, u32 InternalFormat, u32 Buffer) \
+   IMPORT(void, TexImage3D,                  u32 Target, s32 Level, s32 InternalFormat, s32 Width, s32 Height, s32 Depth, s32 Border, u32 Format, u32 Type, vptr Pixels) \
+   IMPORT(void, SamplerParameteri,           u32 Sampler, u32 Name, s32 Param) \
+   IMPORT(void, ShaderSource,                u32 Shader, s32 Count, c08 **String, s32 *Length) \
+   IMPORT(void, Uniform1f,                   s32 Location, r32 V0) \
+   IMPORT(void, Uniform1i,                   s32 Location, s32 V0) \
+   IMPORT(void, Uniform2ui,                  s32 Location, u32 V0, u32 V1) \
+   IMPORT(void, Uniform3f,                   s32 Location, r32 V0, r32 V1, r32 V2) \
+   IMPORT(void, Uniform4f,                   s32 Location, r32 V0, r32 V1, r32 V2, r32 V3) \
+   IMPORT(void, UniformMatrix4fv,            s32 Location, u32 Count, b08 Transpose, r32 *Value) \
+   IMPORT(void, UseProgram,                  u32 Program) \
+   IMPORT(void, VertexAttribPointer,         u32 Index, s32 Size, u32 Type, b08 Normalized, s32 Stride, vptr Offset) \
+   IMPORT(void, VertexAttribIPointer,        u32 Index, s32 Size, u32 Type, s32 Stride, vptr Offset) \
+   //
 
 #define OPENGL_FUNCS OPENGL_FUNCS_TYPE_1 OPENGL_FUNCS_TYPE_2
 
