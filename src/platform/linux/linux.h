@@ -388,7 +388,6 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(186, GetTid,       s32,     void) \
 	SYSCALL(202, Futex,        s32,     u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
 	SYSCALL(228, GetClockTime, s32,     sys_clock Clock, sys_timespec *Timespec) \
-	SYSCALL(229, GetClockRes,  s32,     sys_clock Clock, sys_timespec *Timespec) \
 	SYSCALL(319, MemfdCreate,  s32,     c08 *Name, u32 Flags) \
 	SYSCALL(332, StatX,        s32,     s32 Fd, c08 *Path, sys_statx_flags Flags, sys_statx_mask_flags Mask, sys_statx *Stat) \
 	//

@@ -46,8 +46,6 @@ extern s32 Platform_ThreadThunk(void);
 		Assert(CHECK(Status), ErrorMessage); \
 	} while(0)
 
-global sys_timespec ClockResolution;
-
 internal opengl_funcs OpenGLFuncs;
 
 internal opengl_funcs *
@@ -466,11 +464,6 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	};
 	_G.Funcs = &_F;
 
-	VALIDATE(
-		Sys_GetClockRes(SYS_CLOCK_REALTIME, &ClockResolution),
-		"Failed to get clock resolution"
-	);
-
 	usize EnvCount = 0;
 	for (; EnvParams[EnvCount]; EnvCount++);
 
@@ -520,6 +513,11 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 			Module->Update(&_G);
 			if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		}
+
+		timestamp EndTime = Platform_GetTimestamp();
+		r64 Elapsed = Platform_GetSecondsElapsed(StartTime, EndTime);
+		StartTime		= EndTime;
+		_G.FPS = 1.0f / Elapsed;
 	}
 
 	HASHMAP_FOREACH (
