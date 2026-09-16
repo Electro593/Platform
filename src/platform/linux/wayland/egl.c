@@ -356,6 +356,7 @@ struct egl {
 	IMPORT(egl_boolean, Egl, eglGetConfigs,          Egl_GetConfigs,          egl_display Display, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
 	IMPORT(egl_display, Egl, eglGetDisplay,          Egl_GetDisplay,          egl_native_display_type Display) \
 	IMPORT(egl_int,     Egl, eglGetError,            Egl_GetError,            void) \
+	IMPORT(vptr,        Egl, eglGetProcAddress,      Egl_GetProcAddress,            c08 *Name) \
 	IMPORT(egl_boolean, Egl, eglInitialize,          Egl_Initialize,          egl_display Display, egl_int *Major, egl_int *Minor) \
 	IMPORT(egl_boolean, Egl, eglMakeCurrent,         Egl_MakeCurrent,         egl_display Display, egl_surface Draw, egl_surface Read, egl_context Context) \
 	IMPORT(egl_api,     Egl, eglQueryAPI,            Egl_QueryApi,            void) \

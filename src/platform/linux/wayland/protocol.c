@@ -1449,6 +1449,18 @@ wayland_prototype WaylandFixesPrototype = {
 	.Events = NULL,
 };
 
+internal void
+Wayland_Buffer_Destroy(wayland_buffer *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+
+internal wayland_surface *
+Wayland_Compositor_CreateSurface(wayland_compositor *This)
+{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 0); }
+
+internal wayland_region *
+Wayland_Compositor_CreateRegion(wayland_compositor *This)
+{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+
 internal wayland_callback *
 Wayland_Display_Sync(wayland_display *This)
 { return Wayland_HandleConstructorRequest((wayland_interface *) This, 0); }
@@ -1456,6 +1468,41 @@ Wayland_Display_Sync(wayland_display *This)
 internal wayland_registry *
 Wayland_Display_GetRegistry(wayland_display *This)
 { return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+
+internal void
+Wayland_Fixes_Destroy(wayland_fixes *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+
+internal void
+Wayland_Fixes_DestroyRegistry(wayland_fixes *This, wayland_registry *Registry)
+{ Wayland_HandleRequest((wayland_interface *) This, 1, Registry); }
+
+internal void
+Wayland_Keyboard_Release(wayland_keyboard *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+
+internal void
+Wayland_Pointer_SetCursor(
+	wayland_pointer *This,
+	u32				 Serial,
+	wayland_surface *Surface,
+	s32				 HotspotX,
+	s32				 HotspotY
+)
+{
+	Wayland_HandleRequest(
+		(wayland_interface *) This,
+		0,
+		Serial,
+		Surface,
+		HotspotX,
+		HotspotY
+	);
+}
+
+internal void
+Wayland_Pointer_Release(wayland_pointer *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 1); }
 
 internal wayland_interface *
 Wayland_Registry_Bind(
@@ -1474,61 +1521,21 @@ Wayland_Registry_Bind(
 	);
 }
 
-internal wayland_surface *
-Wayland_Compositor_CreateSurface(wayland_compositor *This)
+internal wayland_pointer *
+Wayland_Seat_GetPointer(wayland_seat *This)
 { return Wayland_HandleConstructorRequest((wayland_interface *) This, 0); }
 
-internal wayland_region *
-Wayland_Compositor_CreateRegion(wayland_compositor *This)
+internal wayland_keyboard *
+Wayland_Seat_GetKeyboard(wayland_seat *This)
 { return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
 
-internal wayland_buffer *
-Wayland_ShmPool_CreateBuffer(
-	wayland_shm_pool  *This,
-	s32				   Offset,
-	s32				   Width,
-	s32				   Height,
-	s32				   Stride,
-	wayland_shm_format Format
-)
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		0,
-		Offset,
-		Width,
-		Height,
-		Stride,
-		Format
-	);
-}
+internal wayland_touch *
+Wayland_Seat_GetTouch(wayland_seat *This)
+{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 2); }
 
 internal void
-Wayland_ShmPool_Destroy(wayland_shm_pool *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 1); }
-
-internal void
-Wayland_ShmPool_Resize(wayland_shm_pool *This, s32 Size)
-{ Wayland_HandleRequest((wayland_interface *) This, 2, Size); }
-
-internal wayland_shm_pool *
-Wayland_Shm_CreatePool(wayland_shm *This, s32 Fd, s32 Size)
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		0,
-		Fd,
-		Size
-	);
-}
-
-internal void
-Wayland_Shm_Release(wayland_shm *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 1); }
-
-internal void
-Wayland_Buffer_Destroy(wayland_buffer *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+Wayland_Seat_Release(wayland_seat *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 3); }
 
 internal wayland_shell_surface *
 Wayland_Shell_GetShellSurface(wayland_shell *This, wayland_surface *Surface)
@@ -1630,6 +1637,50 @@ internal void
 Wayland_ShellSurface_SetClass(wayland_shell_surface *This, c08 *Class)
 { Wayland_HandleRequest((wayland_interface *) This, 9, Class); }
 
+internal wayland_shm_pool *
+Wayland_Shm_CreatePool(wayland_shm *This, s32 Fd, s32 Size)
+{
+	return Wayland_HandleConstructorRequest(
+		(wayland_interface *) This,
+		0,
+		Fd,
+		Size
+	);
+}
+
+internal void
+Wayland_Shm_Release(wayland_shm *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 1); }
+
+internal wayland_buffer *
+Wayland_ShmPool_CreateBuffer(
+	wayland_shm_pool  *This,
+	s32				   Offset,
+	s32				   Width,
+	s32				   Height,
+	s32				   Stride,
+	wayland_shm_format Format
+)
+{
+	return Wayland_HandleConstructorRequest(
+		(wayland_interface *) This,
+		0,
+		Offset,
+		Width,
+		Height,
+		Stride,
+		Format
+	);
+}
+
+internal void
+Wayland_ShmPool_Destroy(wayland_shm_pool *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 1); }
+
+internal void
+Wayland_ShmPool_Resize(wayland_shm_pool *This, s32 Size)
+{ Wayland_HandleRequest((wayland_interface *) This, 2, Size); }
+
 internal void
 Wayland_Surface_Destroy(wayland_surface *This)
 { Wayland_HandleRequest((wayland_interface *) This, 0); }
@@ -1695,12 +1746,12 @@ Wayland_Surface_Offset(wayland_surface *This, s32 X, s32 Y)
 { Wayland_HandleRequest((wayland_interface *) This, 10, X, Y); }
 
 internal void
-Wayland_Fixes_Destroy(wayland_fixes *This)
+Wayland_Touch_Release(wayland_touch *This)
 { Wayland_HandleRequest((wayland_interface *) This, 0); }
 
 internal void
-Wayland_Fixes_DestroyRegistry(wayland_fixes *This, wayland_registry *Registry)
-{ Wayland_HandleRequest((wayland_interface *) This, 1, Registry); }
+Wayland_Output_Release(wayland_output *This)
+{ Wayland_HandleRequest((wayland_interface *) This, 0); }
 
 #endif
 

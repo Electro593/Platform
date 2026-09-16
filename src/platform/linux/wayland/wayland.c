@@ -9,6 +9,14 @@
 
 #ifdef INCLUDE_HEADER
 
+typedef struct wayland_seat_entry {
+	wayland_seat		   *Seat;
+	string					Name;
+	wayland_seat_capability Capabilities;
+
+	wayland_keyboard *Keyboard;
+} wayland_seat_entry;
+
 typedef struct wayland_dmabuf_format_entry {
 	drm_format			Format;
 	drm_format_modifier Modifier;
@@ -133,6 +141,83 @@ Wayland_Buffer_Release(wayland_buffer *This)
 		Window->Buffers[1] = Window->Buffers[0];
 		Window->Buffers[0] = This;
 	}
+}
+
+internal void
+Wayland_Keyboard_Enter(
+	wayland_keyboard *This,
+	u32				  Serial,
+	wayland_surface	 *Surface,
+	wayland_array	  Keys
+)
+{
+	Wayland_DebugLog(
+		This,
+		"Keyboard focused on %s with serial %u and %d keys pressed\n",
+		Wayland_GetObjectName((wayland_interface *) Surface),
+		Serial,
+		Keys.Size / sizeof(u32)
+	);
+
+	if (_G.FocusState == FOCUS_NONE) {
+		Mem_Set(_G.Keys, 0, sizeof(_G.Keys));
+		Mem_Set(_G.Buttons, 0, sizeof(_G.Buttons));
+
+		_G.FocusState		= FOCUS_CLIENT;
+		_G.CursorIsDisabled = TRUE;	 // TODO: Properly capture cursor
+	}
+}
+
+internal void
+Wayland_Keyboard_Leave(
+	wayland_keyboard *This,
+	u32				  Serial,
+	wayland_surface	 *Surface
+)
+{
+	Wayland_DebugLog(
+		This,
+		"Keyboard defocused from %s with serial %u\n",
+		Wayland_GetObjectName((wayland_interface *) Surface),
+		Serial
+	);
+
+	_G.FocusState = FOCUS_NONE;
+}
+
+internal void
+Wayland_Seat_Capabilities(
+	wayland_seat		   *This,
+	wayland_seat_capability Capabilities
+)
+{
+	Wayland_DebugLog(This, "Advertized seat capabilities %x\n", Capabilities);
+
+	wayland_seat_entry *Entry =
+		HashMap_GetRef(&_G.Wayland.Seats, &This->Interface.Id);
+	if (Entry) {
+		b08 HasKeyboard = Capabilities & WAYLAND_SEAT_CAPABILITY_KEYBOARD;
+		if (HasKeyboard && !Entry->Keyboard) {
+			Entry->Keyboard		   = Wayland_Seat_GetKeyboard(This);
+			Entry->Keyboard->Enter = Wayland_Keyboard_Enter;
+			Entry->Keyboard->Leave = Wayland_Keyboard_Leave;
+		} else if (!HasKeyboard && Entry->Keyboard) {
+			Wayland_Keyboard_Release(Entry->Keyboard);
+			Entry->Keyboard = NULL;
+		}
+
+		Entry->Capabilities = Capabilities;
+	}
+}
+
+internal void
+Wayland_Seat_Name(wayland_seat *This, c08 *Name)
+{
+	Wayland_DebugLog(This, "Advertized seat name %s\n", CString(Name));
+
+	wayland_seat_entry *Entry =
+		HashMap_GetRef(&_G.Wayland.Seats, &This->Interface.Id);
+	if (Entry) Entry->Name = HString(_G.Heap, Name);
 }
 
 internal void
@@ -450,6 +535,16 @@ Wayland_Registry_Global(
 			"Bound %s\n",
 			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
 		);
+	} else if (String_Cmp(Str, CStringL("wl_seat")) == 0) {
+		wayland_seat *Seat = (wayland_seat *)
+			Wayland_Registry_Bind(This, Name, Interface, Version);
+		Seat->Capabilities = Wayland_Seat_Capabilities;
+		Seat->Name		   = Wayland_Seat_Name;
+		HashMap_Add(
+			&_G.Wayland.Seats,
+			&Seat->Interface.Id,
+			&(wayland_seat_entry){ .Seat = Seat }
+		);
 	} else if (String_Cmp(Str, CStringL("xdg_wm_base")) == 0) {
 		_G.Wayland.XdgWmBaseName = Name;
 		_G.Wayland.XdgWmBase	 = (wayland_xdg_wm_base *)
@@ -581,6 +676,9 @@ Wayland_TryInit(void)
 	if (Wayland_IsConnected()) return TRUE;
 
 	if (Wayland_Connect()) {
+		_G.Wayland.Seats =
+			HashMap_Init(_G.Heap, sizeof(u32), sizeof(wayland_seat_entry));
+
 		wayland_display *Display = Wayland_GetDisplay();
 		Display->Error			 = Wayland_Display_Error;
 		Display->DeleteId		 = Wayland_Display_DeleteId;

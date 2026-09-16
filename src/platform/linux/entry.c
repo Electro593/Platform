@@ -53,10 +53,29 @@ Platform_LoadOpenGL(void)
 {
 	if (OpenGLFuncs.Initialized) return &OpenGLFuncs;
 
-	vptr Handle = dlopen("/usr/lib/libGL.so", SYS_RUNTIME_LOADER_LAZY);
+	platform_module Egl, Gbm;
+	Egl.FileName = "libEGL.so";
+	Gbm.FileName = "libgbm.so";
+
+	Platform_OpenModuleBackend(&Egl);
+	if (!Platform_IsModuleBackendOpened(&Egl)) {
+		FPrintL("Failed to load libEGL.so!\n");
+		Sys_Exit(-1);
+	}
+
+	Platform_OpenModuleBackend(&Gbm);
+	if (!Platform_IsModuleBackendOpened(&Gbm)) {
+		FPrintL("Failed to load gbm.so!\n");
+		Sys_Exit(-1);
+	}
+
+#define IMPORT(R, M, MN, N, ...) Platform_GetProcAddress(&M, #MN, (vptr*)&N);
+#define X GBM_FUNCS EGL_FUNCS
+#include <x.h>
 
 #define IMPORT(R, N, ...) \
-	OpenGLFuncs.OpenGL_##N = OpenGL_##N = dlsym(Handle, "gl" #N);
+	OpenGLFuncs.OpenGL_##N = OpenGL_##N = Egl_GetProcAddress("gl" #N); \
+	Assert(OpenGLFuncs.OpenGL_##N);
 #define X OPENGL_FUNCS
 #include <x.h>
 
@@ -67,6 +86,7 @@ Platform_LoadOpenGL(void)
 internal void
 Platform_CreateWindow(c08 *Name, u32 Width, u32 Height)
 {
+	Assert(OpenGLFuncs.Initialized);
 	if (Wayland_TryInit()) Wayland_CreateGLWindow(Name, Width, Height);
 }
 
@@ -370,7 +390,7 @@ Platform_OpenModuleBackend(platform_module *Module)
 #ifdef _USE_LOADER
 	Module->ELF = Loader_OpenShared(Module->FileName);
 #else
-	Module->ELF = dlopen(Module->FileName, SYS_RUNTIME_LOADER_LAZY);
+	Module->ELF = dlopen(Module->FileName, SYS_RUNTIME_LOADER_LAZY | SYS_RUNTIME_LOADER_GLOBAL);
 #endif
 }
 
@@ -430,30 +450,6 @@ Platform_SetupEnvTable(usize EnvCount, c08 **EnvParams)
 	}
 }
 
-internal void
-Platform_LoadDependencies(void)
-{
-	platform_module Egl, Gbm;
-	Egl.FileName = "libEGL.so";
-	Gbm.FileName = "libgbm.so";
-
-	Platform_OpenModuleBackend(&Egl);
-	if (!Platform_IsModuleBackendOpened(&Egl)) {
-		FPrintL("Failed to load libEGL.so!\n");
-		Sys_Exit(-1);
-	}
-
-	Platform_OpenModuleBackend(&Gbm);
-	if (!Platform_IsModuleBackendOpened(&Gbm)) {
-		FPrintL("Failed to load gbm.so!\n");
-		Sys_Exit(-1);
-	}
-
-#define IMPORT(R, M, MN, N, ...) Platform_GetProcAddress(&M, #MN, (vptr*)&N);
-#define X GBM_FUNCS EGL_FUNCS
-#include <x.h>
-}
-
 external void
 Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 {
@@ -473,7 +469,6 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	Platform_SetupArgTable(ArgCount, Args);
 	Platform_SetupEnvTable(EnvCount, EnvParams);
-	Platform_LoadDependencies();
 
 	Platform_LoadModule(CStringL("base"));
 
@@ -515,9 +510,9 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		}
 
 		timestamp EndTime = Platform_GetTimestamp();
-		r64 Elapsed = Platform_GetSecondsElapsed(StartTime, EndTime);
-		StartTime		= EndTime;
-		_G.FPS = 1.0f / Elapsed;
+		r64		  Elapsed = Platform_GetSecondsElapsed(StartTime, EndTime);
+		StartTime		  = EndTime;
+		_G.FPS			  = 1.0f / Elapsed;
 	}
 
 	HASHMAP_FOREACH (

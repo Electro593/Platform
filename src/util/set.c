@@ -39,6 +39,7 @@ typedef struct hashmap {
    EXPORT(vptr,    BinarySearchArray,    vptr *Array, u32 Start, u32 End, vptr Target, type Type, cmp_func Func, vptr Param, u32 *IndexOut) \
    EXPORT(void,    QuickSort,            vptr Data, usize ElementSize, usize ElementCount, s08 (*Cmp)(vptr A, vptr B)) \
    EXPORT(hashmap, HashMap_InitCustom,   heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCapacity, r32 ResizeThresh, r32 ResizeRate, hash_func HashFunc, vptr HashParam, cmp_func CmpFunc, vptr CmpParam) \
+   EXPORT(hashmap, HashMap_InitStr,      heap *Heap, u32 ValueSize, u32 InitialCapacity) \
    EXPORT(hashmap, HashMap_Init,         heap *Heap, u32 KeySize, u32 ValueSize) \
    EXPORT(vptr,    HashMap_GetRef,       hashmap *Map, vptr Key) \
    EXPORT(b08,     HashMap_Get,          hashmap *Map, vptr Key, vptr ValueOut) \
@@ -230,6 +231,23 @@ HashMap_InitCustom(
 	Map.Cmp		 = CmpFunc ? CmpFunc : (cmp_func) Mem_Cmp;
 
 	return Map;
+}
+
+internal hashmap
+HashMap_InitStr(heap *Heap, u32 ValueSize, u32 InitialCapacity)
+{
+	return HashMap_InitCustom(
+		Heap,
+		sizeof(string),
+		ValueSize,
+		InitialCapacity,
+		0.5f,
+		2.0f,
+		(hash_func) String_HashPtr,
+		NULL,
+		(cmp_func) String_CmpPtr,
+		NULL
+	);
 }
 
 internal hashmap
