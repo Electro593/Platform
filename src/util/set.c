@@ -9,8 +9,28 @@
 
 #ifdef INCLUDE_HEADER
 
-#define HASH_VACANT  0
-#define HASH_DELETED 1
+typedef struct array_list {
+	vptr Data;
+	u32	 ValueSize;
+	u32	 Capacity;
+	u32	 Count;
+} array_list;
+
+#define ARRAY_LIST_FOREACH(I, value, Value, List) \
+	for (u32 I = 0; I < (List)->Count; I = (List)->Count) \
+		for (value Value; I < (List)->Count && (Value = *(value*) ArrayList_At(List, I), TRUE); I++)
+
+typedef struct array_deque {
+	vptr Data;
+	u32	 ValueSize;
+	u32	 Capacity;
+	u32	 Count;
+	u32	 Front;
+} array_deque;
+
+#define ARRAY_DEQUE_FOREACH(I, value, Value, Deque) \
+	for (u32 I = 0; I < (Deque)->Count; I = (Deque)->Count) \
+		for (value Value; I < (Deque)->Count && (Value = *(value*) ArrayDeque_At(Deque, I), TRUE); I++)
 
 typedef struct hashmap {
 	heap_handle *Data;
@@ -29,6 +49,9 @@ typedef struct hashmap {
 	hash_func Hash;
 } hashmap;
 
+#define HASH_VACANT  0
+#define HASH_DELETED 1
+
 #define HASHMAP_FOREACH(I, Hash, key, Key, value, Value, Map) \
 	for (usize I = 0; I < (Map)->Capacity; I++) \
 		for (usize Hash = *(usize*) ((Map)->Data->Data + (Map)->EntrySize * I); Hash >= 2; ) \
@@ -36,16 +59,33 @@ typedef struct hashmap {
 				for (value Value = *(value*) ((Map)->Data->Data + (Map)->EntrySize * I + sizeof(usize) + (Map)->KeySize); Hash; Hash = 0)
 
 #define SET_FUNCS \
-   EXPORT(vptr,    BinarySearchArray,    vptr *Array, u32 Start, u32 End, vptr Target, type Type, cmp_func Func, vptr Param, u32 *IndexOut) \
-   EXPORT(void,    QuickSort,            vptr Data, usize ElementSize, usize ElementCount, s08 (*Cmp)(vptr A, vptr B)) \
-   EXPORT(hashmap, HashMap_InitCustom,   heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCapacity, r32 ResizeThresh, r32 ResizeRate, hash_func HashFunc, vptr HashParam, cmp_func CmpFunc, vptr CmpParam) \
-   EXPORT(hashmap, HashMap_InitStr,      heap *Heap, u32 ValueSize, u32 InitialCapacity) \
-   EXPORT(hashmap, HashMap_Init,         heap *Heap, u32 KeySize, u32 ValueSize) \
-   EXPORT(vptr,    HashMap_GetRef,       hashmap *Map, vptr Key) \
-   EXPORT(b08,     HashMap_Get,          hashmap *Map, vptr Key, vptr ValueOut) \
-   EXPORT(b08,     HashMap_Remove,       hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut) \
-   EXPORT(vptr,    HashMap_Add,          hashmap *Map, vptr Key, vptr Value) \
-   EXPORT(void,    HashMap_Free,         hashmap *Map)
+	EXPORT(vptr,        BinarySearchArray,     vptr *Array, u32 Start, u32 End, vptr Target, type Type, cmp_func Func, vptr Param, u32 *IndexOut) \
+	EXPORT(void,        QuickSort,             vptr Data, usize ElementSize, usize ElementCount, s08 (*Cmp)(vptr A, vptr B)) \
+	INTERN(usize,       AlignReservedSize,     u32 ValueSize, u32 Capacity) \
+	EXPORT(array_list,  ArrayList_Init,        heap *Heap, u32 ValueSize, u32 InitialCapacity) \
+	INTERN(b08,         ArrayList_Validate,    array_list *List) \
+	EXPORT(void,        ArrayList_Reserve,     array_list *List, u32 MinCapacity) \
+	EXPORT(vptr,        ArrayList_At,          array_list *List, u32 Index) \
+	EXPORT(vptr,        ArrayList_Push,        array_list *List) \
+	EXPORT(void,        ArrayList_Pop,         array_list *List, vptr ValueOut) \
+	INTERN(b08,         ArrayDeque_Validate,   array_deque *Deque) \
+	EXPORT(array_deque, ArrayDeque_Init,       heap *Heap, u32 ValueSize, u32 InitialCapacity) \
+	EXPORT(void,        ArrayDeque_Reserve,    array_deque *Deque, u32 MinCapacity) \
+	EXPORT(vptr,        ArrayDeque_At,         array_deque *Deque, u32 Index) \
+	EXPORT(vptr,        ArrayDeque_PeekFront,  array_deque *Deque) \
+	EXPORT(vptr,        ArrayDeque_PeekBack,   array_deque *Deque) \
+	EXPORT(vptr,        ArrayDeque_PushFront,  array_deque *Deque) \
+	EXPORT(vptr,        ArrayDeque_PushBack,   array_deque *Deque) \
+	EXPORT(void,        ArrayDeque_PopFront,   array_deque *Deque, vptr ValueOut) \
+	EXPORT(void,        ArrayDeque_PopBack,    array_deque *Deque, vptr ValueOut) \
+	EXPORT(hashmap,     HashMap_InitCustom,    heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCapacity, r32 ResizeThresh, r32 ResizeRate, hash_func HashFunc, vptr HashParam, cmp_func CmpFunc, vptr CmpParam) \
+	EXPORT(hashmap,     HashMap_InitStr,       heap *Heap, u32 ValueSize, u32 InitialCapacity) \
+	EXPORT(hashmap,     HashMap_Init,          heap *Heap, u32 KeySize, u32 ValueSize) \
+	EXPORT(vptr,        HashMap_GetRef,        hashmap *Map, vptr Key) \
+	EXPORT(b08,         HashMap_Get,           hashmap *Map, vptr Key, vptr ValueOut) \
+	EXPORT(b08,         HashMap_Remove,        hashmap *Map, vptr Key, vptr KeyOut, vptr ValueOut) \
+	EXPORT(vptr,        HashMap_Add,           hashmap *Map, vptr Key, vptr Value) \
+	EXPORT(void,        HashMap_Free,          hashmap *Map)
 
 #endif
 
@@ -186,6 +226,235 @@ QuickSort(
 
 	Stack_SetCursor(Cursor);
 #undef QSORT_SWAP
+}
+
+internal usize
+AlignReservedSize(u32 ValueSize, u32 Capacity)
+{
+	usize MinSize = (usize) Capacity * ValueSize;
+	Assert(MinSize / ValueSize == Capacity);
+
+	u32 Index;
+	if (Intrin_BitScanReverse(&Index, MinSize - 1)) Index++;
+	else Index = 0;
+
+	usize AlignedSize = (Index >= sizeof(usize) * 8) ? MinSize : 1ull << Index;
+	Assert(AlignedSize / ValueSize >= Capacity);
+
+	return AlignedSize;
+}
+
+internal array_list
+ArrayList_Init(heap *Heap, u32 ValueSize, u32 InitialCapacity)
+{
+	array_list List = {
+		.Data	   = Heap_AllocateA(Heap, (usize) InitialCapacity * ValueSize),
+		.ValueSize = ValueSize,
+		.Capacity  = InitialCapacity,
+		.Count	   = 0,
+	};
+	Assert(ArrayList_Validate(&List));
+	return List;
+}
+
+internal b08
+ArrayList_Validate(array_list *List)
+{
+	return List
+		&& List->Data
+		&& List->ValueSize > 0
+		&& List->Count <= List->Capacity
+		// Verify that offsets won't overflow
+		&& (usize) List->Capacity * List->ValueSize / List->ValueSize
+			   == List->Capacity;
+}
+
+internal void
+ArrayList_Reserve(array_list *List, u32 MinCapacity)
+{
+	Assert(ArrayList_Validate(List));
+	if (List->Capacity >= MinCapacity) return;
+
+	usize NewSize	  = AlignReservedSize(List->ValueSize, MinCapacity);
+	u32	  NewCapacity = NewSize / List->ValueSize;
+
+	heap_handle *OldHandle = Heap_GetHandleA(List->Data);
+	vptr		 NewData   = Heap_AllocateA(Heap_GetHeap(OldHandle), NewSize);
+	Assert(NewData);
+
+	Mem_Cpy(NewData, List->Data, List->Count * List->ValueSize);
+	Heap_Free(OldHandle);
+
+	List->Data	   = NewData;
+	List->Capacity = NewCapacity;
+}
+
+internal vptr
+ArrayList_At(array_list *List, u32 Index)
+{
+	Assert(ArrayList_Validate(List));
+	Assert(Index < List->Count);
+	return List->Data + Index * List->ValueSize;
+}
+
+internal vptr
+ArrayList_Push(array_list *List)
+{
+	Assert(ArrayList_Validate(List));
+	Assert(List->Count + 1 > 0);
+
+	ArrayList_Reserve(List, List->Count + 1);
+	List->Count++;
+
+	return ArrayList_At(List, List->Count - 1);
+}
+
+internal void
+ArrayList_Pop(array_list *List, vptr ValueOut)
+{
+	Assert(ArrayList_Validate(List));
+
+	vptr EntryRef = ArrayList_At(List, List->Count - 1);
+	if (ValueOut) Mem_Cpy(ValueOut, EntryRef, List->ValueSize);
+	Debug_FillDeleted(EntryRef, List->ValueSize);
+
+	List->Count--;
+}
+
+internal array_deque
+ArrayDeque_Init(heap *Heap, u32 ValueSize, u32 InitialCapacity)
+{
+	array_deque Deque = {
+		.Data	   = Heap_AllocateA(Heap, (usize) InitialCapacity * ValueSize),
+		.ValueSize = ValueSize,
+		.Capacity  = InitialCapacity,
+		.Count	   = 0,
+		.Front	   = 0,
+	};
+	ArrayDeque_Validate(&Deque);
+	return Deque;
+}
+
+internal b08
+ArrayDeque_Validate(array_deque *Deque)
+{
+	return Deque
+		&& Deque->Data
+		&& Deque->ValueSize > 0
+		&& Deque->Count <= Deque->Capacity
+		// Verify that Front is in bounds
+		&& (!Deque->Capacity || Deque->Front < Deque->Capacity)
+		// Verify that Back won't overflow
+		&& ((usize) Deque->Capacity << 1) - 1 >= Deque->Capacity
+		// Verify that offsets won't overflow
+		&& (usize) Deque->Capacity * Deque->ValueSize / Deque->ValueSize
+			   == Deque->Capacity;
+}
+
+internal void
+ArrayDeque_Reserve(array_deque *Deque, u32 MinCapacity)
+{
+	Assert(ArrayDeque_Validate(Deque));
+	if (Deque->Capacity >= MinCapacity) return;
+
+	usize NewSize	  = AlignReservedSize(Deque->ValueSize, MinCapacity);
+	u32	  NewCapacity = NewSize / Deque->ValueSize;
+
+	heap_handle *OldHandle = Heap_GetHandleA(Deque->Data);
+	vptr		 NewData   = Heap_AllocateA(Heap_GetHeap(OldHandle), NewSize);
+	Assert(NewData);
+
+	if (Deque->Count) {
+		usize Front		  = Deque->Front;
+		usize Back		  = (Front + Deque->Count - 1) % Deque->Capacity;
+		usize FrontOffset = Front * Deque->ValueSize;
+		usize BackSize	  = (Back + 1) * Deque->ValueSize;
+
+		if (Front <= Back) {
+			usize SpanSize = BackSize - FrontOffset;
+			Mem_Cpy(NewData, Deque->Data + FrontOffset, SpanSize);
+		} else {
+			usize OldSize	= (usize) Deque->Capacity * Deque->ValueSize;
+			usize FrontSize = OldSize - FrontOffset;
+			Mem_Cpy(NewData, Deque->Data + FrontOffset, FrontSize);
+			Mem_Cpy(NewData + FrontSize, Deque->Data, BackSize);
+		}
+	}
+
+	Heap_Free(OldHandle);
+
+	Deque->Data		= NewData;
+	Deque->Capacity = NewCapacity;
+	Deque->Front	= 0;
+}
+
+internal vptr
+ArrayDeque_At(array_deque *Deque, u32 Index)
+{
+	Assert(ArrayDeque_Validate(Deque));
+	Assert(Index < Deque->Count);
+	usize Slot = ((usize) Deque->Front + Index) % Deque->Capacity;
+	return Deque->Data + Slot * Deque->ValueSize;
+}
+
+internal vptr
+ArrayDeque_PeekFront(array_deque *Deque)
+{ return ArrayDeque_At(Deque, 0); }
+
+internal vptr
+ArrayDeque_PeekBack(array_deque *Deque)
+{ return Assert(Deque), ArrayDeque_At(Deque, Deque->Count - 1); }
+
+internal vptr
+ArrayDeque_PushFront(array_deque *Deque)
+{
+	Assert(ArrayDeque_Validate(Deque));
+	Assert(Deque->Count + 1 > 0);
+
+	ArrayDeque_Reserve(Deque, Deque->Count + 1);
+	if (Deque->Front == 0) Deque->Front = Deque->Capacity;
+	Deque->Front--;
+	Deque->Count++;
+
+	return ArrayDeque_PeekFront(Deque);
+}
+
+internal vptr
+ArrayDeque_PushBack(array_deque *Deque)
+{
+	Assert(ArrayDeque_Validate(Deque));
+	Assert(Deque->Count + 1 > 0);
+
+	ArrayDeque_Reserve(Deque, Deque->Count + 1);
+	Deque->Count++;
+
+	return ArrayDeque_PeekBack(Deque);
+}
+
+internal void
+ArrayDeque_PopFront(array_deque *Deque, vptr ValueOut)
+{
+	Assert(ArrayDeque_Validate(Deque));
+
+	vptr EntryRef = ArrayDeque_PeekFront(Deque);
+	if (ValueOut) Mem_Cpy(ValueOut, EntryRef, Deque->ValueSize);
+	Debug_FillDeleted(EntryRef, Deque->ValueSize);
+
+	Deque->Count--;
+	Deque->Front++;
+	if (Deque->Front == Deque->Capacity) Deque->Front = 0;
+}
+
+internal void
+ArrayDeque_PopBack(array_deque *Deque, vptr ValueOut)
+{
+	Assert(ArrayDeque_Validate(Deque));
+
+	vptr EntryRef = ArrayDeque_PeekBack(Deque);
+	if (ValueOut) Mem_Cpy(ValueOut, EntryRef, Deque->ValueSize);
+	Debug_FillDeleted(EntryRef, Deque->ValueSize);
+
+	Deque->Count--;
 }
 
 internal usize

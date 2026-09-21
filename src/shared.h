@@ -97,18 +97,23 @@ typedef u32	 c32;
 
 #ifdef _DEBUG
 #define Assert(Expression, ...)                                               \
-    do {                                                                      \
-        if (!(Expression)) {                                                  \
-			Platform_Assert(__FILE__, __LINE__, #Expression, "" __VA_ARGS__); \
-			STOP;                                                             \
-		}                                                                     \
-    } while(0)
+    (void)((Expression) || (                                                  \
+		Platform_Assert(__FILE__, __LINE__, #Expression, "" __VA_ARGS__),     \
+		STOP,                                                                 \
+		0                                                                     \
+	))
 #define STOP Intrin_DebugBreak()
 #define NOP Intrin_Nop()
+#define Debug_FillAllocated(Buffer, Size) _Mem_Set(Buffer, 0xDA, Size)
+#define Debug_FillDeleted(Buffer, Size) _Mem_Set(Buffer, 0xDD, Size)
+#define Debug_FillFreed(Buffer, Size) _Mem_Set(Buffer, 0xDF, Size)
 #else
-#define Assert(...) while(0) { }
+#define Assert(...) (void)0
 #define STOP Platform_Exit(-1)
-#define NOP while(0) { }
+#define NOP (void)0
+#define Debug_FillAllocated(Buffer, Size) (void)0
+#define Debug_FillRemoved(Buffer, Size) (void)0
+#define Debug_FillFreed(Buffer, Size) (void)0
 #endif
 
 #define NULL ((vptr)0)

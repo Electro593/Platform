@@ -19,7 +19,10 @@ Intrin_ReadGSQWord(u32 Offset)
 	return Result;
 }
 
-#define Intrin_DebugBreak() __asm__ ( "int3" )
+intrin void
+Intrin_DebugBreak()
+{ __asm__("int3"); }
+
 #define Intrin_Nop() __asm__ ( "nop" )
 
 intrin u16

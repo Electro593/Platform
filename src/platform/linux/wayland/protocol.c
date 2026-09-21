@@ -515,7 +515,12 @@ enum wayland_keyboard_key_state {
 struct wayland_keyboard {
 	wayland_interface Interface;
 
-	void (*Keymap)(wayland_keyboard *This, s32 FileDescriptor, u32 Size);
+	void (*Keymap)(
+		wayland_keyboard			  *This,
+		wayland_keyboard_keymap_format Format,
+		s32							   FileDescriptor,
+		u32							   Size
+	);
 	void (*Enter)(
 		wayland_keyboard *This,
 		u32				  Serial,
