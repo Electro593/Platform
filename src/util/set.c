@@ -74,8 +74,8 @@ typedef struct hashmap {
 	EXPORT(vptr,        ArrayDeque_At,         array_deque *Deque, u32 Index) \
 	EXPORT(vptr,        ArrayDeque_PeekFront,  array_deque *Deque) \
 	EXPORT(vptr,        ArrayDeque_PeekBack,   array_deque *Deque) \
-	EXPORT(vptr,        ArrayDeque_PushFront,  array_deque *Deque) \
-	EXPORT(vptr,        ArrayDeque_PushBack,   array_deque *Deque) \
+	EXPORT(vptr,        ArrayDeque_PushFront,  array_deque *Deque, vptr Value) \
+	EXPORT(vptr,        ArrayDeque_PushBack,   array_deque *Deque, vptr Value) \
 	EXPORT(void,        ArrayDeque_PopFront,   array_deque *Deque, vptr ValueOut) \
 	EXPORT(void,        ArrayDeque_PopBack,    array_deque *Deque, vptr ValueOut) \
 	EXPORT(hashmap,     HashMap_InitCustom,    heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCapacity, r32 ResizeThresh, r32 ResizeRate, hash_func HashFunc, vptr HashParam, cmp_func CmpFunc, vptr CmpParam) \
@@ -406,7 +406,7 @@ ArrayDeque_PeekBack(array_deque *Deque)
 { return Assert(Deque), ArrayDeque_At(Deque, Deque->Count - 1); }
 
 internal vptr
-ArrayDeque_PushFront(array_deque *Deque)
+ArrayDeque_PushFront(array_deque *Deque, vptr Value)
 {
 	Assert(ArrayDeque_Validate(Deque));
 	Assert(Deque->Count + 1 > 0);
@@ -416,11 +416,13 @@ ArrayDeque_PushFront(array_deque *Deque)
 	Deque->Front--;
 	Deque->Count++;
 
-	return ArrayDeque_PeekFront(Deque);
+	vptr EntryRef = ArrayDeque_PeekFront(Deque);
+	if (Value) Mem_Cpy(EntryRef, Value, Deque->ValueSize);
+	return EntryRef;
 }
 
 internal vptr
-ArrayDeque_PushBack(array_deque *Deque)
+ArrayDeque_PushBack(array_deque *Deque, vptr Value)
 {
 	Assert(ArrayDeque_Validate(Deque));
 	Assert(Deque->Count + 1 > 0);
@@ -428,7 +430,9 @@ ArrayDeque_PushBack(array_deque *Deque)
 	ArrayDeque_Reserve(Deque, Deque->Count + 1);
 	Deque->Count++;
 
-	return ArrayDeque_PeekBack(Deque);
+	vptr EntryRef = ArrayDeque_PeekBack(Deque);
+	if (Value) Mem_Cpy(EntryRef, Value, Deque->ValueSize);
+	return EntryRef;
 }
 
 internal void

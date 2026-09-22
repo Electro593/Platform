@@ -17,6 +17,7 @@ typedef u32 wayland_fixed;
 
 typedef struct wayland_array		   wayland_array;
 typedef struct wayland_param		   wayland_param;
+typedef struct wayland_event_queue	   wayland_event_queue;
 typedef struct wayland_interface	   wayland_interface;
 typedef struct wayland_message		   wayland_message;
 typedef struct wayland_method		   wayland_method;
@@ -69,12 +70,20 @@ struct wayland_param {
 	};
 };
 
+struct wayland_event_queue {
+	array_deque	 Deque;
+	mutex_handle Lock;
+};
+
 struct wayland_interface {
 	u32 Id;
-	u32 Version;
-	u32 Size;
+	u16 Version;
+	u16 Size;
 
 	wayland_prototype *Prototype;
+
+	wayland_event_queue *LinkedEventQueue;
+	wayland_event_queue	 InternalEventQueue;
 
 	vptr Events[];
 };
@@ -188,6 +197,9 @@ typedef struct wayland_api_state {
 	INTERN(b08,  Wayland_IsConnected, void) \
 	INTERN(void, Wayland_Disconnect,  void) \
 	INTERN(b08,  Wayland_Connect,     void) \
+	\
+	INTERN(wayland_event_queue, Wayland_CreateEventQueue, void) \
+	INTERN(void,                Wayland_LinkEventQueue,   wayland_interface *Object, wayland_event_queue *EventQueue) \
 	\
 	INTERN(b08,  Wayland_PollEventQueue, s32 Timeout, wayland_event *Event) \
 	INTERN(void, Wayland_DispatchEvent,  wayland_event Event) \
@@ -599,58 +611,65 @@ end:
 
 #endif
 
+#ifndef SECTION_EVENT_QUEUE
+
+internal wayland_event_queue
+Wayland_CreateEventQueue(void)
+{
+	wayland_event_queue EventQueue;
+	EventQueue.Deque =
+		ArrayDeque_Init(_G.WaylandApi.Heap, sizeof(wayland_message), 16);
+	Platform_CreateMutex(&EventQueue.Lock);
+	return EventQueue;
+}
+
+internal void
+Wayland_EnqueueEvent(wayland_event_queue *EventQueue, wayland_message Message)
+{
+	Assert(EventQueue);
+	Platform_LockMutex(&EventQueue->Lock);
+	ArrayDeque_PushBack(&EventQueue->Deque, &Message);
+	Platform_UnlockMutex(&EventQueue->Lock);
+}
+
+internal b08
+Wayland_DequeueEvent(
+	wayland_event_queue *EventQueue,
+	wayland_message		*MessageOut
+)
+{
+	Assert(EventQueue);
+	b08 Popped = FALSE;
+
+	Platform_LockMutex(&EventQueue->Lock);
+	if (EventQueue->Deque.Count > 0) {
+		ArrayDeque_PopFront(&EventQueue->Deque, MessageOut);
+		Popped = TRUE;
+	}
+	Platform_UnlockMutex(&EventQueue->Lock);
+
+	return Popped;
+}
+
+internal void
+Wayland_LinkEventQueue(
+	wayland_interface	*Object,
+	wayland_event_queue *EventQueue
+)
+{
+	Assert(Object);
+
+	Object->LinkedEventQueue = EventQueue;
+	if (!EventQueue) return;
+
+	wayland_message Message;
+	while (Wayland_DequeueEvent(&Object->InternalEventQueue, &Message))
+		Wayland_EnqueueEvent(EventQueue, Message);
+}
+
+#endif
+
 #ifndef SECTION_MESSAGE_SERIALIZATION
-
-internal b08
-Wayland_WaitUntilCanSend(s32 Timeout)
-{
-	if (!_G.WaylandApi.Connected) return FALSE;
-
-	sys_pollfd PollFd = {
-		.FileDescriptor	 = _G.WaylandApi.Socket,
-		.RequestedEvents = SYS_POLLOUT,
-		.ReturnedEvents	 = 0,
-	};
-
-	s32 Result = Sys_Poll(&PollFd, 1, Timeout);
-	return Result == 1 && (PollFd.ReturnedEvents & SYS_POLLOUT);
-}
-
-internal b08
-Wayland_SendMessage(wayland_message Message)
-{
-	sys_iovec IOVector = { 0 };
-	IOVector.Base	   = Message.MessageData;
-	IOVector.Length	   = Message.MessageSize;
-
-	sys_msghdr MessageHeader	= { 0 };
-	MessageHeader.IOVectors		= &IOVector;
-	MessageHeader.IOVectorCount = 1;
-	MessageHeader.Control		= Message.ControlData;
-	MessageHeader.ControlSize	= Message.ControlSize;
-
-	ssize BytesWritten =
-		Sys_SendMsg(_G.WaylandApi.Socket, &MessageHeader, SYS_MSG_NOSIGNAL);
-
-	if (BytesWritten < 0) return FALSE;
-	Assert(BytesWritten == Message.MessageSize);
-	return TRUE;
-}
-
-internal b08
-Wayland_WaitUntilCanReceive(s32 Timeout)
-{
-	if (!_G.WaylandApi.Connected) return FALSE;
-
-	sys_pollfd PollFd = {
-		.FileDescriptor	 = _G.WaylandApi.Socket,
-		.RequestedEvents = SYS_POLLIN,
-		.ReturnedEvents	 = 0,
-	};
-
-	s32 Result = Sys_Poll(&PollFd, 1, Timeout);
-	return Result == 1 && (PollFd.ReturnedEvents & SYS_POLLIN);
-}
 
 internal void
 Wayland_DestroyMessage(wayland_message Message)
@@ -1117,6 +1136,61 @@ Wayland_DeserializeMethod(u32 *Words)
 	}
 
 	return PreparedMethod;
+}
+
+#endif
+
+#ifndef SECTION_MESSAGE_QUEUE
+
+internal b08
+Wayland_WaitUntilCanReceive(s32 Timeout)
+{
+	if (!_G.WaylandApi.Connected) return FALSE;
+
+	sys_pollfd PollFd = {
+		.FileDescriptor	 = _G.WaylandApi.Socket,
+		.RequestedEvents = SYS_POLLIN,
+		.ReturnedEvents	 = 0,
+	};
+
+	s32 Result = Sys_Poll(&PollFd, 1, Timeout);
+	return Result == 1 && (PollFd.ReturnedEvents & SYS_POLLIN);
+}
+
+internal b08
+Wayland_WaitUntilCanSend(s32 Timeout)
+{
+	if (!_G.WaylandApi.Connected) return FALSE;
+
+	sys_pollfd PollFd = {
+		.FileDescriptor	 = _G.WaylandApi.Socket,
+		.RequestedEvents = SYS_POLLOUT,
+		.ReturnedEvents	 = 0,
+	};
+
+	s32 Result = Sys_Poll(&PollFd, 1, Timeout);
+	return Result == 1 && (PollFd.ReturnedEvents & SYS_POLLOUT);
+}
+
+internal b08
+Wayland_SendMessage(wayland_message Message)
+{
+	sys_iovec IOVector = { 0 };
+	IOVector.Base	   = Message.MessageData;
+	IOVector.Length	   = Message.MessageSize;
+
+	sys_msghdr MessageHeader	= { 0 };
+	MessageHeader.IOVectors		= &IOVector;
+	MessageHeader.IOVectorCount = 1;
+	MessageHeader.Control		= Message.ControlData;
+	MessageHeader.ControlSize	= Message.ControlSize;
+
+	ssize BytesWritten =
+		Sys_SendMsg(_G.WaylandApi.Socket, &MessageHeader, SYS_MSG_NOSIGNAL);
+
+	if (BytesWritten < 0) return FALSE;
+	Assert(BytesWritten == Message.MessageSize);
+	return TRUE;
 }
 
 internal void
