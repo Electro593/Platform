@@ -15,6 +15,7 @@ typedef struct wayland_seat_entry {
 	wayland_seat_capability Capabilities;
 
 	wayland_keyboard *Keyboard;
+	vptr			  Keymap;
 } wayland_seat_entry;
 
 typedef struct wayland_dmabuf_format_entry {
@@ -45,9 +46,11 @@ typedef struct wayland_state {
 	gbm Gbm;
 	egl Egl;
 
-	thread_handle EventThread;
+	thread_handle		EventThread;
+	wayland_event_queue EventQueue;
 
 	mutex_handle SyncLock;
+	b08			 Syncing;
 
 	wayland_display	 *Display;
 	wayland_registry *Registry;
@@ -144,6 +147,34 @@ Wayland_Buffer_Release(wayland_buffer *This)
 }
 
 internal void
+Wayland_Callback_Done_Sync(wayland_callback *This, u32 CallbackData)
+{
+	Wayland_DebugLog(This, "Event queue sync sentinel hit\n");
+
+	Assert(_G.Wayland.Syncing);
+	_G.Wayland.Syncing = FALSE;
+}
+
+internal void
+Wayland_Keyboard_Keymap(
+	wayland_keyboard			  *This,
+	wayland_keyboard_keymap_format Format,
+	s32							   Fd,
+	u32							   Size
+)
+{
+	Wayland_DebugLog(This, "Sent keymap table (fd %d, %d bytes)\n", Fd, Size);
+
+	vptr KeymapData =
+		Sys_MemMap(NULL, Size, SYS_PROT_READ, SYS_MAP_PRIVATE, Fd, 0);
+	Assert(KeymapData && (usize) KeymapData <= (usize) -4096);
+	Sys_Close(Fd);
+
+	// TODO
+	// _G.Wayland.Keymap = KeymapData;
+}
+
+internal void
 Wayland_Keyboard_Enter(
 	wayland_keyboard *This,
 	u32				  Serial,
@@ -198,9 +229,14 @@ Wayland_Seat_Capabilities(
 	if (Entry) {
 		b08 HasKeyboard = Capabilities & WAYLAND_SEAT_CAPABILITY_KEYBOARD;
 		if (HasKeyboard && !Entry->Keyboard) {
-			Entry->Keyboard		   = Wayland_Seat_GetKeyboard(This);
-			Entry->Keyboard->Enter = Wayland_Keyboard_Enter;
-			Entry->Keyboard->Leave = Wayland_Keyboard_Leave;
+			Entry->Keyboard			= Wayland_Seat_GetKeyboard(This);
+			Entry->Keyboard->Keymap = Wayland_Keyboard_Keymap;
+			Entry->Keyboard->Enter	= Wayland_Keyboard_Enter;
+			Entry->Keyboard->Leave	= Wayland_Keyboard_Leave;
+			Wayland_LinkEventQueue(
+				(vptr) Entry->Keyboard,
+				&_G.Wayland.EventQueue
+			);
 		} else if (!HasKeyboard && Entry->Keyboard) {
 			Wayland_Keyboard_Release(Entry->Keyboard);
 			Entry->Keyboard = NULL;
@@ -353,7 +389,9 @@ Wayland_ZwpLinuxBufferParamsV1_Created(
 
 	usize I = _G.Wayland.Window.Buffers[0] != NULL;
 
-	Buffer->Release				 = Wayland_Buffer_Release;
+	Buffer->Release = Wayland_Buffer_Release;
+	Wayland_LinkEventQueue((vptr) Buffer, &_G.Wayland.EventQueue);
+
 	_G.Wayland.Window.Buffers[I] = Buffer;
 }
 
@@ -530,6 +568,10 @@ Wayland_Registry_Global(
 		_G.Wayland.CompositorName = Name;
 		_G.Wayland.Compositor	  = (wayland_compositor *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
+		Wayland_LinkEventQueue(
+			(vptr) _G.Wayland.Compositor,
+			&_G.Wayland.EventQueue
+		);
 		Wayland_DebugLog(
 			This,
 			"Bound %s\n",
@@ -540,6 +582,7 @@ Wayland_Registry_Global(
 			Wayland_Registry_Bind(This, Name, Interface, Version);
 		Seat->Capabilities = Wayland_Seat_Capabilities;
 		Seat->Name		   = Wayland_Seat_Name;
+		Wayland_LinkEventQueue((vptr) Seat, &_G.Wayland.EventQueue);
 		HashMap_Add(
 			&_G.Wayland.Seats,
 			&Seat->Interface.Id,
@@ -550,6 +593,10 @@ Wayland_Registry_Global(
 		_G.Wayland.XdgWmBase	 = (wayland_xdg_wm_base *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
 		_G.Wayland.XdgWmBase->Ping = Wayland_XdgWmBase_Ping;
+		Wayland_LinkEventQueue(
+			(vptr) _G.Wayland.XdgWmBase,
+			&_G.Wayland.EventQueue
+		);
 		Wayland_DebugLog(
 			This,
 			"Bound %s\n",
@@ -560,6 +607,10 @@ Wayland_Registry_Global(
 		_G.Wayland.ZwpLinuxDmabufV1Name = Name;
 		_G.Wayland.ZwpLinuxDmabufV1		= (wayland_zwp_linux_dmabuf_v1 *)
 			Wayland_Registry_Bind(This, Name, Interface, Version);
+		Wayland_LinkEventQueue(
+			(vptr) _G.Wayland.ZwpLinuxDmabufV1,
+			&_G.Wayland.EventQueue
+		);
 		Wayland_DebugLog(
 			This,
 			"Bound %s\n",
@@ -605,35 +656,63 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 }
 
 internal void
-Wayland_Frame(wayland_callback *This, u32 CallbackData)
+Wayland_Callback_Done_Frame(wayland_callback *This, u32 CallbackData)
 {
 	Wayland_DebugLog(This, "Notified of frame at time %d\n", CallbackData);
 
 	wayland_window_state *Window = &_G.Wayland.Window;
 
 	wayland_callback *FrameCallback = Wayland_Surface_Frame(Window->Surface);
-	FrameCallback->Done				= Wayland_Frame;
-	Window->FrameCallback			= FrameCallback;
+	FrameCallback->Done				= Wayland_Callback_Done_Frame;
+	Wayland_LinkEventQueue((vptr) FrameCallback, &_G.Wayland.EventQueue);
 
+	Window->FrameCallback = FrameCallback;
 	Wayland_SwapBuffers();
 }
 
 internal s32
 Wayland_EventHandlerThread(vptr Data)
 {
-	wayland_event Event;
+	usize DebugCounter = 0;
 
 	usize PollsSinceLastEvent = 0;
 	while (Wayland_IsConnected()) {
 		Platform_LockMutex(&_G.Wayland.SyncLock);
 
-		if (Wayland_PollEventQueue(20, &Event)) {
+		wayland_event Event;
+		b08 Polled = Wayland_PollConnection(20)
+				  && Wayland_DequeueEvent(&_G.Wayland.EventQueue, &Event);
+		if (Polled) {
 			Wayland_DispatchEvent(Event);
 			Wayland_DestroyEvent(Event);
-
 			PollsSinceLastEvent = 0;
+			DebugCounter++;
 		} else {
 			PollsSinceLastEvent++;
+		}
+
+		if (DebugCounter > 100) {
+			DebugCounter = 0;
+			HASHMAP_FOREACH (
+				I,
+				Hash,
+				u32,
+				Id,
+				wayland_interface *,
+				Object,
+				&_G.WaylandApi.IdTable
+			)
+			{
+				u32 EventCount = Object->InternalEventQueue.Deque.Count;
+				if (!Object->LinkedEventQueue && EventCount > 0) {
+					Wayland_LogMessage(
+						Object,
+						NULL,
+						"[Debug] Has %d outstanding events\n",
+						EventCount
+					);
+				}
+			}
 		}
 
 		Platform_UnlockMutex(&_G.Wayland.SyncLock);
@@ -653,18 +732,19 @@ Wayland_EventHandlerThread(vptr Data)
 internal void
 Wayland_SyncAndHandleEvents(void)
 {
-	wayland_event Event;
-
 	Platform_LockMutex(&_G.Wayland.SyncLock);
+	_G.Wayland.Syncing = TRUE;
 
 	wayland_callback *SyncCallback = Wayland_Display_Sync(_G.Wayland.Display);
-	while (Wayland_PollEventQueue(20, &Event)) {
-		if (Event.Method.Object == (wayland_interface *) SyncCallback) {
+	SyncCallback->Done			   = Wayland_Callback_Done_Sync;
+	Wayland_LinkEventQueue((vptr) SyncCallback, &_G.Wayland.EventQueue);
+
+	while (_G.Wayland.Syncing && Wayland_PollConnection(20)) {
+		wayland_event Event;
+		if (Wayland_DequeueEvent(&_G.Wayland.EventQueue, &Event)) {
+			Wayland_DispatchEvent(Event);
 			Wayland_DestroyEvent(Event);
-			break;
 		}
-		Wayland_DispatchEvent(Event);
-		Wayland_DestroyEvent(Event);
 	}
 
 	Platform_UnlockMutex(&_G.Wayland.SyncLock);
@@ -679,16 +759,20 @@ Wayland_TryInit(void)
 		_G.Wayland.Seats =
 			HashMap_Init(_G.Heap, sizeof(u32), sizeof(wayland_seat_entry));
 
+		_G.Wayland.EventQueue = Wayland_CreateEventQueue();
+
 		wayland_display *Display = Wayland_GetDisplay();
 		Display->Error			 = Wayland_Display_Error;
 		Display->DeleteId		 = Wayland_Display_DeleteId;
 		_G.Wayland.Display		 = Display;
+		Wayland_LinkEventQueue((vptr) Display, &_G.Wayland.EventQueue);
 
 		wayland_registry *Registry =
 			Wayland_Display_GetRegistry(_G.Wayland.Display);
 		Registry->Global	   = Wayland_Registry_Global;
 		Registry->GlobalRemove = Wayland_Registry_GlobalRemove;
 		_G.Wayland.Registry	   = Registry;
+		Wayland_LinkEventQueue((vptr) Registry, &_G.Wayland.EventQueue);
 
 		b08 Success = Platform_CreateThread(
 			&_G.Wayland.EventThread,
@@ -773,6 +857,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	Surface->PreferredBufferScale = Wayland_Surface_PreferredBufferScale;
 	Surface->PreferredBufferTransform =
 		Wayland_Surface_PreferredBufferTransform;
+	Wayland_LinkEventQueue((vptr) Surface, &_G.Wayland.EventQueue);
 
 	Feedback = Wayland_ZwpLinuxDmabufV1_GetSurfaceFeedback(
 		_G.Wayland.ZwpLinuxDmabufV1,
@@ -786,10 +871,12 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 		Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice;
 	Feedback->TrancheFormats = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFormats;
 	Feedback->TrancheFlags	 = Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFlags;
+	Wayland_LinkEventQueue((vptr) Feedback, &_G.Wayland.EventQueue);
 
 	XdgSurface = Wayland_XdgWmBase_GetXdgSurface(_G.Wayland.XdgWmBase, Surface);
 	if (!XdgSurface) goto error;
 	XdgSurface->Configure = Wayland_XdgSurface_Configure;
+	Wayland_LinkEventQueue((vptr) XdgSurface, &_G.Wayland.EventQueue);
 
 	XdgToplevel = Wayland_XdgSurface_GetToplevel(XdgSurface);
 	if (!XdgToplevel) goto error;
@@ -797,6 +884,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	XdgToplevel->Close			 = Wayland_XdgToplevel_Close;
 	XdgToplevel->ConfigureBounds = Wayland_XdgToplevel_ConfigureBounds;
 	XdgToplevel->WmCapabilities	 = Wayland_XdgToplevel_WmCapabilities;
+	Wayland_LinkEventQueue((vptr) XdgToplevel, &_G.Wayland.EventQueue);
 	Wayland_XdgToplevel_SetTitle(XdgToplevel, "Voxarc");
 	Wayland_XdgToplevel_SetAppId(XdgToplevel, "voxarc");
 
@@ -827,6 +915,7 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 			Wayland_ZwpLinuxDmabufV1_CreateParams(_G.Wayland.ZwpLinuxDmabufV1);
 		BufferParams[I]->Created = Wayland_ZwpLinuxBufferParamsV1_Created;
 		BufferParams[I]->Failed	 = Wayland_ZwpLinuxBufferParamsV1_Failed;
+		Wayland_LinkEventQueue((vptr) BufferParams[I], &_G.Wayland.EventQueue);
 
 		gbm_bo *Bo = _G.Wayland.Gbm.BufferObjects[I];
 		Wayland_ZwpLinuxBufferParamsV1_Add(

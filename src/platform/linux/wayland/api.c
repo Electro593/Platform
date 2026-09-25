@@ -82,6 +82,7 @@ struct wayland_interface {
 
 	wayland_prototype *Prototype;
 
+	mutex_handle		 LinkLock;
 	wayland_event_queue *LinkedEventQueue;
 	wayland_event_queue	 InternalEventQueue;
 
@@ -199,9 +200,10 @@ typedef struct wayland_api_state {
 	INTERN(b08,  Wayland_Connect,     void) \
 	\
 	INTERN(wayland_event_queue, Wayland_CreateEventQueue, void) \
+	INTERN(b08,                 Wayland_DequeueEvent,     wayland_event_queue *EventQueue, wayland_event *EventOut) \
 	INTERN(void,                Wayland_LinkEventQueue,   wayland_interface *Object, wayland_event_queue *EventQueue) \
 	\
-	INTERN(b08,  Wayland_PollEventQueue, s32 Timeout, wayland_event *Event) \
+	INTERN(b08,  Wayland_PollConnection, s32 Timeout) \
 	INTERN(void, Wayland_DispatchEvent,  wayland_event Event) \
 	INTERN(void, Wayland_DestroyEvent,   wayland_event Event) \
 	//
@@ -405,6 +407,10 @@ Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
 	Object->Version	  = Version;
 	Object->Size	  = InterfaceSize;
 	Object->Prototype = Prototype;
+
+	Platform_CreateMutex(&Object->LinkLock);
+	Object->LinkedEventQueue = NULL;
+	Object->InternalEventQueue = Wayland_CreateEventQueue();
 
 	HashMap_Add(&_G.WaylandApi.IdTable, &ObjectId, &Object);
 	return Object;
@@ -618,37 +624,44 @@ Wayland_CreateEventQueue(void)
 {
 	wayland_event_queue EventQueue;
 	EventQueue.Deque =
-		ArrayDeque_Init(_G.WaylandApi.Heap, sizeof(wayland_message), 16);
+		ArrayDeque_Init(_G.WaylandApi.Heap, sizeof(wayland_event), 16);
 	Platform_CreateMutex(&EventQueue.Lock);
 	return EventQueue;
 }
 
 internal void
-Wayland_EnqueueEvent(wayland_event_queue *EventQueue, wayland_message Message)
+Wayland_EnqueueObjectEvent(wayland_interface *Object, wayland_event Event)
 {
-	Assert(EventQueue);
+	Assert(Object);
+
+	// This can deadlock if an event queue lock is already held!
+	Platform_LockMutex(&Object->LinkLock);
+
+	wayland_event_queue *EventQueue = Object->LinkedEventQueue;
+	if (!EventQueue) EventQueue = &Object->InternalEventQueue;
+
 	Platform_LockMutex(&EventQueue->Lock);
-	ArrayDeque_PushBack(&EventQueue->Deque, &Message);
+	Assert(
+		EventQueue->Deque.Count < 256,
+		"Large growth in wayland object event queue"
+	);
+	ArrayDeque_PushBack(&EventQueue->Deque, &Event);
 	Platform_UnlockMutex(&EventQueue->Lock);
+
+	Platform_UnlockMutex(&Object->LinkLock);
 }
 
 internal b08
-Wayland_DequeueEvent(
-	wayland_event_queue *EventQueue,
-	wayland_message		*MessageOut
-)
+Wayland_DequeueEvent(wayland_event_queue *EventQueue, wayland_event *EventOut)
 {
 	Assert(EventQueue);
-	b08 Popped = FALSE;
 
 	Platform_LockMutex(&EventQueue->Lock);
-	if (EventQueue->Deque.Count > 0) {
-		ArrayDeque_PopFront(&EventQueue->Deque, MessageOut);
-		Popped = TRUE;
-	}
+	b08 HasEvent = EventQueue->Deque.Count > 0;
+	if (HasEvent) ArrayDeque_PopFront(&EventQueue->Deque, EventOut);
 	Platform_UnlockMutex(&EventQueue->Lock);
 
-	return Popped;
+	return HasEvent;
 }
 
 internal void
@@ -659,12 +672,32 @@ Wayland_LinkEventQueue(
 {
 	Assert(Object);
 
-	Object->LinkedEventQueue = EventQueue;
-	if (!EventQueue) return;
+	// This can deadlock if an event queue lock is already held!
+	Platform_LockMutex(&Object->LinkLock);
 
-	wayland_message Message;
-	while (Wayland_DequeueEvent(&Object->InternalEventQueue, &Message))
-		Wayland_EnqueueEvent(EventQueue, Message);
+	Object->LinkedEventQueue = EventQueue;
+	if (EventQueue) {
+		wayland_event Event;
+
+		while (1) {
+			b08 Popped = FALSE;
+
+			wayland_event_queue *InternalQueue = &Object->InternalEventQueue;
+			Platform_LockMutex(&InternalQueue->Lock);
+			if (InternalQueue->Deque.Count > 0) {
+				ArrayDeque_PopFront(&InternalQueue->Deque, &Event);
+				Popped = TRUE;
+			}
+			Platform_UnlockMutex(&InternalQueue->Lock);
+			if (!Popped) break;
+
+			Platform_LockMutex(&EventQueue->Lock);
+			ArrayDeque_PushBack(&EventQueue->Deque, &Event);
+			Platform_UnlockMutex(&EventQueue->Lock);
+		}
+	}
+
+	Platform_UnlockMutex(&Object->LinkLock);
 }
 
 #endif
@@ -1410,7 +1443,7 @@ Wayland_TryDequeueEvent(
 }
 
 internal b08
-Wayland_PollEventQueue(s32 Timeout, wayland_event *Event)
+Wayland_PollConnection(s32 Timeout)
 {
 	Platform_LockMutex(&_G.WaylandApi.Lock);
 
@@ -1424,12 +1457,15 @@ Wayland_PollEventQueue(s32 Timeout, wayland_event *Event)
 			Timeout
 		);
 
+		wayland_event Event;
 		Dequeued = Wayland_TryDequeueEvent(
 			_G.WaylandApi.Heap,
 			&_G.WaylandApi.MessageQueue,
 			&_G.WaylandApi.FdQueue,
-			Event
+			&Event
 		);
+
+		if (Dequeued) Wayland_EnqueueObjectEvent(Event.Method.Object, Event);
 	}
 
 	Platform_UnlockMutex(&_G.WaylandApi.Lock);
