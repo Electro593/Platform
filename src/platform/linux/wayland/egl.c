@@ -105,6 +105,7 @@ typedef enum egl_conformance_flags			 egl_conformance_flags;
 typedef enum egl_error						 egl_error;
 typedef enum egl_image_attrib				 egl_image_attrib;
 typedef enum egl_image_target				 egl_image_target;
+typedef enum egl_platform					 egl_platform;
 typedef enum egl_profile_flags				 egl_profile_flags;
 typedef enum egl_query						 egl_query;
 typedef enum egl_renderable_type_flags		 egl_renderable_type_flags;
@@ -266,6 +267,11 @@ enum egl_image_target {
 	EGL_IMAGE_TARGET_LINUX_DMA_BUF = 0x3270,
 };
 
+enum egl_platform {
+	// EGL_KHR_platform_gbm
+	EGL_PLATFORM_GBM_KHR = 0x31D7,
+};
+
 enum egl_profile_flags {
 	EGL_PROFILE_OPENGL_CORE			 = 0x00000001,	// v1.5
 	EGL_PROFILE_OPENGL_COMPATIBILITY = 0x00000002,	// v1.5
@@ -356,7 +362,8 @@ struct egl {
 	IMPORT(egl_boolean, Egl, eglGetConfigs,          Egl_GetConfigs,          egl_display Display, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
 	IMPORT(egl_display, Egl, eglGetDisplay,          Egl_GetDisplay,          egl_native_display_type Display) \
 	IMPORT(egl_int,     Egl, eglGetError,            Egl_GetError,            void) \
-	IMPORT(vptr,        Egl, eglGetProcAddress,      Egl_GetProcAddress,            c08 *Name) \
+	IMPORT(egl_display, Egl, eglGetPlatformDisplay,  Egl_GetPlatformDisplay,  egl_platform Platform, egl_native_display_type Display, egl_attrib *Attribs) \
+	IMPORT(vptr,        Egl, eglGetProcAddress,      Egl_GetProcAddress,      c08 *Name) \
 	IMPORT(egl_boolean, Egl, eglInitialize,          Egl_Initialize,          egl_display Display, egl_int *Major, egl_int *Minor) \
 	IMPORT(egl_boolean, Egl, eglMakeCurrent,         Egl_MakeCurrent,         egl_display Display, egl_surface Draw, egl_surface Read, egl_context Context) \
 	IMPORT(egl_api,     Egl, eglQueryAPI,            Egl_QueryApi,            void) \
@@ -374,7 +381,40 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 {
 	egl_config *Configs	   = NULL;
 	egl_surface EglSurface = EGL_NO_SURFACE;
-	egl_display EglDisplay = Egl_GetDisplay(Gbm->Device);
+	egl_display EglDisplay = EGL_NO_DISPLAY;
+
+	FPrintL("Initializing egl...\n");
+
+	// Query client extensions
+	b08	   HasEglKhrPlatformGbm = FALSE;
+	string ClientExtensions =
+		CString(Egl_QueryString(EglDisplay, EGL_QUERY_EXTENSIONS));
+	if (ClientExtensions.Length) FPrintL("- Client Extensions:\n");
+	else FPrintL("- No Client Extensions\n");
+	while (ClientExtensions.Length) {
+		string Extension = String_SplitLeftByCodepoint(&ClientExtensions, ' ');
+		FPrintL("  - %s\n", Extension);
+
+		if (String_Cmp(Extension, CStringL("EGL_KHR_platform_gbm")) == 0)
+			HasEglKhrPlatformGbm = TRUE;
+	}
+
+	if (HasEglKhrPlatformGbm) {
+		EglDisplay =
+			Egl_GetPlatformDisplay(EGL_PLATFORM_GBM_KHR, Gbm->Device, NULL);
+	} else {
+		FPrintL(
+			"Client extension EGL_KHR_platform_bgm is not present. Falling "
+			"back to eglGetDisplay.\n"
+		);
+
+		EglDisplay = Egl_GetDisplay(Gbm->Device);
+	}
+
+	if (EglDisplay == EGL_NO_DISPLAY) {
+		FPrintL("Failed to get egl display: code %#x\n", Egl_GetError());
+		goto error;
+	}
 
 	// Initialize
 	egl_int Major, Minor;
@@ -425,6 +465,8 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		if (String_Cmp(Extension, CStringL("EGL_EXT_image_dma_buf_import"))
 			== 0)
 			HasEglExtImageDmaBufImport = TRUE;
+		else if (String_Cmp(Extension, CStringL("EGL_KHR_platform_gbm")) == 0)
+			HasEglKhrPlatformGbm = TRUE;
 	}
 
 	if (Api != EGL_API_OPENGL) {

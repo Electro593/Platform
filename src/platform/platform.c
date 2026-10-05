@@ -55,7 +55,7 @@ typedef enum execution_state {
 	EXECUTION_ENDED,
 } execution_state;
 
-typedef enum focus_state { FOCUS_CLIENT, FOCUS_FRAME, FOCUS_NONE } focus_state;
+typedef enum focus_state { FOCUS_NONE, FOCUS_CLIENT, FOCUS_FRAME } focus_state;
 
 typedef enum scancode {
 	ScanCode_Unknown = 0x00,

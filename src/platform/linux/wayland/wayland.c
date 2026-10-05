@@ -14,8 +14,10 @@ typedef struct wayland_seat_entry {
 	string					Name;
 	wayland_seat_capability Capabilities;
 
-	wayland_keyboard *Keyboard;
-	vptr			  Keymap;
+	wayland_keyboard			  *Keyboard;
+	wayland_keyboard_keymap_format KeymapFormat;
+	vptr						   KeymapData;
+	usize						   KeymapSize;
 } wayland_seat_entry;
 
 typedef struct wayland_dmabuf_format_entry {
@@ -72,8 +74,7 @@ typedef struct wayland_state {
 	v2s32					 MaxWindowSize;
 	v2s32					 PreferredWindowSize;
 
-	hashmap Seats;
-	hashmap Outputs;
+	wayland_seat_entry Seat;
 } wayland_state;
 
 #define WAYLAND_USER_FUNCS \
@@ -165,10 +166,17 @@ Wayland_Keyboard_Keymap(
 {
 	Wayland_DebugLog(This, "Sent keymap table (fd %d, %d bytes)\n", Fd, Size);
 
-	vptr KeymapData =
+	wayland_seat_entry *Entry = &_G.Wayland.Seat;
+	Assert(Entry->Seat && Entry->Keyboard == This);
+
+	Entry->KeymapFormat = Format;
+	Entry->KeymapSize	= Size;
+	Entry->KeymapData =
 		Sys_MemMap(NULL, Size, SYS_PROT_READ, SYS_MAP_PRIVATE, Fd, 0);
-	Assert(KeymapData && (usize) KeymapData <= (usize) -4096);
+	Assert(Entry->KeymapData && (usize) Entry->KeymapData <= (usize) -4096);
 	Sys_Close(Fd);
+
+	FPrintL("%s\n", CString(Entry->KeymapData));
 
 	// TODO
 	// _G.Wayland.Keymap = KeymapData;
@@ -224,26 +232,28 @@ Wayland_Seat_Capabilities(
 {
 	Wayland_DebugLog(This, "Advertized seat capabilities %x\n", Capabilities);
 
-	wayland_seat_entry *Entry =
-		HashMap_GetRef(&_G.Wayland.Seats, &This->Interface.Id);
-	if (Entry) {
-		b08 HasKeyboard = Capabilities & WAYLAND_SEAT_CAPABILITY_KEYBOARD;
-		if (HasKeyboard && !Entry->Keyboard) {
-			Entry->Keyboard			= Wayland_Seat_GetKeyboard(This);
-			Entry->Keyboard->Keymap = Wayland_Keyboard_Keymap;
-			Entry->Keyboard->Enter	= Wayland_Keyboard_Enter;
-			Entry->Keyboard->Leave	= Wayland_Keyboard_Leave;
-			Wayland_LinkEventQueue(
-				(vptr) Entry->Keyboard,
-				&_G.Wayland.EventQueue
-			);
-		} else if (!HasKeyboard && Entry->Keyboard) {
-			Wayland_Keyboard_Release(Entry->Keyboard);
-			Entry->Keyboard = NULL;
-		}
+	wayland_seat_entry *Entry = &_G.Wayland.Seat;
+	Assert(Entry->Seat);
 
-		Entry->Capabilities = Capabilities;
+	b08 HasKeyboard = Capabilities & WAYLAND_SEAT_CAPABILITY_KEYBOARD;
+	if (HasKeyboard && !Entry->Keyboard) {
+		Entry->Keyboard			= Wayland_Seat_GetKeyboard(This);
+		Entry->Keyboard->Keymap = Wayland_Keyboard_Keymap;
+		Entry->Keyboard->Enter	= Wayland_Keyboard_Enter;
+		Entry->Keyboard->Leave	= Wayland_Keyboard_Leave;
+		Wayland_LinkEventQueue((vptr) Entry->Keyboard, &_G.Wayland.EventQueue);
+	} else if (!HasKeyboard && Entry->Keyboard) {
+		if (Entry->KeymapData) {
+			Sys_MemUnmap(Entry->KeymapData, Entry->KeymapSize);
+			Entry->KeymapFormat = 0;
+			Entry->KeymapData	= NULL;
+			Entry->KeymapSize	= 0;
+		}
+		Wayland_Keyboard_Release(Entry->Keyboard);
+		Entry->Keyboard = NULL;
 	}
+
+	Entry->Capabilities = Capabilities;
 }
 
 internal void
@@ -251,9 +261,10 @@ Wayland_Seat_Name(wayland_seat *This, c08 *Name)
 {
 	Wayland_DebugLog(This, "Advertized seat name %s\n", CString(Name));
 
-	wayland_seat_entry *Entry =
-		HashMap_GetRef(&_G.Wayland.Seats, &This->Interface.Id);
-	if (Entry) Entry->Name = HString(_G.Heap, Name);
+	wayland_seat_entry *Entry = &_G.Wayland.Seat;
+	Assert(Entry->Seat);
+
+	Entry->Name = HString(_G.Heap, Name);
 }
 
 internal void
@@ -578,16 +589,14 @@ Wayland_Registry_Global(
 			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
 		);
 	} else if (String_Cmp(Str, CStringL("wl_seat")) == 0) {
-		wayland_seat *Seat = (wayland_seat *)
-			Wayland_Registry_Bind(This, Name, Interface, Version);
-		Seat->Capabilities = Wayland_Seat_Capabilities;
-		Seat->Name		   = Wayland_Seat_Name;
-		Wayland_LinkEventQueue((vptr) Seat, &_G.Wayland.EventQueue);
-		HashMap_Add(
-			&_G.Wayland.Seats,
-			&Seat->Interface.Id,
-			&(wayland_seat_entry){ .Seat = Seat }
-		);
+		if (!_G.Wayland.Seat.Seat) {
+			wayland_seat *Seat = (wayland_seat *)
+				Wayland_Registry_Bind(This, Name, Interface, Version);
+			Seat->Capabilities = Wayland_Seat_Capabilities;
+			Seat->Name		   = Wayland_Seat_Name;
+			_G.Wayland.Seat	   = (wayland_seat_entry){ .Seat = Seat };
+			Wayland_LinkEventQueue((vptr) Seat, &_G.Wayland.EventQueue);
+		}
 	} else if (String_Cmp(Str, CStringL("xdg_wm_base")) == 0) {
 		_G.Wayland.XdgWmBaseName = Name;
 		_G.Wayland.XdgWmBase	 = (wayland_xdg_wm_base *)
@@ -756,9 +765,6 @@ Wayland_TryInit(void)
 	if (Wayland_IsConnected()) return TRUE;
 
 	if (Wayland_Connect()) {
-		_G.Wayland.Seats =
-			HashMap_Init(_G.Heap, sizeof(u32), sizeof(wayland_seat_entry));
-
 		_G.Wayland.EventQueue = Wayland_CreateEventQueue();
 
 		wayland_display *Display = Wayland_GetDisplay();
