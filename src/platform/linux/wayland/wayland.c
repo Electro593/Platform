@@ -11,8 +11,12 @@
 
 typedef struct wayland_seat_entry {
 	wayland_seat		   *Seat;
+	u32						GlobalName;
 	string					Name;
 	wayland_seat_capability Capabilities;
+
+	wayland_pointer *Pointer;
+	v2r32			 PointerPos;
 
 	wayland_keyboard			  *Keyboard;
 	wayland_keyboard_keymap_format KeymapFormat;
@@ -81,6 +85,9 @@ typedef struct wayland_state {
 	EXPORT(b08,               Wayland_TryInit,        void) \
 	EXPORT(wayland_surface *, Wayland_CreateGLWindow, c08 *Title, usize Width, usize Height) \
 	EXPORT(void,              Wayland_SwapBuffers,    void) \
+	\
+	INTERN(void, Wayland_Pointer_Motion, wayland_pointer *This, u32 Time, wayland_fixed SurfaceX, wayland_fixed SurfaceY) \
+	INTERN(void, Wayland_Pointer_Frame,  wayland_pointer *This) \
 	//
 
 #endif
@@ -225,6 +232,44 @@ Wayland_Keyboard_Leave(
 }
 
 internal void
+Wayland_Pointer_Motion(
+	wayland_pointer *This,
+	u32				 Time,
+	wayland_fixed	 SurfaceX,
+	wayland_fixed	 SurfaceY
+)
+{
+	wayland_seat_entry *Entry = &_G.Wayland.Seat;
+	Assert(Entry->Seat && Entry->Pointer);
+
+	Entry->PointerPos = (v2r32){
+		.X = Wayland_FixedToR32(SurfaceX),
+		.Y = Wayland_FixedToR32(SurfaceY),
+	};
+
+	Wayland_DebugLog(
+		This,
+		"Pointer motion at %ums: (%f, %f)\n",
+		Entry->PointerPos.X,
+		Entry->PointerPos.Y
+	);
+}
+
+internal void
+Wayland_Pointer_Frame(wayland_pointer *This)
+{
+	Wayland_DebugLog(This, "Pointer frame\n");
+
+	wayland_seat_entry *Entry = &_G.Wayland.Seat;
+	Assert(Entry->Seat && Entry->Pointer);
+
+	_G.CursorPos = (v2s32){
+		(s32) Entry->PointerPos.X,
+		(s32) Entry->PointerPos.Y,
+	};
+}
+
+internal void
 Wayland_Seat_Capabilities(
 	wayland_seat		   *This,
 	wayland_seat_capability Capabilities
@@ -234,6 +279,17 @@ Wayland_Seat_Capabilities(
 
 	wayland_seat_entry *Entry = &_G.Wayland.Seat;
 	Assert(Entry->Seat);
+
+	b08 HasPointer = Capabilities & WAYLAND_SEAT_CAPABILITY_POINTER;
+	if (HasPointer && !Entry->Pointer) {
+		Entry->Pointer		   = Wayland_Seat_GetPointer(This);
+		Entry->Pointer->Motion = Wayland_Pointer_Motion;
+		Entry->Pointer->Frame  = Wayland_Pointer_Frame;
+		Wayland_LinkEventQueue((vptr) Entry->Pointer, &_G.Wayland.EventQueue);
+	} else if (!HasPointer && Entry->Pointer) {
+		Wayland_Pointer_Release(Entry->Pointer);
+		Entry->Pointer = NULL;
+	}
 
 	b08 HasKeyboard = Capabilities & WAYLAND_SEAT_CAPABILITY_KEYBOARD;
 	if (HasKeyboard && !Entry->Keyboard) {
@@ -594,7 +650,10 @@ Wayland_Registry_Global(
 				Wayland_Registry_Bind(This, Name, Interface, Version);
 			Seat->Capabilities = Wayland_Seat_Capabilities;
 			Seat->Name		   = Wayland_Seat_Name;
-			_G.Wayland.Seat	   = (wayland_seat_entry){ .Seat = Seat };
+			_G.Wayland.Seat	   = (wayland_seat_entry){
+				.Seat		= Seat,
+				.GlobalName = Name,
+			};
 			Wayland_LinkEventQueue((vptr) Seat, &_G.Wayland.EventQueue);
 		}
 	} else if (String_Cmp(Str, CStringL("xdg_wm_base")) == 0) {
@@ -643,6 +702,16 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
 		);
 		Wayland_DestroyObject(_G.Wayland.Compositor);
+	} else if (_G.Wayland.Seat.GlobalName == Name) {
+		_G.Wayland.Seat.GlobalName = 0;
+		Wayland_DebugLog(
+			This,
+			"Destroying %s\n",
+			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Seat.Seat)
+		);
+		Wayland_Seat_Capabilities(_G.Wayland.Seat.Seat, 0);
+		Wayland_DestroyObject(_G.Wayland.Seat.Seat);
+		_G.Wayland.Seat.Seat = NULL;
 	} else if (_G.Wayland.XdgWmBaseName == Name) {
 		_G.Wayland.XdgWmBaseName = 0;
 		Wayland_DebugLog(

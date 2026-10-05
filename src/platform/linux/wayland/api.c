@@ -203,6 +203,8 @@ typedef struct wayland_api_state {
 	INTERN(b08,                 Wayland_DequeueEvent,     wayland_event_queue *EventQueue, wayland_event *EventOut) \
 	INTERN(void,                Wayland_LinkEventQueue,   wayland_interface *Object, wayland_event_queue *EventQueue) \
 	\
+	INTERN(r32, Wayland_FixedToR32, wayland_fixed Fixed) \
+	\
 	INTERN(b08,  Wayland_PollConnection, s32 Timeout) \
 	INTERN(void, Wayland_DispatchEvent,  wayland_event Event) \
 	INTERN(void, Wayland_DestroyEvent,   wayland_event Event) \
@@ -409,7 +411,7 @@ Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
 	Object->Prototype = Prototype;
 
 	Platform_CreateMutex(&Object->LinkLock);
-	Object->LinkedEventQueue = NULL;
+	Object->LinkedEventQueue   = NULL;
 	Object->InternalEventQueue = Wayland_CreateEventQueue();
 
 	HashMap_Add(&_G.WaylandApi.IdTable, &ObjectId, &Object);
@@ -703,6 +705,10 @@ Wayland_LinkEventQueue(
 #endif
 
 #ifndef SECTION_MESSAGE_SERIALIZATION
+
+internal r32
+Wayland_FixedToR32(wayland_fixed Fixed)
+{ return (r32) Fixed / 256.0f; }
 
 internal void
 Wayland_DestroyMessage(wayland_message Message)
