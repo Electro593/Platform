@@ -38,6 +38,9 @@
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build Program (SH)",
             "environment": [],
+            "sourceFileMap": {
+                "/": "/"
+            },
             "MIMode": "gdb",
             "setupCommands": [
                 {

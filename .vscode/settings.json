@@ -69,6 +69,7 @@
 	"C_Cpp.files.exclude": {
 		"**/*.i": true
 	},
+	"clice.inactiveRegions.opacity": 1,
     "todo-tree.tree.showCountsInTree": false,
     "todo-tree.tree.showBadges": false,
     "editor.indentSize": "tabSize",

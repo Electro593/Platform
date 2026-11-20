@@ -81,6 +81,24 @@ typedef u32	 c32;
 #define FLAG_SET(Value, Flag) (((Value) & (Flag)) == (Flag))
 #define ALIGN_UP(Value, Size) (((Value) + ((Size) - 1)) & ~((Size) - 1))
 
+#define ARRAY_COUNT(Array) (sizeof(Array) / sizeof((Array)[0]))
+
+#define _FOREACH(Name, Count, ...) MAC_CONCAT(_FOREACH_, MAC_ARGCOUNT(MAC_SKIP(Count, _, _, __VA_ARGS__)) (Name, __VA_ARGS__))
+#define _FOREACH_(Name, ...) MAC_EVAL(MAC_EVAL(Name) (__VA_ARGS__))
+#define _FOREACH_0(Name, ...) _FOREACH_(Name, __VA_ARGS__, It, Index)
+#define _FOREACH_1(Name, ...) _FOREACH_(Name, __VA_ARGS__, Index)
+#define _FOREACH_2(Name, ...) _FOREACH_(Name, __VA_ARGS__)
+
+#define ARRAY_FOREACH(...) _FOREACH(_ARRAY_FOREACH, 3, __VA_ARGS__)
+#define _ARRAY_FOREACH(Array, Value, I) \
+	for (usize I = 0; I < ARRAY_COUNT(Array); I = ARRAY_COUNT(Array)) \
+		for (typeof(Array[0]) Value; I < ARRAY_COUNT(Array) && (Value = (Array)[I], TRUE); I++)
+
+#define ARRAY_FOREACH_PTR(...) _FOREACH(_ARRAY_FOREACH_PTR, 3, __VA_ARGS__)
+#define _ARRAY_FOREACH_PTR(Array, Value, I) \
+	for (usize I = 0; I < ARRAY_COUNT(Array); I = ARRAY_COUNT(Array)) \
+		for (typeof(Array[0]) *Value; I < ARRAY_COUNT(Array) && (Value = &(Array)[I], TRUE); I++)
+
 #include <macro.h>
 
 #define Error(Message) do {                                                   \

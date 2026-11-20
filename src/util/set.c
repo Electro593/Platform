@@ -16,7 +16,10 @@ typedef struct array_list {
 	u32	 Count;
 } array_list;
 
-#define ARRAY_LIST_FOREACH(I, value, Value, List) \
+#define ARRAY_LIST(Type) array_list
+
+#define ARRAY_LIST_FOREACH(...) _FOREACH(_ARRAY_LIST_FOREACH, 4, __VA_ARGS__)
+#define _ARRAY_LIST_FOREACH(List, value, Value, I) \
 	for (u32 I = 0; I < (List)->Count; I = (List)->Count) \
 		for (value Value; I < (List)->Count && (Value = *(value*) ArrayList_At(List, I), TRUE); I++)
 
@@ -28,7 +31,8 @@ typedef struct array_deque {
 	u32	 Front;
 } array_deque;
 
-#define ARRAY_DEQUE_FOREACH(I, value, Value, Deque) \
+#define ARRAY_DEQUE_FOREACH(...) _FOREACH(_ARRAY_DEQUE_FOREACH, 4, __VA_ARGS__)
+#define _ARRAY_DEQUE_FOREACH(I, value, Value, Deque) \
 	for (u32 I = 0; I < (Deque)->Count; I = (Deque)->Count) \
 		for (value Value; I < (Deque)->Count && (Value = *(value*) ArrayDeque_At(Deque, I), TRUE); I++)
 
@@ -68,6 +72,7 @@ typedef struct hashmap {
 	EXPORT(vptr,        ArrayList_At,          array_list *List, u32 Index) \
 	EXPORT(vptr,        ArrayList_Push,        array_list *List) \
 	EXPORT(void,        ArrayList_Pop,         array_list *List, vptr ValueOut) \
+	EXPORT(void,        ArrayList_Free,        array_list *List) \
 	INTERN(b08,         ArrayDeque_Validate,   array_deque *Deque) \
 	EXPORT(array_deque, ArrayDeque_Init,       heap *Heap, u32 ValueSize, u32 InitialCapacity) \
 	EXPORT(void,        ArrayDeque_Reserve,    array_deque *Deque, u32 MinCapacity) \
@@ -78,6 +83,7 @@ typedef struct hashmap {
 	EXPORT(vptr,        ArrayDeque_PushBack,   array_deque *Deque, vptr Value) \
 	EXPORT(void,        ArrayDeque_PopFront,   array_deque *Deque, vptr ValueOut) \
 	EXPORT(void,        ArrayDeque_PopBack,    array_deque *Deque, vptr ValueOut) \
+	EXPORT(void,        ArrayDeque_Free,       array_deque *Deque) \
 	EXPORT(hashmap,     HashMap_InitCustom,    heap *Heap, u32 KeySize, u32 ValueSize, u32 InitialCapacity, r32 ResizeThresh, r32 ResizeRate, hash_func HashFunc, vptr HashParam, cmp_func CmpFunc, vptr CmpParam) \
 	EXPORT(hashmap,     HashMap_InitStr,       heap *Heap, u32 ValueSize, u32 InitialCapacity) \
 	EXPORT(hashmap,     HashMap_Init,          heap *Heap, u32 KeySize, u32 ValueSize) \
@@ -129,7 +135,7 @@ BinarySearchArray(
 					else Cmp = EQUAL;
 				} break;
 
-				case TYPEID_U64:
+				case TYPEID_U64 :
 				case TYPEID_VPTR: {
 					if (*(u64 *) Curr < *(u64 *) Target) Cmp = LESS;
 					else if (*(u64 *) Curr > *(u64 *) Target) Cmp = GREATER;
@@ -321,6 +327,14 @@ ArrayList_Pop(array_list *List, vptr ValueOut)
 	List->Count--;
 }
 
+internal void
+ArrayList_Free(array_list *List)
+{
+	if (!List || !List->Data) return;
+	Heap_FreeA(List->Data);
+	Mem_Set(List, 0, sizeof(array_list));
+}
+
 internal array_deque
 ArrayDeque_Init(heap *Heap, u32 ValueSize, u32 InitialCapacity)
 {
@@ -459,6 +473,14 @@ ArrayDeque_PopBack(array_deque *Deque, vptr ValueOut)
 	Debug_FillDeleted(EntryRef, Deque->ValueSize);
 
 	Deque->Count--;
+}
+
+internal void
+ArrayDeque_Free(array_deque *Deque)
+{
+	if (!Deque || !Deque->Data) return;
+	Heap_FreeA(Deque->Data);
+	Mem_Set(Deque, 0, sizeof(array_deque));
 }
 
 internal usize

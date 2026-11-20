@@ -9,14 +9,21 @@
 
 #ifdef INCLUDE_HEADER
 
+typedef struct wayland_dmabuf_tranche_entry {
+	wayland_array									   Device;
+	wayland_array									   FormatIndices;
+	wayland_zwp_linux_dmabuf_feedback_v1_tranche_flags Flags;
+} wayland_dmabuf_tranche_entry;
+
 typedef struct wayland_seat_entry {
 	wayland_seat		   *Seat;
 	u32						GlobalName;
 	string					Name;
 	wayland_seat_capability Capabilities;
 
-	wayland_pointer *Pointer;
-	v2r32			 PointerPos;
+	wayland_pointer					*Pointer;
+	v2r32							 PointerPos;
+	wayland_zwp_relative_pointer_v1 *ZwpRelativePointerV1;
 
 	wayland_keyboard			  *Keyboard;
 	wayland_keyboard_keymap_format KeymapFormat;
@@ -61,15 +68,18 @@ typedef struct wayland_state {
 	wayland_display	 *Display;
 	wayland_registry *Registry;
 
-	wayland_compositor			*Compositor;
-	u32							 CompositorName;
-	wayland_xdg_wm_base			*XdgWmBase;
-	u32							 XdgWmBaseName;
-	wayland_zwp_linux_dmabuf_v1 *ZwpLinuxDmabufV1;
-	u32							 ZwpLinuxDmabufV1Name;
+	wayland_compositor						*Compositor;
+	u32										 CompositorName;
+	wayland_xdg_wm_base						*XdgWmBase;
+	u32										 XdgWmBaseName;
+	wayland_zwp_linux_dmabuf_v1				*ZwpLinuxDmabufV1;
+	u32										 ZwpLinuxDmabufV1Name;
+	wayland_zwp_relative_pointer_manager_v1 *ZwpRelativePointerManagerV1;
+	u32										 ZwpRelativePointerManagerV1Name;
 
 	usize						 DrmFormatsSize;
 	wayland_dmabuf_format_entry *DrmFormats;
+	ARRAY_LIST(wayland_dmabuf_tranche_entry) DrmTranches;
 
 	wayland_window_state Window;
 
@@ -94,6 +104,11 @@ typedef struct wayland_state {
 
 #ifdef _LINUX
 #ifdef INCLUDE_SOURCE
+
+internal wayland_zwp_relative_pointer_v1 *Wayland_ZwpRelativePointerV1_New(
+	wayland_zwp_relative_pointer_manager_v1 *ZwpRelativePointerManagerV1,
+	wayland_pointer							*Pointer
+);
 
 internal void
 Wayland_DebugLog(vptr Object, c08 *Format, ...)
@@ -286,7 +301,15 @@ Wayland_Seat_Capabilities(
 		Entry->Pointer->Motion = Wayland_Pointer_Motion;
 		Entry->Pointer->Frame  = Wayland_Pointer_Frame;
 		Wayland_LinkEventQueue((vptr) Entry->Pointer, &_G.Wayland.EventQueue);
+
+		Entry->ZwpRelativePointerV1 = Wayland_ZwpRelativePointerV1_New(
+			_G.Wayland.ZwpRelativePointerManagerV1,
+			Entry->Pointer
+		);
 	} else if (!HasPointer && Entry->Pointer) {
+		Wayland_ZwpRelativePointerV1_Destroy(Entry->ZwpRelativePointerV1);
+		Entry->ZwpRelativePointerV1 = NULL;
+
 		Wayland_Pointer_Release(Entry->Pointer);
 		Entry->Pointer = NULL;
 	}
@@ -526,26 +549,6 @@ Wayland_ZwpLinuxDmabufFeedbackV1_MainDevice(
 		Device.Size,
 		*(u64 *) Device.Data
 	);
-
-	u64 SpecialDeviceId = *(u64 *) Device.Data;
-
-	s32 Fd = Drm_OpenDriverFromVersion(
-		SYS_DEV_MAJOR(SpecialDeviceId),
-		SYS_DEV_MINOR(SpecialDeviceId)
-	);
-	if (Fd < 0) {
-		Wayland_DebugLog(This, "Failed to open device node! code %d\n", -Fd);
-		goto error;
-	}
-
-	s32 NodeType = Drm_GetNodeType(Fd);
-	if (NodeType < 0) goto error;
-
-	_G.Wayland.DrmFd = Fd;
-	return;
-
-error:
-	if (Fd >= 0) Drm_CloseDriver(Fd);
 }
 
 internal void
@@ -566,6 +569,26 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice(
 		Device.Size,
 		*(u64 *) Device.Data
 	);
+
+	u64 SpecialDeviceId = *(u64 *) Device.Data;
+
+	s32 Fd = Drm_OpenDriverFromVersion(
+		SYS_DEV_MAJOR(SpecialDeviceId),
+		SYS_DEV_MINOR(SpecialDeviceId)
+	);
+	if (Fd < 0) {
+		Wayland_DebugLog(This, "Failed to open device node! code %d\n", -Fd);
+		goto error;
+	}
+
+	s32 NodeType = Drm_GetNodeType(Fd);
+	if (NodeType < 0) goto error;
+
+	_G.Wayland.DrmFd = Fd;
+	return;
+
+error:
+	if (Fd >= 0) Drm_CloseDriver(Fd);
 }
 
 internal void
@@ -686,7 +709,52 @@ Wayland_Registry_Global(
 				(wayland_interface *) _G.Wayland.ZwpLinuxDmabufV1
 			)
 		);
+	} else if (
+		String_Cmp(
+			Str,
+			CString(Wayland_ZwpRelativePointerManagerV1_Prototype.Name)
+		)
+		== 0
+	)
+	{
+		_G.Wayland.ZwpRelativePointerManagerV1Name = Name;
+		_G.Wayland.ZwpRelativePointerManagerV1 =
+			(vptr) Wayland_Registry_Bind(This, Name, Interface, Version);
+		Wayland_LinkEventQueue(
+			(vptr) _G.Wayland.ZwpRelativePointerManagerV1,
+			&_G.Wayland.EventQueue
+		);
+		Wayland_DebugLog(
+			This,
+			"Bound %s\n",
+			Wayland_GetObjectName(
+				(wayland_interface *) _G.Wayland.ZwpRelativePointerManagerV1
+			)
+		);
 	}
+}
+
+internal void
+Wayland_ZwpRelativePointerV1_RelativeMotion(
+	wayland_zwp_relative_pointer_v1 *This,
+	u32								 MicroTimeHigh,
+	u32								 MicroTimeLow,
+	wayland_fixed					 DeltaX,
+	wayland_fixed					 DeltaY,
+	wayland_fixed					 DeltaXUnaccel,
+	wayland_fixed					 DeltaYUnaccel
+)
+{
+	Wayland_DebugLog(
+		This,
+		"Notified of relative motion at %lluus: %f, %f (%f, %f "
+		"unaccelerated)\n",
+		(u64) MicroTimeHigh << 32 | MicroTimeLow,
+		Wayland_FixedToR32(DeltaX),
+		Wayland_FixedToR32(DeltaY),
+		Wayland_FixedToR32(DeltaYUnaccel),
+		Wayland_FixedToR32(DeltaYUnaccel)
+	);
 }
 
 internal void
@@ -746,6 +814,22 @@ Wayland_Callback_Done_Frame(wayland_callback *This, u32 CallbackData)
 
 	Window->FrameCallback = FrameCallback;
 	Wayland_SwapBuffers();
+}
+
+internal wayland_zwp_relative_pointer_v1 *
+Wayland_ZwpRelativePointerV1_New(
+	wayland_zwp_relative_pointer_manager_v1 *ZwpRelativePointerManagerV1,
+	wayland_pointer							*Pointer
+)
+{
+	wayland_zwp_relative_pointer_v1 *This =
+		Wayland_ZwpRelativePointerManagerV1_GetRelativePointer(
+			ZwpRelativePointerManagerV1,
+			Pointer
+		);
+	This->RelativeMotion = Wayland_ZwpRelativePointerV1_RelativeMotion;
+	Wayland_LinkEventQueue((vptr) This, &_G.Wayland.EventQueue);
+	return This;
 }
 
 internal s32
@@ -858,6 +942,13 @@ Wayland_TryInit(void)
 
 		Wayland_DebugLog(NULL, "Syncing for global events...\n");
 		Wayland_SyncAndHandleEvents();
+
+		if (!_G.Wayland.ZwpLinuxDmabufV1
+			|| !_G.Wayland.ZwpRelativePointerManagerV1)
+			goto error;
+
+		_G.Wayland.DrmTranches =
+			ArrayList_Init(_G.Heap, sizeof(wayland_dmabuf_tranche_entry), 8);
 
 		Wayland_DebugLog(NULL, "Connected!\n");
 	}
@@ -1038,6 +1129,8 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 	Window->BackBufferIndex = 0;
 	Wayland_SwapBuffers();
 
+	_G.Updates |= WINDOW_RESIZED;
+
 	return Surface;
 
 error:
@@ -1049,6 +1142,24 @@ error:
 	if (Feedback) Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(Feedback);
 	Wayland_Disconnect();
 	return NULL;
+}
+
+internal void
+Wayland_Deinit()
+{
+	if (!Wayland_IsConnected()) return;
+
+	ARRAY_LIST_FOREACH(&_G.Wayland.DrmTranches, wayland_dmabuf_tranche_entry)
+	{
+		Wayland_FreeArray(It.Device);
+		Wayland_FreeArray(It.FormatIndices);
+	}
+	ArrayList_Free(&_G.Wayland.DrmTranches);
+
+	Egl_Deinit(&_G.Wayland.Egl);
+	Gbm_Deinit(&_G.Wayland.Gbm);
+
+	Wayland_Disconnect();
 }
 
 #undef CALL

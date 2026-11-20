@@ -114,6 +114,7 @@ typedef enum opengl_debug_severity {
 #define GL_DRAW_FRAMEBUFFER       0x8CA9
 #define GL_FRAMEBUFFER_COMPLETE   0x8CD5
 #define GL_COLOR_ATTACHMENT0      0x8CE0
+#define GL_DEPTH_ATTACHMENT       0x8D00
 #define GL_FRAMEBUFFER            0x8D40
 #define GL_RENDERBUFFER           0x8D41
 #define GL_RGBA32UI               0x8D70
@@ -190,9 +191,12 @@ typedef void(func_OpenGL_DebugProc)(
    IMPORT(void, DebugMessageCallback,        func_OpenGL_DebugProc Callback, vptr UserParam) \
    IMPORT(void, DebugMessageControl,         u32 Source, u32 Type, u32 Severity, s32 Count, u32 *IDs, u08 Enabled) \
    IMPORT(void, DeleteBuffers,               u32 Count, u32 *Buffers) \
+   IMPORT(void, DeleteFramebuffers,          u32 Count, u32 *Framebuffers) \
    IMPORT(void, DeleteProgram,               u32 Program) \
    IMPORT(void, DeleteShader,                u32 Shader) \
    IMPORT(void, DetachShader,                u32 Program, u32 Shader) \
+   IMPORT(void, DeleteRenderbuffers,         u32 Count, u32 *Renderbuffers) \
+   IMPORT(void, DeleteTextures,              u32 Count, u32 *Textures) \
    IMPORT(void, DrawElementsBaseVertex,      u32 Mode, s32 Count, u32 Type, vptr *Indices, s32 BaseVertex) \
    IMPORT(void, EnableVertexAttribArray,     u32 Index) \
    IMPORT(void, FramebufferRenderbuffer,     u32 Target, u32 Attachment, u32 RenderbufferTarget, u32 RenderbufferId) \

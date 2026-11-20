@@ -80,7 +80,14 @@ ContinuationIndentWidth: 4
 Cpp11BracedListStyle: Block
 DerivePointerAlignment: false
 DisableFormat: false
-ForEachMacros: [HASHMAP_FOREACH, STRING_FOREACH]
+ForEachMacros: [
+  ARRAY_FOREACH,
+  ARRAY_FOREACH_PTR,
+  ARRAY_LIST_FOREACH,
+  ARRAY_DEQUE_FOREACH,
+  HASHMAP_FOREACH,
+  STRING_FOREACH
+]
 IncludeBlocks: Preserve
 IndentCaseBlocks: false
 IndentCaseLabels: true

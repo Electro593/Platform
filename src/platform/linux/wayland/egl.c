@@ -338,8 +338,9 @@ enum egl_yuv_color_space_hint {
 struct egl {
 	gbm *Gbm;
 
-	egl_image EglImages[2];
+	egl_image Images[2];
 	u32		  FramebufferIds[2];
+	u32		  RenderbufferIds[2];
 	u32		  TextureIds[2];
 
 	egl_display Display;
@@ -348,7 +349,8 @@ struct egl {
 };
 
 #define EGL_FUNCS \
-	INTERN(b08, Egl_Init, gbm *Gbm, heap *Heap, egl *EglOut) \
+	INTERN(b08,  Egl_Init,   gbm *Gbm, heap *Heap, egl *EglOut) \
+	INTERN(void, Egl_Deinit, egl *Egl) \
 	\
 	IMPORT(egl_boolean, Egl, eglBindAPI,             Egl_BindApi,             egl_api Api) \
 	IMPORT(egl_boolean, Egl, eglChooseConfig,        Egl_ChooseConfig,        egl_display Display, egl_int *Attribs, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
@@ -379,339 +381,416 @@ struct egl {
 internal b08
 Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 {
-	egl_config *Configs	   = NULL;
-	egl_surface EglSurface = EGL_NO_SURFACE;
-	egl_display EglDisplay = EGL_NO_DISPLAY;
+	egl Egl = { 0 };
+
+	egl_api Api = EGL_NONE;
+	egl_int Major, Minor;
+
+	egl_config *Configs = NULL;
+
+	b08 HasApiOpenGl						= FALSE;
+	b08 HasEglKhrPlatformGbm				= FALSE;
+	b08 HasEglExtImageDmaBufImport			= FALSE;
+	b08 HasEglExtImageDmaBufImportModifiers = FALSE;
+	b08 HasGlExtEglImageStorage				= FALSE;
+
+#define HASEXT(Key, Variable) \
+	(String_Cmp(Extension, CStringL(Key)) == 0 && (Variable = TRUE, TRUE))
+#define REQEXT(Key, Variable) \
+	if (!(Variable)) { \
+		FPrintL("Required extension " Key " is not present\n"); \
+		goto error; \
+	}
 
 	FPrintL("Initializing egl...\n");
 
 	// Query client extensions
-	b08	   HasEglKhrPlatformGbm = FALSE;
-	string ClientExtensions =
-		CString(Egl_QueryString(EglDisplay, EGL_QUERY_EXTENSIONS));
-	if (ClientExtensions.Length) FPrintL("- Client Extensions:\n");
-	else FPrintL("- No Client Extensions\n");
-	while (ClientExtensions.Length) {
-		string Extension = String_SplitLeftByCodepoint(&ClientExtensions, ' ');
-		FPrintL("  - %s\n", Extension);
+	{
+		string ClientExtensions =
+			CString(Egl_QueryString(Egl.Display, EGL_QUERY_EXTENSIONS));
+		if (ClientExtensions.Length) FPrintL("- Client Extensions:\n");
+		else FPrintL("- No Client Extensions\n");
+		while (ClientExtensions.Length) {
+			string Extension =
+				String_SplitLeftByCodepoint(&ClientExtensions, ' ');
+			FPrintL("  - %s\n", Extension);
 
-		if (String_Cmp(Extension, CStringL("EGL_KHR_platform_gbm")) == 0)
-			HasEglKhrPlatformGbm = TRUE;
-	}
-
-	if (HasEglKhrPlatformGbm) {
-		EglDisplay =
-			Egl_GetPlatformDisplay(EGL_PLATFORM_GBM_KHR, Gbm->Device, NULL);
-	} else {
-		FPrintL(
-			"Client extension EGL_KHR_platform_bgm is not present. Falling "
-			"back to eglGetDisplay.\n"
-		);
-
-		EglDisplay = Egl_GetDisplay(Gbm->Device);
-	}
-
-	if (EglDisplay == EGL_NO_DISPLAY) {
-		FPrintL("Failed to get egl display: code %#x\n", Egl_GetError());
-		goto error;
-	}
-
-	// Initialize
-	egl_int Major, Minor;
-	if (!Egl_Initialize(EglDisplay, &Major, &Minor)) {
-		FPrintL("Failed to initialize egl: code %#x\n", Egl_GetError());
-		goto error;
-	}
-
-	FPrintL("Initialized egl v%d.%d\n", Major, Minor);
-	FPrintL(
-		"- Vendor: %s\n",
-		CString(Egl_QueryString(EglDisplay, EGL_QUERY_VENDOR))
-	);
-	FPrintL(
-		"- Full Version: %s\n",
-		CString(Egl_QueryString(EglDisplay, EGL_QUERY_VERSION))
-	);
-
-	if (Major == 1 && Minor < 4) {
-		FPrintL("Egl version is too old! Must be at least v1.4\n");
-		goto error;
-	}
-
-	// Select Client API
-	egl_api Api = Egl_QueryApi();
-	string	ClientApis =
-		CString(Egl_QueryString(EglDisplay, EGL_QUERY_CLIENT_APIS));
-	FPrintL("- Client APIs:\n");
-	string Cursor = ClientApis;
-	while (Cursor.Length) {
-		string ClientApi = String_SplitLeftByCodepoint(&Cursor, ' ');
-		FPrintL("  - %s\n", ClientApi);
-		if (String_Cmp(ClientApi, CStringL("OpenGL")) == 0) {
-			if (Egl_BindApi(EGL_API_OPENGL)) Api = EGL_API_OPENGL;
+			HASEXT("EGL_KHR_platform_gbm", HasEglKhrPlatformGbm);
 		}
 	}
 
-	// Find extensions
-	b08	   HasEglExtImageDmaBufImport = FALSE;
-	string Extensions =
-		CString(Egl_QueryString(EglDisplay, EGL_QUERY_EXTENSIONS));
-	FPrintL("- Extensions:\n");
-	Cursor = Extensions;
-	while (Cursor.Length) {
-		string Extension = String_SplitLeftByCodepoint(&Cursor, ' ');
-		FPrintL("  - %s\n", Extension);
+	// Get the egl display
+	{
+		if (HasEglKhrPlatformGbm) {
+			Egl.Display =
+				Egl_GetPlatformDisplay(EGL_PLATFORM_GBM_KHR, Gbm->Device, NULL);
+		} else {
+			FPrintL(
+				"Client extension EGL_KHR_platform_bgm is not present. Falling "
+				"back to eglGetDisplay.\n"
+			);
 
-		if (String_Cmp(Extension, CStringL("EGL_EXT_image_dma_buf_import"))
-			== 0)
-			HasEglExtImageDmaBufImport = TRUE;
-		else if (String_Cmp(Extension, CStringL("EGL_KHR_platform_gbm")) == 0)
-			HasEglKhrPlatformGbm = TRUE;
+			Egl.Display = Egl_GetDisplay(Gbm->Device);
+		}
+
+		if (Egl.Display == EGL_NO_DISPLAY) {
+			FPrintL("Failed to get egl display: code %#x\n", Egl_GetError());
+			goto error;
+		}
 	}
 
-	if (Api != EGL_API_OPENGL) {
-		FPrintL("Failed to select OpenGL as EGL's client API\n");
-		goto error;
-	}
-	FPrintL("Selected EGL OpenGL client api\n");
+	// Initialize egl
+	{
+		if (!Egl_Initialize(Egl.Display, &Major, &Minor)) {
+			FPrintL("Failed to initialize egl: code %#x\n", Egl_GetError());
+			goto error;
+		}
 
-	if (!HasEglExtImageDmaBufImport) {
+		FPrintL("Initialized egl v%d.%d\n", Major, Minor);
 		FPrintL(
-			"Required extension EGL_EXT_image_dma_buf_import is not present\n"
+			"- Vendor: %s\n",
+			CString(Egl_QueryString(Egl.Display, EGL_QUERY_VENDOR))
 		);
-		goto error;
+		FPrintL(
+			"- Full Version: %s\n",
+			CString(Egl_QueryString(Egl.Display, EGL_QUERY_VERSION))
+		);
+
+		if (Major == 1 && Minor < 5) {
+			FPrintL("Egl version is too old! Must be at least v1.5\n");
+			goto error;
+		}
+	}
+
+	// Select client API
+	{
+		string ClientApis =
+			CString(Egl_QueryString(Egl.Display, EGL_QUERY_CLIENT_APIS));
+		FPrintL("- Client APIs:\n");
+		string Cursor = ClientApis;
+		while (Cursor.Length) {
+			string ClientApi = String_SplitLeftByCodepoint(&Cursor, ' ');
+			FPrintL("  - %s\n", ClientApi);
+
+			if (String_Cmp(ClientApi, CStringL("OpenGL")) == 0)
+				HasApiOpenGl = TRUE;
+		}
+
+		if (HasApiOpenGl && Egl_BindApi(EGL_API_OPENGL)) Api = EGL_API_OPENGL;
+
+		if (Api != EGL_API_OPENGL) {
+			FPrintL("Failed to select OpenGL as EGL's client API\n");
+			goto error;
+		}
+	}
+
+	// Query display extensions
+	{
+		string Extensions =
+			CString(Egl_QueryString(Egl.Display, EGL_QUERY_EXTENSIONS));
+		FPrintL("- Extensions:\n");
+		string Cursor = Extensions;
+		while (Cursor.Length) {
+			string Extension = String_SplitLeftByCodepoint(&Cursor, ' ');
+			FPrintL("  - %s\n", Extension);
+
+			HASEXT("EGL_EXT_image_dma_buf_import", HasEglExtImageDmaBufImport)
+			|| HASEXT(
+				"EGL_EXT_image_dma_buf_import_modifiers",
+				HasEglExtImageDmaBufImportModifiers
+			);
+		}
+
+		REQEXT("EGL_EXT_image_dma_buf_import", HasEglExtImageDmaBufImport);
+		REQEXT(
+			"EGL_EXT_image_dma_buf_import_modifiers",
+			HasEglExtImageDmaBufImportModifiers
+		);
 	}
 
 	// Select Config
-	egl_int ConfigCount = 0;
-	if (!Egl_GetConfigs(EglDisplay, NULL, 0, &ConfigCount)) {
-		FPrintL("Failed to get egl config count: code %#x\n", Egl_GetError());
-		goto error;
-	}
-	if (ConfigCount < 1) {
-		FPrintL("No egl configs were found\n");
-		goto error;
-	}
-
-	Configs = Heap_AllocateA(Heap, ConfigCount * sizeof(egl_config));
-	if (!Configs) {
-		FPrintL("Failed to allocate space for egl configs\n");
-		goto error;
-	}
-
-	// clang-format off
-	egl_int ConfigAttribs[] = {
-		EGL_CONFIG_RED_SIZE,          1,
-		EGL_CONFIG_GREEN_SIZE,        1,
-		EGL_CONFIG_BLUE_SIZE,         1,
-		EGL_CONFIG_ALPHA_SIZE,        0,
-		EGL_CONFIG_COLOR_BUFFER_TYPE, EGL_COLOR_BUFFER_RGB,
-
-		EGL_CONFIG_DEPTH_SIZE,        24,
-		EGL_CONFIG_STENCIL_SIZE,      8,
-
-		EGL_CONFIG_CONFORMANT,        EGL_CONFORMANCE_OPENGL,
-		EGL_CONFIG_RENDERABLE_TYPE,   EGL_RENDERABLE_TYPE_OPENGL,
-		EGL_CONFIG_NONE
-	};
-	// clang-format on
-
-	egl_int		MatchCount = 0;
-	egl_boolean Success	   = Egl_ChooseConfig(
-		EglDisplay,
-		ConfigAttribs,
-		Configs,
-		ConfigCount,
-		&MatchCount
-	);
-	if (!Success) {
-		FPrintL(
-			"Failed to find applicable egl configs: code %#x\n",
-			Egl_GetError()
-		);
-		goto error;
-	}
-
-	egl_int SelectedIndex = -1;
-	for (egl_int I = 0; I < MatchCount; I++) {
-		egl_int Value;
-		Success = Egl_GetConfigAttrib(
-			EglDisplay,
-			Configs[I],
-			EGL_CONFIG_NATIVE_VISUAL_ID,
-			&Value
-		);
-		if (!Success) {
+	{
+		egl_int ConfigCount = 0;
+		if (!Egl_GetConfigs(Egl.Display, NULL, 0, &ConfigCount)) {
 			FPrintL(
-				"Failed to query egl config attrib: code %#x\n",
+				"Failed to get egl config count: code %#x\n",
 				Egl_GetError()
 			);
 			goto error;
 		}
-
-		if (Value == Gbm->Format) {
-			SelectedIndex = I;
-			break;
+		if (ConfigCount < 1) {
+			FPrintL("No egl configs were found\n");
+			goto error;
 		}
-	}
-	if (SelectedIndex == -1) {
-		FPrintL("No applicable egl configs were found\n");
-		goto error;
-	}
 
-	egl_config EglConfig = Configs[SelectedIndex];
-	Heap_FreeA(Configs);
-
-#if defined(_DEBUG)
-	b08 IsDebug = TRUE;
-#else
-	b08 IsDebug = FALSE;
-#endif
-
-	// Create context
-	// clang-format off
-	egl_int ContextAttribs[] = {
-		EGL_CONTEXT_MAJOR_VERSION,             4,
-		EGL_CONTEXT_MINOR_VERSION,             6,
-		EGL_CONTEXT_OPENGL_PROFILE_MASK,       EGL_PROFILE_OPENGL_CORE,
-		EGL_CONTEXT_OPENGL_DEBUG,              IsDebug,
-		EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE, TRUE,
-		EGL_CONTEXT_NONE,
-	};
-	// clang-format on
-	egl_context EglContext = Egl_CreateContext(
-		EglDisplay,
-		EglConfig,
-		EGL_NO_CONTEXT,
-		ContextAttribs
-	);
-	if (EglContext == EGL_NO_CONTEXT) {
-		FPrintL("Failed to create egl context: code %#x\n", Egl_GetError());
-		goto error;
-	}
-
-	if (!Egl_MakeCurrent(
-			EglDisplay,
-			EGL_NO_SURFACE,
-			EGL_NO_SURFACE,
-			EglContext
-		))
-	{
-		FPrintL(
-			"Failed to make egl context current: code %#x\n",
-			Egl_GetError()
-		);
-		goto error;
-	}
-
-	// Check OpenGL extensions
-	s32 ExtensionCount = 0;
-	FPrintL("- OpenGL Extensions:\n");
-	OpenGL_GetIntegerv(GL_NUM_EXTENSIONS, &ExtensionCount);
-
-	b08 HasGlExtEglImageStorage = FALSE;
-	for (s32 I = 0; I < ExtensionCount; I++) {
-		string Extension = CString(OpenGL_GetStringi(GL_EXTENSIONS, I));
-		FPrintL("  - %s\n", Extension);
-
-		if (String_Cmp(Extension, CStringL("GL_EXT_EGL_image_storage")) == 0)
-			HasGlExtEglImageStorage = TRUE;
-	}
-
-	if (!HasGlExtEglImageStorage) {
-		FPrintL("Required extension GL_EXT_EGL_image_storage is not present\n");
-		goto error;
-	}
-
-	OpenGL_GenFramebuffers(2, EglOut->FramebufferIds);
-	OpenGL_GenTextures(2, EglOut->TextureIds);
-
-	egl_image EglImages[2] = { 0 };
-	for (usize I = 0; I < 2; I++) {
-		gbm_bo *Bo = Gbm->BufferObjects[I];
-
-		drm_format_modifier Modifier = Gbm_BoGetModifier(Bo);
+		Configs = Heap_AllocateA(Heap, ConfigCount * sizeof(egl_config));
+		if (!Configs) {
+			FPrintL("Failed to allocate space for egl configs\n");
+			goto error;
+		}
 
 		// clang-format off
-		egl_attrib ImageAttribs[17] = {
-			EGL_IMAGE_ATTRIB_WIDTH,                 Gbm_BoGetWidth(Bo),
-			EGL_IMAGE_ATTRIB_HEIGHT,                Gbm_BoGetHeight(Bo),
-			EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,      Gbm_BoGetFormat(Bo),
-			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,     Gbm_BoGetFd(Bo),
-			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET, 0,
-			EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,  Gbm_BoGetStride(Bo),
-			EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
-			EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
-			EGL_IMAGE_ATTRIB_NONE
+		egl_int ConfigAttribs[] = {
+			EGL_CONFIG_RED_SIZE,          1,
+			EGL_CONFIG_GREEN_SIZE,        1,
+			EGL_CONFIG_BLUE_SIZE,         1,
+			EGL_CONFIG_ALPHA_SIZE,        0,
+			EGL_CONFIG_COLOR_BUFFER_TYPE, EGL_COLOR_BUFFER_RGB,
+
+			EGL_CONFIG_DEPTH_SIZE,        24,
+			EGL_CONFIG_STENCIL_SIZE,      8,
+
+			EGL_CONFIG_CONFORMANT,        EGL_CONFORMANCE_OPENGL,
+			EGL_CONFIG_RENDERABLE_TYPE,   EGL_RENDERABLE_TYPE_OPENGL,
+			EGL_CONFIG_NONE
 		};
 		// clang-format on
 
-		if (Modifier != DRM_FORMAT_MOD_INVALID) {
-			ImageAttribs[12] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_LO;
-			ImageAttribs[13] = Modifier & 0xFFFFFFFF;
-			ImageAttribs[14] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_HI;
-			ImageAttribs[15] = Modifier >> 32;
-		}
-
-		EglOut->EglImages[I] = Egl_CreateImage(
-			EglDisplay,
-			EGL_NO_CONTEXT,
-			EGL_IMAGE_TARGET_LINUX_DMA_BUF,
-			NULL,
-			ImageAttribs
+		egl_int		MatchCount = 0;
+		egl_boolean Success	   = Egl_ChooseConfig(
+			Egl.Display,
+			ConfigAttribs,
+			Configs,
+			ConfigCount,
+			&MatchCount
 		);
-
-		if (!EglOut->EglImages[I]) {
+		if (!Success) {
 			FPrintL(
-				"Failed to create egl image %d: code %#x\n",
-				I,
+				"Failed to find applicable egl configs: code %#x\n",
 				Egl_GetError()
 			);
 			goto error;
 		}
 
-		OpenGL_BindFramebuffer(GL_FRAMEBUFFER, EglOut->FramebufferIds[I]);
-		OpenGL_BindTexture(GL_TEXTURE_2D, EglOut->TextureIds[I]);
-		OpenGL_EGLImageTargetTexStorageEXT(
-			GL_TEXTURE_2D,
-			EglOut->EglImages[I],
-			NULL
-		);
-		OpenGL_FramebufferTexture2D(
-			GL_FRAMEBUFFER,
-			GL_COLOR_ATTACHMENT0,
-			GL_TEXTURE_2D,
-			EglOut->TextureIds[I],
-			0
+		egl_int SelectedIndex = -1;
+		for (egl_int I = 0; I < MatchCount; I++) {
+			egl_int Value;
+			Success = Egl_GetConfigAttrib(
+				Egl.Display,
+				Configs[I],
+				EGL_CONFIG_NATIVE_VISUAL_ID,
+				&Value
+			);
+			if (!Success) {
+				FPrintL(
+					"Failed to query egl config attrib: code %#x\n",
+					Egl_GetError()
+				);
+				goto error;
+			}
+
+			if (Value == Gbm->Format) {
+				SelectedIndex = I;
+				break;
+			}
+		}
+		if (SelectedIndex == -1) {
+			FPrintL("No applicable egl configs were found\n");
+			goto error;
+		}
+
+		Egl.Config = Configs[SelectedIndex];
+		Heap_FreeA(Configs);
+	}
+
+	// Create context
+	{
+		// clang-format off
+		egl_int ContextAttribs[] = {
+			EGL_CONTEXT_MAJOR_VERSION,             4,
+			EGL_CONTEXT_MINOR_VERSION,             6,
+			EGL_CONTEXT_OPENGL_PROFILE_MASK,       EGL_PROFILE_OPENGL_CORE,
+#if defined(_DEBUG)
+			EGL_CONTEXT_OPENGL_DEBUG,              TRUE,
+#endif
+			EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE, TRUE,
+			EGL_CONTEXT_NONE,
+		};
+		// clang-format on
+
+		Egl.Context = Egl_CreateContext(
+			Egl.Display,
+			Egl.Config,
+			EGL_NO_CONTEXT,
+			ContextAttribs
 		);
 
-		u32 Status = OpenGL_CheckFramebufferStatus(GL_FRAMEBUFFER);
-		if (Status != GL_FRAMEBUFFER_COMPLETE) {
+		if (Egl.Context == EGL_NO_CONTEXT) {
+			FPrintL("Failed to create egl context: code %#x\n", Egl_GetError());
+			goto error;
+		}
+
+		b08 Success = Egl_MakeCurrent(
+			Egl.Display,
+			EGL_NO_SURFACE,
+			EGL_NO_SURFACE,
+			Egl.Context
+		);
+		if (!Success) {
 			FPrintL(
-				"Failed to initialize framebuffer %d: code %#x\n",
-				I,
-				Status
+				"Failed to make egl context current: code %#x\n",
+				Egl_GetError()
 			);
 			goto error;
+		}
+	}
+
+	// Check OpenGL extensions
+	{
+		s32 ExtensionCount = 0;
+		FPrintL("- OpenGL Extensions:\n");
+		OpenGL_GetIntegerv(GL_NUM_EXTENSIONS, &ExtensionCount);
+
+		for (s32 I = 0; I < ExtensionCount; I++) {
+			string Extension = CString(OpenGL_GetStringi(GL_EXTENSIONS, I));
+			FPrintL("  - %s\n", Extension);
+
+			HASEXT("GL_EXT_EGL_image_storage", HasGlExtEglImageStorage);
+		}
+
+		REQEXT("GL_EXT_EGL_image_storage", HasGlExtEglImageStorage);
+	}
+
+	// Set up framebuffers
+	{
+		OpenGL_GenFramebuffers(2, Egl.FramebufferIds);
+		OpenGL_GenRenderbuffers(2, Egl.RenderbufferIds);
+		OpenGL_GenTextures(2, Egl.TextureIds);
+
+		for (usize I = 0; I < 2; I++) {
+			gbm_bo *Bo = Gbm->BufferObjects[I];
+
+			drm_format_modifier Modifier = Gbm_BoGetModifier(Bo);
+
+			// clang-format off
+			egl_attrib ImageAttribs[17] = {
+				EGL_IMAGE_ATTRIB_WIDTH,                 Gbm_BoGetWidth(Bo),
+				EGL_IMAGE_ATTRIB_HEIGHT,                Gbm_BoGetHeight(Bo),
+				EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,      Gbm_BoGetFormat(Bo),
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,     Gbm_BoGetFd(Bo),
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET, 0,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,  Gbm_BoGetStride(Bo),
+				EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
+				EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
+				EGL_IMAGE_ATTRIB_NONE
+			};
+			// clang-format on
+
+			if (Modifier != DRM_FORMAT_MOD_INVALID) {
+				ImageAttribs[12] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_LO;
+				ImageAttribs[13] = Modifier & 0xFFFFFFFF;
+				ImageAttribs[14] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_HI;
+				ImageAttribs[15] = Modifier >> 32;
+			}
+
+			Egl.Images[I] = Egl_CreateImage(
+				Egl.Display,
+				EGL_NO_CONTEXT,
+				EGL_IMAGE_TARGET_LINUX_DMA_BUF,
+				NULL,
+				ImageAttribs
+			);
+
+			if (!Egl.Images[I]) {
+				FPrintL(
+					"Failed to create egl image %d: code %#x\n",
+					I,
+					Egl_GetError()
+				);
+				goto error;
+			}
+
+			OpenGL_BindFramebuffer(GL_FRAMEBUFFER, Egl.FramebufferIds[I]);
+			OpenGL_BindTexture(GL_TEXTURE_2D, Egl.TextureIds[I]);
+			OpenGL_EGLImageTargetTexStorageEXT(
+				GL_TEXTURE_2D,
+				Egl.Images[I],
+				NULL
+			);
+			OpenGL_FramebufferTexture2D(
+				GL_FRAMEBUFFER,
+				GL_COLOR_ATTACHMENT0,
+				GL_TEXTURE_2D,
+				Egl.TextureIds[I],
+				0
+			);
+
+			OpenGL_BindRenderbuffer(GL_RENDERBUFFER, Egl.RenderbufferIds[I]);
+			OpenGL_RenderbufferStorage(
+				GL_RENDERBUFFER,
+				GL_DEPTH24_STENCIL8,
+				Gbm_BoGetWidth(Bo),
+				Gbm_BoGetHeight(Bo)
+			);
+			OpenGL_FramebufferRenderbuffer(
+				GL_FRAMEBUFFER,
+				GL_DEPTH_ATTACHMENT,
+				GL_RENDERBUFFER,
+				Egl.RenderbufferIds[I]
+			);
+
+			u32 Status = OpenGL_CheckFramebufferStatus(GL_FRAMEBUFFER);
+			if (Status != GL_FRAMEBUFFER_COMPLETE) {
+				FPrintL(
+					"Failed to initialize framebuffer %d: code %#x\n",
+					I,
+					Status
+				);
+				goto error;
+			}
 		}
 	}
 
 	FPrintL("Successfully initialized egl!\n");
-	EglOut->Gbm		= Gbm;
-	EglOut->Display = EglDisplay;
-	EglOut->Context = EglContext;
-	EglOut->Config	= EglConfig;
-	Mem_Cpy(EglOut->EglImages, EglImages, sizeof(EglImages));
+	*EglOut = Egl;
 	return TRUE;
 
 error:
-	if (EglImages[1]) Egl_DestroyImage(EglDisplay, EglImages[1]);
-	if (EglImages[0]) Egl_DestroyImage(EglDisplay, EglImages[0]);
-	if (EglContext != EGL_NO_CONTEXT)
-		Egl_DestroyContext(EglDisplay, EglContext);
 	if (Configs) Heap_FreeA(Configs);
-	Egl_Terminate(EglDisplay);
+	Egl_Deinit(&Egl);
 	return FALSE;
+
+#undef HASEXT
+#undef REQEXT
+}
+
+internal void
+Egl_Deinit(egl *Egl)
+{
+	if (!Egl) return;
+
+	OpenGL_DeleteRenderbuffers(
+		ARRAY_COUNT(Egl->RenderbufferIds),
+		Egl->RenderbufferIds
+	);
+	OpenGL_DeleteFramebuffers(
+		ARRAY_COUNT(Egl->FramebufferIds),
+		Egl->FramebufferIds
+	);
+	OpenGL_DeleteTextures(ARRAY_COUNT(Egl->TextureIds), Egl->TextureIds);
+
+	if (Egl->Display == EGL_NO_DISPLAY) {
+		Assert(Egl->Context == EGL_NO_CONTEXT);
+		ARRAY_FOREACH (Egl->Images) Assert(It == EGL_NO_IMAGE);
+	} else {
+		ARRAY_FOREACH (Egl->Images)
+			if (It != EGL_NO_IMAGE) Egl_DestroyImage(Egl->Display, It);
+
+		if (Egl->Context != EGL_NO_CONTEXT) {
+			Egl_MakeCurrent(
+				Egl->Display,
+				EGL_NO_SURFACE,
+				EGL_NO_SURFACE,
+				EGL_NO_CONTEXT
+			);
+
+			Egl_DestroyContext(Egl->Display, Egl->Context);
+		}
+
+		Egl_Terminate(Egl->Display);
+	}
+
+	Mem_Set(Egl, 0, sizeof(egl));
 }
 
 #endif

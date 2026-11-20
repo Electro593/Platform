@@ -112,8 +112,8 @@ struct wayland_prepared_method {
 	u16				   NewCount;
 	u16				   ParamCount;
 
-	u32	 VersionSince;
-	u32	 DeprecatedSince;
+	u32	 SinceVersion;
+	u32	 UntilVersion;
 	c08 *Format;
 
 	wayland_param *Params;
@@ -192,6 +192,11 @@ typedef struct wayland_api_state {
 #ifndef SECTION_FUNCS
 
 #define WAYLAND_API_FUNCS \
+	INTERN(r32,           Wayland_FixedToR32, wayland_fixed Fixed) \
+	INTERN(wayland_fixed, Wayland_R32ToFixed, r32 Value) \
+	INTERN(wayland_array, Wayland_CopyArray,  heap *Heap, wayland_array Array) \
+	INTERN(void,          Wayland_FreeArray,  wayland_array Array) \
+	\
 	INTERN(void,             Wayland_FreeObjectId, u32 ObjectId) \
 	INTERN(wayland_display*, Wayland_GetDisplay,   void) \
 	\
@@ -202,8 +207,6 @@ typedef struct wayland_api_state {
 	INTERN(wayland_event_queue, Wayland_CreateEventQueue, void) \
 	INTERN(b08,                 Wayland_DequeueEvent,     wayland_event_queue *EventQueue, wayland_event *EventOut) \
 	INTERN(void,                Wayland_LinkEventQueue,   wayland_interface *Object, wayland_event_queue *EventQueue) \
-	\
-	INTERN(r32, Wayland_FixedToR32, wayland_fixed Fixed) \
 	\
 	INTERN(b08,  Wayland_PollConnection, s32 Timeout) \
 	INTERN(void, Wayland_DispatchEvent,  wayland_event Event) \
@@ -216,6 +219,31 @@ typedef struct wayland_api_state {
 
 #ifdef _LINUX
 #ifdef INCLUDE_SOURCE
+
+#ifndef SECTION_UTILITIES
+
+internal r32
+Wayland_FixedToR32(wayland_fixed Fixed)
+{ return (r32) Fixed / 256.0f; }
+
+internal wayland_fixed
+Wayland_R32ToFixed(r32 Value)
+{ return (wayland_fixed) (Value * 256.0f); }
+
+internal wayland_array
+Wayland_CopyArray(heap *Heap, wayland_array Array)
+{
+	return (wayland_array){
+		.Size = Array.Size,
+		.Data = Heap_AllocateA(Heap, Array.Size),
+	};
+}
+
+internal void
+Wayland_FreeArray(wayland_array Array)
+{ Heap_FreeA(Array.Data); }
+
+#endif
 
 #ifndef SECTION_OBJECT_MANAGEMENT
 
@@ -251,6 +279,8 @@ extern wayland_prototype WaylandDrmPrototype;
 extern wayland_prototype WaylandZwpLinuxDmabufV1Prototype;
 extern wayland_prototype WaylandZwpLinuxBufferParamsV1Prototype;
 extern wayland_prototype WaylandZwpLinuxDmabufFeedbackV1Prototype;
+extern wayland_prototype Wayland_ZwpRelativePointerManagerV1_Prototype;
+extern wayland_prototype Wayland_ZwpRelativePointerV1_Prototype;
 
 wayland_prototype *WaylandPrototypes[] = {
 	&WaylandBufferPrototype,
@@ -285,6 +315,8 @@ wayland_prototype *WaylandPrototypes[] = {
 	&WaylandZwpLinuxBufferParamsV1Prototype,
 	&WaylandZwpLinuxDmabufFeedbackV1Prototype,
 	&WaylandZwpLinuxDmabufV1Prototype,
+	&Wayland_ZwpRelativePointerManagerV1_Prototype,
+	&Wayland_ZwpRelativePointerV1_Prototype,
 };
 
 internal wayland_prototype *
@@ -706,10 +738,6 @@ Wayland_LinkEventQueue(
 
 #ifndef SECTION_MESSAGE_SERIALIZATION
 
-internal r32
-Wayland_FixedToR32(wayland_fixed Fixed)
-{ return (r32) Fixed / 256.0f; }
-
 internal void
 Wayland_DestroyMessage(wayland_message Message)
 {
@@ -717,13 +745,22 @@ Wayland_DestroyMessage(wayland_message Message)
 	if (Message.ControlData) Heap_FreeA(Message.ControlData);
 }
 
-internal wayland_prepared_method
-Wayland_PrepareMethod(wayland_interface *Object, u16 Opcode, b08 IsEvent)
+internal b08
+Wayland_PrepareMethod(
+	wayland_interface		*Object,
+	u16						 Opcode,
+	b08						 IsEvent,
+	wayland_prepared_method *MethodOut
+)
 {
 	wayland_prepared_method PreparedMethod = { 0 };
 
 	PreparedMethod.Object = Object;
 	PreparedMethod.Opcode = Opcode;
+
+	u32 Limit = IsEvent ? Object->Prototype->EventCount
+						: Object->Prototype->RequestCount;
+	if (Opcode >= Limit) return FALSE;
 
 	PreparedMethod.Method = IsEvent ? Object->Prototype->Events[Opcode]
 									: Object->Prototype->Requests[Opcode];
@@ -732,20 +769,22 @@ Wayland_PrepareMethod(wayland_interface *Object, u16 Opcode, b08 IsEvent)
 	c08 *C = Method.Format;
 
 	while (*C >= '0' && *C <= '9') {
-		PreparedMethod.VersionSince *= 10;
-		PreparedMethod.VersionSince += *C - '0';
+		PreparedMethod.SinceVersion *= 10;
+		PreparedMethod.SinceVersion += *C - '0';
 		C++;
 	}
-	if (!PreparedMethod.VersionSince) PreparedMethod.VersionSince = 1;
+	if (!PreparedMethod.SinceVersion) PreparedMethod.SinceVersion = 1;
 
-	if (*C == '_') {
+	if (*C == '-') {
 		C++;
 		while (*C >= '0' && *C <= '9') {
-			PreparedMethod.DeprecatedSince *= 10;
-			PreparedMethod.DeprecatedSince += *C - '0';
+			PreparedMethod.UntilVersion *= 10;
+			PreparedMethod.UntilVersion += *C - '0';
 			C++;
 		}
 	}
+	if (!PreparedMethod.UntilVersion)
+		PreparedMethod.UntilVersion = PreparedMethod.SinceVersion;
 
 	PreparedMethod.Format = C;
 	Assert(
@@ -833,25 +872,24 @@ Wayland_PrepareMethod(wayland_interface *Object, u16 Opcode, b08 IsEvent)
 		PI++;
 	}
 
-	if (PreparedMethod.VersionSince > Object->Version)
+	if (PreparedMethod.SinceVersion > Object->Version)
 		Wayland_LogMessage(
 			Object,
 			Method.Name,
 			"Warning: Method is not introduced until v%d",
-			PreparedMethod.VersionSince
+			PreparedMethod.SinceVersion
 		);
 
-	b08 IsDeprecated = PreparedMethod.DeprecatedSince
-					&& PreparedMethod.DeprecatedSince <= Object->Version;
-	if (IsDeprecated)
+	if (PreparedMethod.UntilVersion < Object->Version)
 		Wayland_LogMessage(
 			Object,
 			Method.Name,
 			"Warning: Method has been deprecated since v%d",
-			PreparedMethod.DeprecatedSince
+			PreparedMethod.UntilVersion + 1
 		);
 
-	return PreparedMethod;
+	*MethodOut = PreparedMethod;
+	return TRUE;
 }
 
 internal void
@@ -1068,14 +1106,14 @@ Wayland_SerializeMethod(wayland_prepared_method PreparedMethod)
 
 internal void
 Wayland_DeserializeParam(
-	u32					   *Words,
-	usize				   *WordIndex,
-	wayland_prepared_method PreparedMethod,
-	wayland_param		   *Param,
-	usize					ParamIndex
+	u32						*Words,
+	usize					*WordIndex,
+	wayland_prepared_method *PreparedMethod,
+	usize					 ParamIndex
 )
 {
-	wayland_interface *Object = PreparedMethod.Object;
+	wayland_interface *Object = PreparedMethod->Object;
+	wayland_param	  *Param  = &PreparedMethod->Params[ParamIndex];
 	usize			   WI	  = *WordIndex;
 
 	switch (Param->Type) {
@@ -1094,7 +1132,7 @@ Wayland_DeserializeParam(
 			if (!Param->String && !Param->Nullable)
 				Wayland_LogMessage(
 					Object,
-					PreparedMethod.Method.Name,
+					PreparedMethod->Method.Name,
 					"Warning: Received a null string for non-nullable param %d",
 					ParamIndex
 				);
@@ -1110,20 +1148,20 @@ Wayland_DeserializeParam(
 			if (!ObjectId && !Param->Nullable)
 				Wayland_LogMessage(
 					Object,
-					PreparedMethod.Method.Name,
+					PreparedMethod->Method.Name,
 					"Warning: Received a null object for non-nullable param %d",
 					ParamIndex
 				);
 			if (ObjectId && !Param->Object.Data)
 				Wayland_LogMessage(
 					Object,
-					PreparedMethod.Method.Name,
+					PreparedMethod->Method.Name,
 					"Warning: Failed to lookup object #%d",
 					ObjectId
 				);
 			break;
 		case WAYLAND_PARAM_NEWOBJECT:
-			u32 Version = PreparedMethod.Object->Version;
+			u32 Version = PreparedMethod->Object->Version;
 
 			wayland_prototype *Prototype = Param->NewObject.Prototype;
 			if (!Prototype) {
@@ -1147,8 +1185,8 @@ Wayland_DeserializeParam(
 	*WordIndex = WI;
 }
 
-internal wayland_prepared_method
-Wayland_DeserializeMethod(u32 *Words)
+internal b08
+Wayland_DeserializeMethod(u32 *Words, wayland_prepared_method *PreparedMethod)
 {
 	u32 ObjectId	= Words[0];
 	u16 Opcode		= Words[1] & 0xFFFF;
@@ -1157,24 +1195,17 @@ Wayland_DeserializeMethod(u32 *Words)
 	wayland_interface *Object = Wayland_GetObject(ObjectId);
 	Assert(Object);
 
-	wayland_prepared_method PreparedMethod =
-		Wayland_PrepareMethod(Object, Opcode, TRUE);
+	if (!Wayland_PrepareMethod(Object, Opcode, TRUE, PreparedMethod))
+		return FALSE;
 
-	wayland_param *Params = PreparedMethod.Params;
+	wayland_param *Params = PreparedMethod->Params;
 	Params[0].Object.Data = Object;
 
 	usize WI = 2;
-	for (usize I = 1; I < PreparedMethod.ParamCount; I++) {
-		Wayland_DeserializeParam(
-			Words,
-			&WI,
-			PreparedMethod,
-			&PreparedMethod.Params[I],
-			I
-		);
-	}
+	for (usize I = 1; I < PreparedMethod->ParamCount; I++)
+		Wayland_DeserializeParam(Words, &WI, PreparedMethod, I);
 
-	return PreparedMethod;
+	return TRUE;
 }
 
 #endif
@@ -1242,6 +1273,7 @@ Wayland_EnqueueMessage(
 	u16 MessageSize = Data[1] >> 16;
 	Assert(MessageSize % sizeof(u32) == 0);
 
+	// TODO: Can theset two allocations be merged?
 	wayland_message_queue_entry *Entry =
 		Heap_AllocateA(Heap, sizeof(wayland_message_queue_entry));
 
@@ -1249,16 +1281,19 @@ Wayland_EnqueueMessage(
 	Entry->Data = Heap_AllocateA(Heap, MessageSize);
 	Mem_Cpy(Entry->Data, Data, MessageSize);
 
-	Entry->PreparedMethod = Wayland_DeserializeMethod(Entry->Data);
-
-	if (MessageQueue->Back) {
-		MessageQueue->Back->Next = Entry;
+	if (!Wayland_DeserializeMethod(Entry->Data, &Entry->PreparedMethod)) {
+		Heap_FreeA(Entry->Data);
+		Heap_FreeA(Entry);
 	} else {
-		Assert(!MessageQueue->Front);
-		MessageQueue->Front = Entry;
+		if (MessageQueue->Back) {
+			MessageQueue->Back->Next = Entry;
+		} else {
+			Assert(!MessageQueue->Front);
+			MessageQueue->Front = Entry;
+		}
+		MessageQueue->Back = Entry;
+		MessageQueue->Count++;
 	}
-	MessageQueue->Back = Entry;
-	MessageQueue->Count++;
 }
 
 internal void
@@ -1571,8 +1606,9 @@ Wayland_HandleRequestV(
 {
 	Platform_LockMutex(&_G.WaylandApi.Lock);
 
-	wayland_prepared_method PreparedMethod =
-		Wayland_PrepareMethod(Object, Opcode, FALSE);
+	wayland_prepared_method PreparedMethod;
+	if (!Wayland_PrepareMethod(Object, Opcode, FALSE, &PreparedMethod))
+		Assert(FALSE, "Request not defined!");
 
 	Wayland_FillRequestParams(PreparedMethod, Args);
 	Wayland_GetConstructedParams(PreparedMethod, Constructed);

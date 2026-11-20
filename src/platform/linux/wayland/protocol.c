@@ -500,6 +500,11 @@ struct wayland_pointer {
 		wayland_pointer_axis					Axis,
 		wayland_pointer_axis_relative_direction Direction
 	);
+	void (*Warp)(
+		wayland_pointer *This,
+		wayland_fixed	 SurfaceX,
+		wayland_fixed	 SurfaceY
+	);
 };
 
 enum wayland_keyboard_keymap_format {
@@ -652,6 +657,35 @@ struct wayland_subsurface {
 
 struct wayland_fixes {
 	wayland_interface Interface;
+};
+
+#endif
+
+#ifndef SECTION_DRM
+
+typedef enum wayland_drm_error		wayland_drm_error;
+typedef enum wayland_drm_capability wayland_drm_capability;
+
+typedef struct wayland_drm wayland_drm;
+
+enum wayland_drm_error {
+	WAYLAND_DRM_ERROR_AUTHENTICATE_FAIL = 0,
+	WAYLAND_DRM_ERROR_INVALID_FORMAT	= 1,
+	WAYLAND_DRM_ERROR_INVALID_NAME		= 2,
+};
+
+enum wayland_drm_capability { WAYLAND_DRM_CAPABILITY_PRIME = 1 };
+
+struct wayland_drm {
+	wayland_interface Interface;
+
+	void (*Device)(wayland_drm *This, c08 *Name);
+	void (*Format)(wayland_drm *This, u32 Format);
+	void (*Authenticated)(wayland_drm *This);
+	void (*Capabilities)(
+		wayland_drm			  *This,
+		wayland_drm_capability Capabilities
+	);
 };
 
 #endif
@@ -827,36 +861,7 @@ struct wayland_xdg_popup {
 
 #endif
 
-#ifndef SECTION_DRM
-
-typedef enum wayland_drm_error		wayland_drm_error;
-typedef enum wayland_drm_capability wayland_drm_capability;
-
-typedef struct wayland_drm wayland_drm;
-
-enum wayland_drm_error {
-	WAYLAND_DRM_ERROR_AUTHENTICATE_FAIL = 0,
-	WAYLAND_DRM_ERROR_INVALID_FORMAT	= 1,
-	WAYLAND_DRM_ERROR_INVALID_NAME		= 2,
-};
-
-enum wayland_drm_capability { WAYLAND_DRM_CAPABILITY_PRIME = 1 };
-
-struct wayland_drm {
-	wayland_interface Interface;
-
-	void (*Device)(wayland_drm *This, c08 *Name);
-	void (*Format)(wayland_drm *This, u32 Format);
-	void (*Authenticated)(wayland_drm *This);
-	void (*Capabilities)(
-		wayland_drm			  *This,
-		wayland_drm_capability Capabilities
-	);
-};
-
-#endif
-
-#ifndef SECTION_LINUX_DMABUF
+#ifndef SECTION_ZWP_LINUX_DMABUF
 
 typedef enum wayland_zwp_linux_buffer_params_v1_error
 	wayland_zwp_linux_buffer_params_v1_error;
@@ -892,6 +897,7 @@ enum wayland_zwp_linux_buffer_params_v1_error {
 	WAYLAND_ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DIMENSIONS = 5,
 	WAYLAND_ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS		= 6,
 	WAYLAND_ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_WL_BUFFER	= 7,
+	WAYLAND_ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DEV_T_SIZE = 8,  // v6
 };
 
 enum wayland_zwp_linux_buffer_params_v1_flags {
@@ -911,7 +917,8 @@ struct wayland_zwp_linux_buffer_params_v1 {
 };
 
 enum wayland_zwp_linux_dmabuf_feedback_v1_tranche_flags {
-	WAYLAND_ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SCANOUT = 0x01
+	WAYLAND_ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SCANOUT	= 0x01,	 // v4
+	WAYLAND_ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SAMPLING = 0x02,	 // v6
 };
 
 struct wayland_zwp_linux_dmabuf_feedback_v1 {
@@ -939,6 +946,32 @@ struct wayland_zwp_linux_dmabuf_feedback_v1 {
 	void (*TrancheFlags)(
 		wayland_zwp_linux_dmabuf_feedback_v1			  *This,
 		wayland_zwp_linux_dmabuf_feedback_v1_tranche_flags Flags
+	);
+};
+
+#endif
+
+#ifndef SECTION_ZWP_RELATIVE_POINTER
+
+typedef struct wayland_zwp_relative_pointer_manager_v1
+	wayland_zwp_relative_pointer_manager_v1;
+typedef struct wayland_zwp_relative_pointer_v1 wayland_zwp_relative_pointer_v1;
+
+struct wayland_zwp_relative_pointer_manager_v1 {
+	wayland_interface Interface;
+};
+
+struct wayland_zwp_relative_pointer_v1 {
+	wayland_interface Interface;
+
+	void (*RelativeMotion)(
+		wayland_zwp_relative_pointer_v1 *This,
+		u32								 MicroTimeHigh,
+		u32								 MicroTimeLow,
+		wayland_fixed					 DeltaX,
+		wayland_fixed					 DeltaY,
+		wayland_fixed					 DeltaXUnaccel,
+		wayland_fixed					 DeltaYUnaccel
 	);
 };
 
@@ -983,6 +1016,11 @@ struct wayland_zwp_linux_dmabuf_feedback_v1 {
 	INTERN(void,                   Wayland_Fixes_Destroy,              wayland_fixes *This) \
 	INTERN(void,                   Wayland_Fixes_DestroyRegistry,      wayland_fixes *This, wayland_registry *Registry) \
 	\
+	INTERN(void,            Wayland_Drm_Authenticate,       wayland_drm *This, u32 Id) \
+	INTERN(wayland_buffer*, Wayland_Drm_CreateBuffer,       wayland_drm *This, u32 Name, s32 Width, s32 Height, u32 Stride, wayland_shm_format Format) \
+	INTERN(wayland_buffer*, Wayland_Drm_CreatePlanarBuffer, wayland_drm *This, u32 Name, s32 Width, s32 Height, wayland_shm_format Format, s32 Offset0, s32 Stride0, s32 Offset1, s32 Stride1, s32 Offset2, s32 Stride2) \
+	INTERN(wayland_buffer*, Wayland_Drm_CreatePrimeBuffer,  wayland_drm *This, s32 Name, s32 Width, s32 Height, wayland_shm_format Format, s32 Offset0, s32 Stride0, s32 Offset1, s32 Stride1, s32 Offset2, s32 Stride2) \
+	\
 	INTERN(void,                    Wayland_XdgWmBase_Destroy,                     wayland_xdg_wm_base *This) \
 	INTERN(wayland_xdg_positioner*, Wayland_XdgWmBase_CreatePositioner,            wayland_xdg_wm_base *This) \
 	INTERN(wayland_xdg_surface*,    Wayland_XdgWmBase_GetXdgSurface,               wayland_xdg_wm_base *This, wayland_surface *Surface) \
@@ -1020,11 +1058,6 @@ struct wayland_zwp_linux_dmabuf_feedback_v1 {
 	INTERN(void,                    Wayland_XdgToplevel_UnsetFullscreen,           wayland_xdg_toplevel *This) \
 	INTERN(void,                    Wayland_XdgToplevel_SetMinimized,              wayland_xdg_toplevel *This) \
 	\
-	INTERN(void,            Wayland_Drm_Authenticate,       wayland_drm *This, u32 Id) \
-	INTERN(wayland_buffer*, Wayland_Drm_CreateBuffer,       wayland_drm *This, u32 Name, s32 Width, s32 Height, u32 Stride, wayland_shm_format Format) \
-	INTERN(wayland_buffer*, Wayland_Drm_CreatePlanarBuffer, wayland_drm *This, u32 Name, s32 Width, s32 Height, wayland_shm_format Format, s32 Offset0, s32 Stride0, s32 Offset1, s32 Stride1, s32 Offset2, s32 Stride2) \
-	INTERN(wayland_buffer*, Wayland_Drm_CreatePrimeBuffer,  wayland_drm *This, s32 Name, s32 Width, s32 Height, wayland_shm_format Format, s32 Offset0, s32 Stride0, s32 Offset1, s32 Stride1, s32 Offset2, s32 Stride2) \
-	\
 	INTERN(void,                                  Wayland_ZwpLinuxDmabufV1_Destroy,            wayland_zwp_linux_dmabuf_v1 *This) \
 	INTERN(wayland_zwp_linux_buffer_params_v1*,   Wayland_ZwpLinuxDmabufV1_CreateParams,       wayland_zwp_linux_dmabuf_v1 *This) \
 	INTERN(wayland_zwp_linux_dmabuf_feedback_v1*, Wayland_ZwpLinuxDmabufV1_GetDefaultFeedback, wayland_zwp_linux_dmabuf_v1 *This) \
@@ -1034,6 +1067,10 @@ struct wayland_zwp_linux_dmabuf_feedback_v1 {
 	INTERN(void,                                  Wayland_ZwpLinuxBufferParamsV1_Create,       wayland_zwp_linux_buffer_params_v1 *This, s32 Width, s32 Height, u32 Format, wayland_zwp_linux_buffer_params_v1_flags Flags) \
 	INTERN(wayland_buffer*,                       Wayland_ZwpLinuxBufferParamsV1_CreateImmed,  wayland_zwp_linux_buffer_params_v1 *This, s32 Width, s32 Height, u32 Format, wayland_zwp_linux_buffer_params_v1_flags Flags) \
 	INTERN(void,                                  Wayland_ZwpLinuxDmabufFeedbackV1_Destroy,    wayland_zwp_linux_dmabuf_feedback_v1 *This) \
+	\
+	INTERN(void,                             Wayland_ZwpRelativePointerManagerV1_Destroy,            wayland_zwp_relative_pointer_manager_v1 *This) \
+	INTERN(wayland_zwp_relative_pointer_v1*, Wayland_ZwpRelativePointerManagerV1_GetRelativePointer, wayland_zwp_relative_pointer_manager_v1 *This, wayland_pointer *Pointer) \
+	INTERN(void,                             Wayland_ZwpRelativePointerV1_Destroy,                   wayland_zwp_relative_pointer_v1 *This) \
 	//
 
 #endif
@@ -1054,13 +1091,13 @@ wayland_prototype WaylandDisplayPrototype = {
 	.EventCount	  = 2,
 	.Requests =
 		M{
-			{ "sync", "on", P{ &WaylandCallbackPrototype } },
-			{ "get_registry", "on", P{ &WaylandRegistryPrototype } },
+		  { "sync", "on", P{ &WaylandCallbackPrototype } },
+		  { "get_registry", "on", P{ &WaylandRegistryPrototype } },
 		  },
 	.Events =
 		M{
-			{ "error", "oous", NULL },
-			{ "delete_id", "ou", NULL },
+		  { "error", "oous", NULL },
+		  { "delete_id", "ou", NULL },
 		  },
 };
 
@@ -1071,12 +1108,12 @@ wayland_prototype WaylandRegistryPrototype = {
 	.EventCount	  = 2,
 	.Requests =
 		M{
-			{ "bind", "oun", P{ NULL } },
+		  { "bind", "oun", P{ NULL } },
 		  },
 	.Events =
 		M{
-			{ "global", "ousu", NULL },
-			{ "global_remove", "ou", NULL },
+		  { "global", "ousu", NULL },
+		  { "global_remove", "ou", NULL },
 		  },
 };
 
@@ -1096,8 +1133,8 @@ wayland_prototype WaylandCompositorPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "create_surface", "on", P{ &WaylandSurfacePrototype } },
-			{ "create_region", "on", P{ &WaylandRegionPrototype } },
+		  { "create_surface", "on", P{ &WaylandSurfacePrototype } },
+		  { "create_region", "on", P{ &WaylandRegionPrototype } },
 		  },
 	.Events = NULL,
 };
@@ -1109,9 +1146,9 @@ wayland_prototype WaylandShmPoolPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "create_buffer", "oniiiiu", P{ &WaylandBufferPrototype } },
-			{ "destroy", "d", NULL },
-			{ "resize", "oi", NULL },
+		  { "create_buffer", "oniiiiu", P{ &WaylandBufferPrototype } },
+		  { "destroy", "d", NULL },
+		  { "resize", "oi", NULL },
 		  },
 	.Events = NULL,
 };
@@ -1123,12 +1160,12 @@ wayland_prototype WaylandShmPrototype = {
 	.EventCount	  = 1,
 	.Requests =
 		M{
-			{ "create_pool", "onfi", P{ &WaylandShmPoolPrototype } },
-			{ "release", "2d", NULL },
+		  { "create_pool", "onfi", P{ &WaylandShmPoolPrototype } },
+		  { "release", "2d", NULL },
 		  },
 	.Events =
 		M{
-			{ "format", "ou", NULL },
+		  { "format", "ou", NULL },
 		  },
 };
 
@@ -1148,17 +1185,17 @@ wayland_prototype WaylandDataOfferPrototype = {
 	.EventCount	  = 3,
 	.Requests =
 		M{
-			{ "accept", "ou?s", NULL },
-			{ "receive", "osf", NULL },
-			{ "destroy", "d", NULL },
-			{ "finish", "3o", NULL },
-			{ "set_actions", "3ouu", NULL },
+		  { "accept", "ou?s", NULL },
+		  { "receive", "osf", NULL },
+		  { "destroy", "d", NULL },
+		  { "finish", "3o", NULL },
+		  { "set_actions", "3ouu", NULL },
 		  },
 	.Events =
 		M{
-			{ "offer", "os", NULL },
-			{ "source_actions", "3ou", NULL },
-			{ "action", "3o", NULL },
+		  { "offer", "os", NULL },
+		  { "source_actions", "3ou", NULL },
+		  { "action", "3o", NULL },
 		  },
 };
 
@@ -1169,18 +1206,18 @@ wayland_prototype WaylandDataSourcePrototype = {
 	.EventCount	  = 6,
 	.Requests =
 		M{
-			{ "offer", "os", NULL },
-			{ "destroy", "d", NULL },
-			{ "set_actions", "3ou", NULL },
+		  { "offer", "os", NULL },
+		  { "destroy", "d", NULL },
+		  { "set_actions", "3ou", NULL },
 		  },
 	.Events =
 		M{
-			{ "target", "o?s", NULL },
-			{ "send", "osf", NULL },
-			{ "cancelled", "3o", NULL },
-			{ "dnd_drop_performed", "3o", NULL },
-			{ "dnd_finished", "3o", NULL },
-			{ "action", "3ou", NULL },
+		  { "target", "o?s", NULL },
+		  { "send", "osf", NULL },
+		  { "cancelled", "3o", NULL },
+		  { "dnd_drop_performed", "3o", NULL },
+		  { "dnd_finished", "3o", NULL },
+		  { "action", "3ou", NULL },
 		  },
 };
 
@@ -1191,18 +1228,18 @@ wayland_prototype WaylandDataDevicePrototype = {
 	.EventCount	  = 6,
 	.Requests =
 		M{
-			{ "start_drag", "o?oo?ou", NULL },
-			{ "set_selection", "o?ou", NULL },
-			{ "release", "2d", NULL },
+		  { "start_drag", "o?oo?ou", NULL },
+		  { "set_selection", "o?ou", NULL },
+		  { "release", "2d", NULL },
 		  },
 	.Events =
 		M{
-			{ "data_offer", "on", P{ &WaylandDataOfferPrototype } },
-			{ "enter", "ouorr?o", NULL },
-			{ "leave", "o", NULL },
-			{ "motion", "ourr", NULL },
-			{ "drop", "o", NULL },
-			{ "selection", "o?o", NULL },
+		  { "data_offer", "on", P{ &WaylandDataOfferPrototype } },
+		  { "enter", "ouorr?o", NULL },
+		  { "leave", "o", NULL },
+		  { "motion", "ourr", NULL },
+		  { "drop", "o", NULL },
+		  { "selection", "o?o", NULL },
 		  },
 };
 
@@ -1213,7 +1250,7 @@ wayland_prototype WaylandDataDeviceManagerPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{
+		  {
 				"create_data_source",
 				"on",
 				P{ &WaylandDataSourcePrototype },
@@ -1232,7 +1269,7 @@ wayland_prototype WaylandShellPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "get_shell_surface", "_ono", P{ &WaylandShellSurfacePrototype } },
+		  { "get_shell_surface", "_ono", P{ &WaylandShellSurfacePrototype } },
 		  },
 	.Events = NULL,
 };
@@ -1244,22 +1281,22 @@ wayland_prototype WaylandShellSurfacePrototype = {
 	.EventCount	  = 3,
 	.Requests =
 		M{
-			{ "pong", "_ou", NULL },
-			{ "move", "_oou", NULL },
-			{ "resize", "_oouu", NULL },
-			{ "set_toplevel", "_o", NULL },
-			{ "set_transient", "_ooiiu", NULL },
-			{ "set_fullscreen", "_ouu?o", NULL },
-			{ "set_popup", "_oouoiiu", NULL },
-			{ "set_maximized", "_o?o", NULL },
-			{ "set_title", "_os", NULL },
-			{ "set_class", "_os", NULL },
+		  { "pong", "_ou", NULL },
+		  { "move", "_oou", NULL },
+		  { "resize", "_oouu", NULL },
+		  { "set_toplevel", "_o", NULL },
+		  { "set_transient", "_ooiiu", NULL },
+		  { "set_fullscreen", "_ouu?o", NULL },
+		  { "set_popup", "_oouoiiu", NULL },
+		  { "set_maximized", "_o?o", NULL },
+		  { "set_title", "_os", NULL },
+		  { "set_class", "_os", NULL },
 		  },
 	.Events =
 		M{
-			{ "ping", "_ou", NULL },
-			{ "configure", "_ouii", NULL },
-			{ "popup_done", "_o", NULL },
+		  { "ping", "_ou", NULL },
+		  { "configure", "_ouii", NULL },
+		  { "popup_done", "_o", NULL },
 		  },
 };
 
@@ -1270,110 +1307,111 @@ wayland_prototype WaylandSurfacePrototype = {
 	.EventCount	  = 4,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "attach", "o?oii", NULL },
-			{ "damage", "oiiii", NULL },
-			{ "frame", "on", P{ &WaylandCallbackPrototype } },
-			{ "set_opaque_region", "o?o", NULL },
-			{ "set_input_region", "o?o", NULL },
-			{ "commit", "o", NULL },
-			{ "set_buffer_transform", "2oi", NULL },
-			{ "set_buffer_scale", "3oi", NULL },
-			{ "damage_buffer", "4oiiii", NULL },
-			{ "offset", "5oii", NULL },
+		  { "destroy", "d", NULL },
+		  { "attach", "o?oii", NULL },
+		  { "damage", "oiiii", NULL },
+		  { "frame", "on", P{ &WaylandCallbackPrototype } },
+		  { "set_opaque_region", "o?o", NULL },
+		  { "set_input_region", "o?o", NULL },
+		  { "commit", "o", NULL },
+		  { "set_buffer_transform", "2oi", NULL },
+		  { "set_buffer_scale", "3oi", NULL },
+		  { "damage_buffer", "4oiiii", NULL },
+		  { "offset", "5oii", NULL },
 		  },
 	.Events =
 		M{
-			{ "enter", "oo", NULL },
-			{ "leave", "oo", NULL },
-			{ "preferred_buffer_scale", "6oi", NULL },
-			{ "preferred_buffer_transform", "6ou", NULL },
+		  { "enter", "oo", NULL },
+		  { "leave", "oo", NULL },
+		  { "preferred_buffer_scale", "6oi", NULL },
+		  { "preferred_buffer_transform", "6ou", NULL },
 		  },
 };
 
 wayland_prototype WaylandSeatPrototype = {
 	.Name		  = "wl_seat",
-	.Version	  = 10,
+	.Version	  = 11,
 	.RequestCount = 4,
 	.EventCount	  = 2,
 	.Requests =
 		M{
-			{ "get_pointer", "on", P{ &WaylandPointerPrototype } },
-			{ "get_keyboard", "on", P{ &WaylandKeyboardPrototype } },
-			{ "get_touch", "on", P{ &WaylandTouchPrototype } },
-			{ "release", "5d", NULL },
+		  { "get_pointer", "on", P{ &WaylandPointerPrototype } },
+		  { "get_keyboard", "on", P{ &WaylandKeyboardPrototype } },
+		  { "get_touch", "on", P{ &WaylandTouchPrototype } },
+		  { "release", "5d", NULL },
 		  },
 	.Events =
 		M{
-			{ "capabilities", "ou", NULL },
-			{ "name", "2os", NULL },
+		  { "capabilities", "ou", NULL },
+		  { "name", "2os", NULL },
 		  },
 };
 
 wayland_prototype WaylandPointerPrototype = {
 	.Name		  = "wl_pointer",
-	.Version	  = 10,
+	.Version	  = 11,
 	.RequestCount = 2,
-	.EventCount	  = 11,
+	.EventCount	  = 12,
 	.Requests =
 		M{
-			{ "set_cursor", "ou?oii", NULL },
-			{ "release", "3d", NULL },
+		  { "set_cursor", "ou?oii", NULL },
+		  { "release", "3d", NULL },
 		  },
 	.Events =
 		M{
-			{ "enter", "ouorr", NULL },
-			{ "leave", "ouo", NULL },
-			{ "motion", "ourr", NULL },
-			{ "button", "ouuuu", NULL },
-			{ "axis", "ouur", NULL },
-			{ "frame", "5o", NULL },
-			{ "axis_source", "5ou", NULL },
-			{ "axis_stop", "5ouu", NULL },
-			{ "axis_discrete", "5_8oui", NULL },
-			{ "axis_value120", "8oui", NULL },
-			{ "axis_relative_direction", "9ouu", NULL },
+		  { "enter", "ouorr", NULL },
+		  { "leave", "ouo", NULL },
+		  { "motion", "ourr", NULL },
+		  { "button", "ouuuu", NULL },
+		  { "axis", "ouur", NULL },
+		  { "frame", "5o", NULL },
+		  { "axis_source", "5ou", NULL },
+		  { "axis_stop", "5ouu", NULL },
+		  { "axis_discrete", "5-7oui", NULL },
+		  { "axis_value120", "8oui", NULL },
+		  { "axis_relative_direction", "9ouu", NULL },
+		  { "warp", "11orr", NULL },
 		  },
 };
 
 wayland_prototype WaylandKeyboardPrototype = {
 	.Name		  = "wl_keyboard",
-	.Version	  = 10,
+	.Version	  = 11,
 	.RequestCount = 1,
 	.EventCount	  = 6,
 	.Requests =
 		M{
-			{ "release", "3d", NULL },
+		  { "release", "3d", NULL },
 		  },
 	.Events =
 		M{
-			{ "keymap", "oufu", NULL },
-			{ "enter", "ouoa", NULL },
-			{ "leave", "ouo", NULL },
-			{ "key", "ouuuu", NULL },
-			{ "modifiers", "ouuuuu", NULL },
-			{ "repeat_info", "4oii", NULL },
+		  { "keymap", "oufu", NULL },
+		  { "enter", "ouoa", NULL },
+		  { "leave", "ouo", NULL },
+		  { "key", "ouuuu", NULL },
+		  { "modifiers", "ouuuuu", NULL },
+		  { "repeat_info", "4oii", NULL },
 		  },
 };
 
 wayland_prototype WaylandTouchPrototype = {
 	.Name		  = "wl_touch",
-	.Version	  = 10,
+	.Version	  = 11,
 	.RequestCount = 1,
 	.EventCount	  = 7,
 	.Requests =
 		M{
-			{ "release", "3d", NULL },
+		  { "release", "3d", NULL },
 		  },
 	.Events =
 		M{
-			{ "down", "ouuoirr", NULL },
-			{ "up", "ouui", NULL },
-			{ "motion", "ouirr", NULL },
-			{ "frame", "o", NULL },
-			{ "cancel", "o", NULL },
-			{ "shape", "6oirr", NULL },
-			{ "orientation", "6oir", NULL },
+		  { "down", "ouuoirr", NULL },
+		  { "up", "ouui", NULL },
+		  { "motion", "ouirr", NULL },
+		  { "frame", "o", NULL },
+		  { "cancel", "o", NULL },
+		  { "shape", "6oirr", NULL },
+		  { "orientation", "6oir", NULL },
 		  },
 };
 
@@ -1384,16 +1422,16 @@ wayland_prototype WaylandOutputPrototype = {
 	.EventCount	  = 6,
 	.Requests =
 		M{
-			{ "release", "3d", NULL },
+		  { "release", "3d", NULL },
 		  },
 	.Events =
 		M{
-			{ "geometry", "oiiiiissi", NULL },
-			{ "mode", "ouiii", NULL },
-			{ "done", "2o", NULL },
-			{ "scale", "2oi", NULL },
-			{ "name", "4os", NULL },
-			{ "description", "4os", NULL },
+		  { "geometry", "oiiiiissi", NULL },
+		  { "mode", "ouiii", NULL },
+		  { "done", "2o", NULL },
+		  { "scale", "2oi", NULL },
+		  { "name", "4os", NULL },
+		  { "description", "4os", NULL },
 		  },
 };
 
@@ -1404,9 +1442,9 @@ wayland_prototype WaylandRegionPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "add", "oiiii", NULL },
-			{ "subtract", "oiiii", NULL },
+		  { "destroy", "d", NULL },
+		  { "add", "oiiii", NULL },
+		  { "subtract", "oiiii", NULL },
 		  },
 	.Events = NULL,
 };
@@ -1418,8 +1456,8 @@ wayland_prototype WaylandSubcompositorPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "get_subsurface", "onoo", P{ &WaylandSubsurfacePrototype } },
+		  { "destroy", "d", NULL },
+		  { "get_subsurface", "onoo", P{ &WaylandSubsurfacePrototype } },
 		  },
 	.Events = NULL,
 };
@@ -1431,12 +1469,12 @@ wayland_prototype WaylandSubsurfacePrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "set_position", "oii", NULL },
-			{ "place_above", "oo", NULL },
-			{ "place_below", "oo", NULL },
-			{ "set_sync", "o", NULL },
-			{ "set_desync", "o", NULL },
+		  { "destroy", "d", NULL },
+		  { "set_position", "oii", NULL },
+		  { "place_above", "oo", NULL },
+		  { "place_below", "oo", NULL },
+		  { "set_sync", "o", NULL },
+		  { "set_desync", "o", NULL },
 		  },
 	.Events = NULL,
 };
@@ -1448,8 +1486,8 @@ wayland_prototype WaylandFixesPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "destroy_registry", "od", NULL },
+		  { "destroy", "d", NULL },
+		  { "destroy_registry", "od", NULL },
 		  },
 	.Events = NULL,
 };
@@ -1769,14 +1807,14 @@ wayland_prototype WaylandXdgWmBasePrototype = {
 	.EventCount	  = 1,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "create_positioner", "on", P{ &WaylandXdgPositionerPrototype } },
-			{ "get_xdg_surface", "ono", P{ &WaylandXdgSurfacePrototype } },
-			{ "pong", "ou", NULL },
+		  { "destroy", "d", NULL },
+		  { "create_positioner", "on", P{ &WaylandXdgPositionerPrototype } },
+		  { "get_xdg_surface", "ono", P{ &WaylandXdgSurfacePrototype } },
+		  { "pong", "ou", NULL },
 		  },
 	.Events =
 		M{
-			{ "ping", "ou", NULL },
+		  { "ping", "ou", NULL },
 		  },
 };
 
@@ -1787,16 +1825,16 @@ wayland_prototype WaylandXdgPositionerPrototype = {
 	.EventCount	  = 0,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "set_size", "oii", NULL },
-			{ "set_anchor_rect", "oiiii", NULL },
-			{ "set_anchor", "ou", NULL },
-			{ "set_gravity", "ou", NULL },
-			{ "set_constraint_adjustment", "ou", NULL },
-			{ "set_offset", "oii", NULL },
-			{ "set_reactive", "3o", NULL },
-			{ "set_parent_size", "3oii", NULL },
-			{ "set_parent_configure", "3ou", NULL },
+		  { "destroy", "d", NULL },
+		  { "set_size", "oii", NULL },
+		  { "set_anchor_rect", "oiiii", NULL },
+		  { "set_anchor", "ou", NULL },
+		  { "set_gravity", "ou", NULL },
+		  { "set_constraint_adjustment", "ou", NULL },
+		  { "set_offset", "oii", NULL },
+		  { "set_reactive", "3o", NULL },
+		  { "set_parent_size", "3oii", NULL },
+		  { "set_parent_configure", "3ou", NULL },
 		  },
 	.Events = NULL,
 };
@@ -1808,15 +1846,15 @@ wayland_prototype WaylandXdgSurfacePrototype = {
 	.EventCount	  = 1,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "get_toplevel", "on", P{ &WaylandXdgToplevelPrototype } },
-			{ "get_popup", "on?oo", P{ &WaylandXdgPopupPrototype } },
-			{ "set_window_geometry", "oiiii", NULL },
-			{ "ack_configure", "ou", NULL },
+		  { "destroy", "d", NULL },
+		  { "get_toplevel", "on", P{ &WaylandXdgToplevelPrototype } },
+		  { "get_popup", "on?oo", P{ &WaylandXdgPopupPrototype } },
+		  { "set_window_geometry", "oiiii", NULL },
+		  { "ack_configure", "ou", NULL },
 		  },
 	.Events =
 		M{
-			{ "configure", "ou", NULL },
+		  { "configure", "ou", NULL },
 		  },
 };
 
@@ -1827,27 +1865,27 @@ wayland_prototype WaylandXdgToplevelPrototype = {
 	.EventCount	  = 4,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "set_parent", "o?o", NULL },
-			{ "set_title", "os", NULL },
-			{ "set_app_id", "os", NULL },
-			{ "show_window_menu", "oouii", NULL },
-			{ "move", "oou", NULL },
-			{ "resize", "oouu", NULL },
-			{ "set_max_size", "oii", NULL },
-			{ "set_min_size", "oii", NULL },
-			{ "set_maximized", "o", NULL },
-			{ "unset_maximized", "o", NULL },
-			{ "set_fullscreen", "o?o", NULL },
-			{ "unset_fullscreen", "o", NULL },
-			{ "set_minimized", "o", NULL },
+		  { "destroy", "d", NULL },
+		  { "set_parent", "o?o", NULL },
+		  { "set_title", "os", NULL },
+		  { "set_app_id", "os", NULL },
+		  { "show_window_menu", "oouii", NULL },
+		  { "move", "oou", NULL },
+		  { "resize", "oouu", NULL },
+		  { "set_max_size", "oii", NULL },
+		  { "set_min_size", "oii", NULL },
+		  { "set_maximized", "o", NULL },
+		  { "unset_maximized", "o", NULL },
+		  { "set_fullscreen", "o?o", NULL },
+		  { "unset_fullscreen", "o", NULL },
+		  { "set_minimized", "o", NULL },
 		  },
 	.Events =
 		M{
-			{ "configure", "oiia", NULL },
-			{ "close", "o", NULL },
-			{ "configure_bounds", "4oii", NULL },
-			{ "wm_capabilities", "5oa", NULL },
+		  { "configure", "oiia", NULL },
+		  { "close", "o", NULL },
+		  { "configure_bounds", "4oii", NULL },
+		  { "wm_capabilities", "5oa", NULL },
 		  },
 };
 
@@ -1858,15 +1896,15 @@ wayland_prototype WaylandXdgPopupPrototype = {
 	.EventCount	  = 3,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "grab", "oou", NULL },
-			{ "reposition", "3oou", NULL },
+		  { "destroy", "d", NULL },
+		  { "grab", "oou", NULL },
+		  { "reposition", "3oou", NULL },
 		  },
 	.Events =
 		M{
-			{ "configure", "oiiii", NULL },
-			{ "popup_done", "o", NULL },
-			{ "repositioned", "3ou", NULL },
+		  { "configure", "oiiii", NULL },
+		  { "popup_done", "o", NULL },
+		  { "repositioned", "3ou", NULL },
 		  },
 };
 
@@ -2114,21 +2152,21 @@ wayland_prototype WaylandDrmPrototype = {
 	.EventCount	  = 4,
 	.Requests =
 		M{
-			{ "authenticate", "ou", NULL },
-			{ "create_buffer", "onuiiuu", P{ &WaylandBufferPrototype } },
-			{ "create_planar_buffer",
-			"onuiiuiiiiii",
-			P{ &WaylandBufferPrototype } },
-			{ "create_prime_buffer",
-			"onfiiuiiiiii",
-			P{ &WaylandBufferPrototype } },
+		  { "authenticate", "ou", NULL },
+		  { "create_buffer", "onuiiuu", P{ &WaylandBufferPrototype } },
+		  { "create_planar_buffer",
+		  "onuiiuiiiiii",
+		  P{ &WaylandBufferPrototype } },
+		  { "create_prime_buffer",
+		  "onfiiuiiiiii",
+		  P{ &WaylandBufferPrototype } },
 		  },
 	.Events =
 		M{
-			{ "device", "os", NULL },
-			{ "format", "ou", NULL },
-			{ "authenticated", "o", NULL },
-			{ "capabilities", "ou", NULL },
+		  { "device", "os", NULL },
+		  { "format", "ou", NULL },
+		  { "authenticated", "o", NULL },
+		  { "capabilities", "ou", NULL },
 		  },
 };
 
@@ -2221,70 +2259,71 @@ Wayland_Drm_CreatePrimeBuffer(
 
 #endif
 
-#ifndef SECTION_LINUX_DMABUF
+#ifndef SECTION_ZWP_LINUX_DMABUF
 
 wayland_prototype WaylandZwpLinuxDmabufV1Prototype = {
 	.Name		  = "zwp_linux_dmabuf_v1",
-	.Version	  = 5,
+	.Version	  = 6,
 	.RequestCount = 4,
 	.EventCount	  = 2,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "create_params",
+		  { "destroy", "d", NULL },
+		  { "create_params",
 				"on",
 				P{ &WaylandZwpLinuxBufferParamsV1Prototype } },
-			{ "get_default_feedback",
+		  { "get_default_feedback",
 				"4on",
 				P{ &WaylandZwpLinuxDmabufFeedbackV1Prototype } },
-			{ "get_surface_feedback",
+		  { "get_surface_feedback",
 				"4ono",
 				P{ &WaylandZwpLinuxDmabufFeedbackV1Prototype } },
 		  },
 	.Events =
 		M{
-			{ "format", "ou", NULL },
-			{ "modifier", "3_4ouuu", NULL },
+		  { "format", "-3ou", NULL },
+		  { "modifier", "3-3ouuu", NULL },
 		  },
 };
 
 wayland_prototype WaylandZwpLinuxBufferParamsV1Prototype = {
 	.Name		  = "zwp_linux_buffer_params_v1",
-	.Version	  = 5,
-	.RequestCount = 4,
+	.Version	  = 6,
+	.RequestCount = 5,
 	.EventCount	  = 2,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
-			{ "add", "ofuuuuu", NULL },
-			{ "create", "oiiuu", NULL },
-			{ "create_immed", "2oniiuu", P{ &WaylandBufferPrototype } },
+		  { "destroy", "d", NULL },
+		  { "add", "ofuuuuu", NULL },
+		  { "create", "oiiuu", NULL },
+		  { "create_immed", "2oniiuu", P{ &WaylandBufferPrototype } },
+		  { "set_sampling_device", "6oa", NULL },
 		  },
 	.Events =
 		M{
-			{ "created", "on", P{ &WaylandBufferPrototype } },
-			{ "failed", "o", NULL },
+		  { "created", "on", P{ &WaylandBufferPrototype } },
+		  { "failed", "o", NULL },
 		  },
 };
 
 wayland_prototype WaylandZwpLinuxDmabufFeedbackV1Prototype = {
 	.Name		  = "zwp_linux_dmabuf_feedback_v1",
-	.Version	  = 5,
+	.Version	  = 6,
 	.RequestCount = 1,
 	.EventCount	  = 7,
 	.Requests =
 		M{
-			{ "destroy", "d", NULL },
+		  { "destroy", "d", NULL },
 		  },
 	.Events =
 		M{
-			{ "done", "o", NULL },
-			{ "format_table", "ofu", NULL },
-			{ "main_device", "oa", NULL },
-			{ "tranche_done", "o", NULL },
-			{ "tranche_target_device", "oa", NULL },
-			{ "tranche_formats", "oa", NULL },
-			{ "tranche_flags", "ou", NULL },
+		  { "done", "o", NULL },
+		  { "format_table", "ofu", NULL },
+		  { "main_device", "-6oa", NULL },
+		  { "tranche_done", "o", NULL },
+		  { "tranche_target_device", "oa", NULL },
+		  { "tranche_formats", "oa", NULL },
+		  { "tranche_flags", "ou", NULL },
 		  },
 };
 
@@ -2379,10 +2418,66 @@ Wayland_ZwpLinuxBufferParamsV1_CreateImmed(
 }
 
 internal void
+Wayland_ZwpLinuxBufferParamsV1_SetSamplingDevice(
+	wayland_zwp_linux_buffer_params_v1 *This,
+	wayland_array						Device
+)
+{ return Wayland_HandleRequest((wayland_interface *) This, 4, Device); }
+
+internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(
 	wayland_zwp_linux_dmabuf_feedback_v1 *This
 )
 { Wayland_HandleRequest((wayland_interface *) This, 0); }
+
+#endif
+
+#ifndef SECTION_ZWP_RELATIVE_POINTER
+
+wayland_prototype Wayland_ZwpRelativePointerManagerV1_Prototype = {
+	.Name		  = "zwp_relative_pointer_manager_v1",
+	.Version	  = 1,
+	.RequestCount = 2,
+	.Requests =
+		M{
+		  { "destroy", "d", NULL },
+		  { "get_relative_pointer",
+				"ono",
+				P{ &Wayland_ZwpRelativePointerV1_Prototype } },
+		  },
+};
+
+wayland_prototype Wayland_ZwpRelativePointerV1_Prototype = {
+	.Name		  = "zwp_relative_pointer_v1",
+	.Version	  = 1,
+	.RequestCount = 1,
+	.EventCount	  = 1,
+	.Requests	  = M{ { "destroy", "d", NULL } },
+	.Events		  = M{ { "relative_motion", "ouurrrr", NULL } }
+};
+
+internal void
+Wayland_ZwpRelativePointerManagerV1_Destroy(
+	wayland_zwp_relative_pointer_manager_v1 *This
+)
+{ return Wayland_HandleRequest((wayland_interface *) This, 0); }
+
+internal wayland_zwp_relative_pointer_v1 *
+Wayland_ZwpRelativePointerManagerV1_GetRelativePointer(
+	wayland_zwp_relative_pointer_manager_v1 *This,
+	wayland_pointer							*Pointer
+)
+{
+	return Wayland_HandleConstructorRequest(
+		(wayland_interface *) This,
+		1,
+		Pointer
+	);
+}
+
+internal void
+Wayland_ZwpRelativePointerV1_Destroy(wayland_zwp_relative_pointer_v1 *This)
+{ return Wayland_HandleRequest((wayland_interface *) This, 0); }
 
 #endif
 

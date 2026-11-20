@@ -28,8 +28,7 @@ typedef enum gbm_bo_transfer_flags : u32 {
 } gbm_bo_transfer_flags;
 
 typedef struct gbm {
-	gbm_device	*Device;
-	gbm_surface *Surface;
+	gbm_device *Device;
 
 	u32		   Width;
 	u32		   Height;
@@ -39,10 +38,12 @@ typedef struct gbm {
 } gbm;
 
 #define GBM_FUNCS \
-	INTERN(b08, Gbm_Init, s32 DrmFd, u32 Width, u32 Height, drm_format Format, drm_format_modifier Modifier, gbm *GbmOut) \
+	INTERN(b08,  Gbm_Init,   s32 DrmFd, u32 Width, u32 Height, drm_format Format, drm_format_modifier Modifier, gbm *GbmOut) \
+	INTERN(void, Gbm_Deinit, gbm *Gbm) \
 	\
 	IMPORT(gbm_bo*,      Gbm, gbm_bo_create,                Gbm_BoCreate,              gbm_device *GbmDevice, u32 Width, u32 Height, drm_format Format, gbm_bo_flags Flags) \
 	IMPORT(gbm_bo*,      Gbm, gbm_bo_create_with_modifiers, Gbm_BoCreateWithModifiers, gbm_device *GbmDevice, u32 Width, u32 Height, drm_format Format, drm_format_modifier *Modifiers, u32 ModifierCount) \
+	IMPORT(void,         Gbm, gbm_bo_destroy,               Gbm_BoDestroy,             gbm_bo *BufferObject) \
 	IMPORT(s32,          Gbm, gbm_bo_get_fd,                Gbm_BoGetFd,               gbm_bo *BufferObject) \
 	IMPORT(drm_format,   Gbm, gbm_bo_get_format,            Gbm_BoGetFormat,           gbm_bo *BufferObject) \
 	IMPORT(u32,          Gbm, gbm_bo_get_height,            Gbm_BoGetHeight,           gbm_bo *BufferObject) \
@@ -51,7 +52,9 @@ typedef struct gbm {
 	IMPORT(u32,          Gbm, gbm_bo_get_width,             Gbm_BoGetWidth,            gbm_bo *BufferObject) \
 	IMPORT(vptr,         Gbm, gbm_bo_map,                   Gbm_BoMap,                 gbm_bo *BufferObject, u32 X, u32 Y, u32 Width, u32 Height, gbm_bo_transfer_flags Flags, u32 *Stride, vptr *MapData) \
 	IMPORT(gbm_device*,  Gbm, gbm_create_device,            Gbm_CreateDevice,          s32 DrmFd) \
-	IMPORT(gbm_surface*, Gbm, gbm_surface_create,           Gbm_SurfaceCreate,         gbm_device *GbmDevice, u32 Width, u32 Height, drm_format Format, u32 Flags) \
+	IMPORT(void,         Gbm, gbm_device_destroy,           Gbm_DeviceDestroy,         gbm_device *Device) \
+	IMPORT(gbm_surface*, Gbm, gbm_surface_create,           Gbm_SurfaceCreate,         gbm_device *Device, u32 Width, u32 Height, drm_format Format, u32 Flags) \
+	IMPORT(void,         Gbm, gbm_surface_destroy,          Gbm_SurfaceDestroy,        gbm_surface *Surface) \
 	//
 
 #endif
@@ -76,50 +79,69 @@ Gbm_Init(
 {
 	if (!GbmOut || !DrmFd) return FALSE;
 
-	GbmOut->Device = Gbm_CreateDevice(DrmFd);
-	if (!GbmOut->Device) {
+	gbm Gbm = {
+		.Width	= Width,
+		.Height = Height,
+		.Format = Format,
+	};
+
+	Gbm.Device = Gbm_CreateDevice(DrmFd);
+	if (!Gbm.Device) {
 		FPrintL("Failed to create gbm device: code %m\n", Gbm_GetError());
-		return FALSE;
+		goto error;
 	}
 
-	GbmOut->Width  = Width;
-	GbmOut->Height = Height;
-	GbmOut->Format = Format;
-
-	for (usize I = 0; I < 2; I++) {
-		gbm_bo *BufferObject = NULL;
-
-		if (Modifier != DRM_FORMAT_MOD_INVALID)
-			BufferObject = Gbm_BoCreateWithModifiers(
-				GbmOut->Device,
+	ARRAY_FOREACH_PTR (Gbm.BufferObjects) {
+		if (Modifier != DRM_FORMAT_MOD_INVALID) {
+			*It = Gbm_BoCreateWithModifiers(
+				Gbm.Device,
 				Width,
 				Height,
 				Format,
 				&Modifier,
 				1
 			);
+		}
 
-		if (!BufferObject)
-			BufferObject = Gbm_BoCreate(
-				GbmOut->Device,
+		if (!*It) {
+			*It = Gbm_BoCreate(
+				Gbm.Device,
 				Width,
 				Height,
 				Format,
 				GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING
 			);
+		}
 
-		if (!BufferObject) {
+		if (!*It) {
 			FPrintL(
 				"Failed to create gbm buffer object: code %m\n",
 				Gbm_GetError()
 			);
-			return FALSE;
+			goto error;
 		}
-		GbmOut->BufferObjects[I] = BufferObject;
 	}
 
 	FPrintL("Successfully initialized gbm!\n");
+	*GbmOut = Gbm;
 	return TRUE;
+
+error:
+	Gbm_Deinit(&Gbm);
+	return FALSE;
+}
+
+internal void
+Gbm_Deinit(gbm *Gbm)
+{
+	if (!Gbm) return;
+
+	ARRAY_FOREACH (Gbm->BufferObjects)
+		if (It) Gbm_BoDestroy(It);
+
+	if (Gbm->Device) Gbm_DeviceDestroy(Gbm->Device);
+
+	Mem_Set(Gbm, 0, sizeof(gbm));
 }
 
 #endif
