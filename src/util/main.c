@@ -24,6 +24,7 @@
 ///  - string: String constructors and operations, including formatting.
 ///  - vector: Multi-dimensional primitive array operations.
 
+_Static_assert(1);
 #if !defined(INCLUDE_SOURCE) && !defined(INCLUDE_HEADER)
 #include <shared.h>
 #include <platform/shared.h>

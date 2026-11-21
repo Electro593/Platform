@@ -540,6 +540,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			EGL_CONFIG_DEPTH_SIZE,        24,
 			EGL_CONFIG_STENCIL_SIZE,      8,
 
+			EGL_CONFIG_SURFACE_TYPE,      0,
 			EGL_CONFIG_CONFORMANT,        EGL_CONFORMANCE_OPENGL,
 			EGL_CONFIG_RENDERABLE_TYPE,   EGL_RENDERABLE_TYPE_OPENGL,
 			EGL_CONFIG_NONE
@@ -590,7 +591,6 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		}
 
 		Egl.Config = Configs[SelectedIndex];
-		Heap_FreeA(Configs);
 	}
 
 	// Create context
@@ -662,26 +662,61 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 
 			drm_format_modifier Modifier = Gbm_BoGetModifier(Bo);
 
+			s32 BoFds[4];
+			for (s32 PI = 0; PI < Gbm_BoGetPlaneCount(Bo); PI++) {
+				BoFds[PI] = Gbm_BoGetFdForPlane(Bo, PI);
+				if (BoFds[PI] < 0) {
+					for (s32 PJ = 0; PJ < PI; PJ++) Sys_Close(BoFds[PJ]);
+					FPrintL(
+						"Failed to get gbm bo fd for plane %d: code %m\n",
+						PI,
+						Gbm_GetError()
+					);
+					goto error;
+				}
+			}
+
 			// clang-format off
-			egl_attrib ImageAttribs[17] = {
-				EGL_IMAGE_ATTRIB_WIDTH,                 Gbm_BoGetWidth(Bo),
-				EGL_IMAGE_ATTRIB_HEIGHT,                Gbm_BoGetHeight(Bo),
-				EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,      Gbm_BoGetFormat(Bo),
-				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,     Gbm_BoGetFd(Bo),
-				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET, 0,
-				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,  Gbm_BoGetStride(Bo),
-				EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
-				EGL_IMAGE_ATTRIB_NONE,                  EGL_NONE,
+			egl_attrib ImageAttribs[] = {
+				EGL_IMAGE_ATTRIB_WIDTH,                      EGL_NONE,
+				EGL_IMAGE_ATTRIB_HEIGHT,                     EGL_NONE,
+				EGL_IMAGE_ATTRIB_LINUX_DRM_FOURCC,           EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_FD,          EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_OFFSET,      EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_PITCH,       EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_LO, EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_HI, EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_FD,          EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_OFFSET,      EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_PITCH,       EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_MODIFIER_LO, EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE1_MODIFIER_HI, EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_FD,          EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_OFFSET,      EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_PITCH,       EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_MODIFIER_LO, EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE2_MODIFIER_HI, EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_FD,          EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_OFFSET,      EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_PITCH,       EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_MODIFIER_LO, EGL_NONE,
+				EGL_IMAGE_ATTRIB_DMA_BUF_PLANE3_MODIFIER_HI, EGL_NONE,
 				EGL_IMAGE_ATTRIB_NONE
 			};
 			// clang-format on
 
-			if (Modifier != DRM_FORMAT_MOD_INVALID) {
-				ImageAttribs[12] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_LO;
-				ImageAttribs[13] = Modifier & 0xFFFFFFFF;
-				ImageAttribs[14] = EGL_IMAGE_ATTRIB_DMA_BUF_PLANE0_MODIFIER_HI;
-				ImageAttribs[15] = Modifier >> 32;
+			usize AI				   = 0;
+			ImageAttribs[2 * AI++ + 1] = Gbm_BoGetWidth(Bo);
+			ImageAttribs[2 * AI++ + 1] = Gbm_BoGetHeight(Bo);
+			ImageAttribs[2 * AI++ + 1] = Gbm_BoGetFormat(Bo);
+			for (s32 PI = 0; PI < Gbm_BoGetPlaneCount(Bo); PI++) {
+				ImageAttribs[2 * AI++ + 1] = BoFds[PI];
+				ImageAttribs[2 * AI++ + 1] = Gbm_BoGetOffset(Bo, PI);
+				ImageAttribs[2 * AI++ + 1] = Gbm_BoGetStrideForPlane(Bo, PI);
+				ImageAttribs[2 * AI++ + 1] = Modifier & 0xFFFFFFFF;
+				ImageAttribs[2 * AI++ + 1] = Modifier >> 32;
 			}
+			ImageAttribs[2 * AI] = EGL_IMAGE_ATTRIB_NONE;
 
 			Egl.Images[I] = Egl_CreateImage(
 				Egl.Display,
@@ -690,6 +725,9 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 				NULL,
 				ImageAttribs
 			);
+
+			for (s32 PI = 0; PI < Gbm_BoGetPlaneCount(Bo); PI++)
+				Sys_Close(BoFds[PI]);
 
 			if (!Egl.Images[I]) {
 				FPrintL(
@@ -742,6 +780,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	}
 
 	FPrintL("Successfully initialized egl!\n");
+	Heap_FreeA(Configs);
 	*EglOut = Egl;
 	return TRUE;
 
@@ -759,16 +798,6 @@ Egl_Deinit(egl *Egl)
 {
 	if (!Egl) return;
 
-	OpenGL_DeleteRenderbuffers(
-		ARRAY_COUNT(Egl->RenderbufferIds),
-		Egl->RenderbufferIds
-	);
-	OpenGL_DeleteFramebuffers(
-		ARRAY_COUNT(Egl->FramebufferIds),
-		Egl->FramebufferIds
-	);
-	OpenGL_DeleteTextures(ARRAY_COUNT(Egl->TextureIds), Egl->TextureIds);
-
 	if (Egl->Display == EGL_NO_DISPLAY) {
 		Assert(Egl->Context == EGL_NO_CONTEXT);
 		ARRAY_FOREACH (Egl->Images) Assert(It == EGL_NO_IMAGE);
@@ -777,6 +806,19 @@ Egl_Deinit(egl *Egl)
 			if (It != EGL_NO_IMAGE) Egl_DestroyImage(Egl->Display, It);
 
 		if (Egl->Context != EGL_NO_CONTEXT) {
+			OpenGL_DeleteRenderbuffers(
+				ARRAY_COUNT(Egl->RenderbufferIds),
+				Egl->RenderbufferIds
+			);
+			OpenGL_DeleteFramebuffers(
+				ARRAY_COUNT(Egl->FramebufferIds),
+				Egl->FramebufferIds
+			);
+			OpenGL_DeleteTextures(
+				ARRAY_COUNT(Egl->TextureIds),
+				Egl->TextureIds
+			);
+
 			Egl_MakeCurrent(
 				Egl->Display,
 				EGL_NO_SURFACE,
