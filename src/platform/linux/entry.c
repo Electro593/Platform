@@ -21,10 +21,9 @@ __asm__(
 	"	                           \n"
 	".globl Platform_ThreadThunk   \n"
 	"Platform_ThreadThunk:         \n"
-	"	pop %rsi                   \n"
+	"	sub $8, %rsp               \n"
 	"	pop %rdi                   \n"
 	"	pop %rax                   \n"
-	"	sub $16, %rsp              \n"
 	"	mov %rsp, %rbp             \n"
 	"	call *%rax                 \n"
 	"	mov %rax, %rdi             \n"
@@ -191,7 +190,7 @@ Platform_JoinThread(thread_handle ThreadHandle)
 		if (ThreadHandle.TidLock == 0) break;
 
 		s32 Result = Sys_Futex(
-			(u32 *) &ThreadHandle.TidLock,
+			(u32 *) ThreadHandle.TidLock,
 			SYS_FUTEX_WAIT,
 			ThreadHandle.ThreadId,
 			NULL,
@@ -199,7 +198,7 @@ Platform_JoinThread(thread_handle ThreadHandle)
 			0
 		);
 
-		if (Result < 0 && (Result != -SYS_EAGAIN || Result == -SYS_EINTR))
+		if (Result < 0 && Result != -SYS_EAGAIN && Result != -SYS_EINTR)
 			return FALSE;
 	}
 

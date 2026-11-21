@@ -78,13 +78,13 @@ struct platform_state {
 
 	hashmap ModuleTable;
 
-	v2u32				   WindowSize;
-	struct platform_funcs *Funcs;
-	execution_state		   ExecutionState;
-	focus_state			   FocusState;
-	platform_updates	   Updates;
-	u08					   Buttons[5];
-	u08					   Keys[256];
+	v2u32					WindowSize;
+	struct platform_funcs  *Funcs;
+	_Atomic execution_state ExecutionState;
+	focus_state				FocusState;
+	platform_updates		Updates;
+	u08						Buttons[5];
+	u08						Keys[256];
 
 	r32 FPS;
 

@@ -55,7 +55,7 @@ typedef struct wayland_state {
 	wayland_event_queue EventQueue;
 
 	thread_handle EventThread;
-	b08			  ThreadRunning;
+	_Atomic b08	  ThreadRunning;
 
 	wayland_display	 *Display;
 	wayland_registry *Registry;
