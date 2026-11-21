@@ -110,28 +110,37 @@ typedef __builtin_va_list va_list;
 intrin u32
 Intrin_Exchange32(u32 *Data, u32 Value)
 {
-	__asm__("lock xchg %1, %2" : "+r"(Value) : "m"(*Data));
+	__asm__ volatile("lock xchg %1, %2" : "+r"(Value) : "m"(*Data) : "memory");
 	return Value;
 }
 
 intrin u08
 Intrin_CompareExchange08(u08 *Value, u08 Target, u08 NewValue)
 {
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
+	__asm__ volatile("lock cmpxchg %1, %2"
+		: "+a"(Target)
+		: "r"(NewValue), "m"(*Value)
+		: "memory");
 	return Target;
 }
 
 intrin u16
 Intrin_CompareExchange16(u16 *Value, u16 Target, u16 NewValue)
 {
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
+	__asm__ volatile("lock cmpxchg %1, %2"
+		: "+a"(Target)
+		: "r"(NewValue), "m"(*Value)
+		: "memory");
 	return Target;
 }
 
 intrin u32
 Intrin_CompareExchange32(u32 *Value, u32 Target, u32 NewValue)
 {
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
+	__asm__ volatile("lock cmpxchg %1, %2"
+		: "+a"(Target)
+		: "r"(NewValue), "m"(*Value)
+		: "memory");
 	return Target;
 }
 
@@ -139,7 +148,10 @@ intrin u64
 Intrin_CompareExchange64(u64 *Value, u64 Target, u64 NewValue)
 {
 	u64 OldValue = Target;
-	__asm__("lock cmpxchg %1, %2" : "+a"(Target) : "r"(NewValue), "m"(*Value));
+	__asm__ volatile("lock cmpxchg %1, %2"
+		: "+a"(Target)
+		: "r"(NewValue), "m"(*Value)
+		: "memory");
 	return Target;
 }
 

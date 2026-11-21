@@ -314,7 +314,7 @@ memcmp(vptr A, vptr B, usize Bytes)
 	EXPORT(void,             Platform_CloseFile,             file_handle FileHandle) \
 	EXPORT(void,             Platform_FreeMemory,            vptr Base, u64 Size) \
 	EXPORT(u64,              Platform_GetFileLength,         file_handle FileHandle) \
-	EXPORT(void,             Platform_GetFileTime,           c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
+	EXPORT(b08,              Platform_GetFileTime,           c08 *FileName, datetime *CreationTime, datetime *LastAccessTime, datetime *LastWriteTime) \
 	EXPORT(timestamp,        Platform_GetTimestamp,          void) \
 	EXPORT(r64,              Platform_GetSecondsElapsed,     timestamp From, timestamp To) \
 	EXPORT(void,             Platform_UnloadModule,          platform_module *Module) \
@@ -491,14 +491,18 @@ internal b08
 Platform_ReloadModule(platform_module *Module)
 {
 	datetime LastWriteTime;
-	Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
+	b08		 HasLastWrite =
+		Platform_GetFileTime(Module->FileName, 0, 0, &LastWriteTime);
+
 	if (Platform_IsModuleBackendOpened(Module)) {
-		if (Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime) != LESS)
+		if (!HasLastWrite
+			|| Platform_CmpFileTime(Module->LastWriteTime, LastWriteTime)
+				   != LESS)
 			return FALSE;
 
 		Platform_UnloadModule(Module);
 	}
-	Module->LastWriteTime = LastWriteTime;
+	if (HasLastWrite) Module->LastWriteTime = LastWriteTime;
 
 	Platform_OpenModuleBackend(Module);
 

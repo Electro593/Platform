@@ -511,7 +511,7 @@ internal void
 Platform_CloseFile(file_handle FileHandle)
 { Win32_CloseHandle(FileHandle.Handle); }
 
-internal void
+internal b08
 Platform_GetFileTime(
 	c08		 *FileName,
 	datetime *CreationTime,
@@ -520,7 +520,7 @@ Platform_GetFileTime(
 )
 {
 	file_handle FileHandle;
-	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
+	if (!Platform_OpenFile(&FileHandle, FileName, FILE_READ)) return FALSE;
 	Win32_GetFileTime(
 		FileHandle.Handle,
 		&CreationTime->Value,
@@ -528,6 +528,7 @@ Platform_GetFileTime(
 		&LastWriteTime->Value
 	);
 	Platform_CloseFile(FileHandle);
+	return TRUE;
 }
 
 internal timestamp
@@ -756,9 +757,9 @@ Platform_WindowCallback(
 		}
 			return 0;
 
-		case WM_KEYUP:
-		case WM_KEYDOWN:
-		case WM_SYSKEYUP:
+		case WM_KEYUP	  :
+		case WM_KEYDOWN	  :
+		case WM_SYSKEYUP  :
 		case WM_SYSKEYDOWN: {
 			u08 ScanCode   = (LParam >> 16) & 0xFF;
 			b08 IsExtended = (LParam >> 24) & 0x01;

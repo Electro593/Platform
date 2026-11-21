@@ -335,9 +335,9 @@ wayland_prototype *WaylandPrototypes[] = {
 internal wayland_prototype *
 Wayland_FindPrototype(string Name)
 {
-	usize  Start  = 0;
-	usize  End	  = sizeof(WaylandPrototypes) / sizeof(wayland_prototype *);
-	usize  Index  = 0;
+	usize Start = 0;
+	usize End	= sizeof(WaylandPrototypes) / sizeof(wayland_prototype *);
+	usize Index = 0;
 
 	wayland_prototype *Curr = NULL;
 
@@ -816,7 +816,7 @@ Wayland_PrepareMethod(
 		}
 	}
 	if (!PreparedMethod.UntilVersion)
-		PreparedMethod.UntilVersion = PreparedMethod.SinceVersion;
+		PreparedMethod.UntilVersion = Object->Version;
 
 	PreparedMethod.Format = C;
 	Assert(

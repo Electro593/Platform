@@ -354,6 +354,7 @@ Wayland_XdgToplevel_Close(wayland_xdg_toplevel *This)
 	Wayland_DebugLog(This, "Requested to close\n");
 
 	Wayland_Disconnect();
+	_G.ExecutionState = EXECUTION_ENDED;
 }
 
 internal void

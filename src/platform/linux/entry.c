@@ -134,13 +134,14 @@ Platform_CreateThread(
 	usize StackSize = 8 * 1024 * 1024;
 	vptr  Stack		= Platform_AllocateMemory(StackSize);
 
-	sys_clone_flags Flags = SYS_CLONE_FILES
+	sys_clone_flags Flags = SYS_CLONE_VM
 						  | SYS_CLONE_FS
-						  | SYS_CLONE_IO
-						  | SYS_CLONE_CHILD_CLEARTID
+						  | SYS_CLONE_FILES
 						  | SYS_CLONE_SIGHAND
 						  | SYS_CLONE_THREAD
-						  | SYS_CLONE_VM;
+						  | SYS_CLONE_PARENT_SETTID
+						  | SYS_CLONE_CHILD_CLEARTID
+						  | SYS_CLONE_IO;
 
 #ifdef _X64
 	vptr  StackTop = Stack + StackSize - 4 * sizeof(vptr);
@@ -153,9 +154,13 @@ Platform_CreateThread(
 #error
 #endif
 
-	sys_pid ProcessId =
-		Sys_Clone(Flags, StackTop, NULL, 0, (s32*) &Words[1]);
-	if (ProcessId < 0) return FALSE;
+	s32	   *TidPtr	  = (s32 *) &Words[1];
+	sys_pid ProcessId = Sys_Clone(Flags, StackTop, TidPtr, TidPtr, 0);
+
+	if (ProcessId < 0) {
+		Platform_FreeMemory(Stack, StackSize);
+		return FALSE;
+	}
 
 	*ThreadHandle = (thread_handle){
 		.ThreadId  = ProcessId,
@@ -168,11 +173,19 @@ Platform_CreateThread(
 internal b08
 Platform_JoinThread(thread_handle ThreadHandle)
 {
-	u32 *Lock = (u32*)ThreadHandle.Stack + 1;
+	u32 *Lock =
+		(u32 *) (ThreadHandle.Stack + ThreadHandle.StackSize - 2 * sizeof(u32));
 
 	while (TRUE) {
 		if (*Lock == 0) break;
-		s32 Result = Sys_Futex(Lock, SYS_FUTEX_WAIT, ThreadHandle.ThreadId, NULL, NULL, 0);
+		s32 Result = Sys_Futex(
+			Lock,
+			SYS_FUTEX_WAIT,
+			ThreadHandle.ThreadId,
+			NULL,
+			NULL,
+			0
+		);
 		if (Result < 0 && Result != -SYS_EAGAIN) return FALSE;
 	}
 
@@ -202,17 +215,21 @@ Platform_LockMutex(mutex_handle *Mutex)
 	s32	 Tid   = Sys_GetTid();
 	u32 *Value = &Mutex->Value;
 
+	// If it's unlocked, lock it and return.
+	s32 OldValue = Intrin_CompareExchange32(Value, 0, 1);
+	if (OldValue == 0) return;
+
 	while (1) {
-		// If it's unlocked, lock it and return.
-		s32 OldValue = Intrin_CompareExchange32(Value, 0, 1);
+		// Try again, but mark it contested if we succeed.
+		s32 OldValue = Intrin_CompareExchange32(Value, 0, 2);
 		if (OldValue == 0) break;
 
-		// Attempt to set it to contended. If it was unlocked between then and
+		// Attempt to set it to contested. If it was unlocked between then and
 		// now, go back and attempt to re-lock it.
 		OldValue = Intrin_CompareExchange32(Value, 1, 2);
 		if (OldValue == 0) continue;
 
-		// The lock is contended, so we'll sleep on it. If it was unlocked (and
+		// The lock is contested, so we'll sleep on it. If it was unlocked (and
 		// potentially re-locked) between then and now, futex will return EAGAIN
 		// immediately and we'll try again. Otherwise, we'll sleep until WAKE is
 		// signalled, at which point we'll try again.
@@ -240,8 +257,8 @@ Platform_UnlockMutex(mutex_handle *Mutex)
 internal b08
 Platform_OpenFile(file_handle *FileHandle, c08 *FileName, file_mode OpenMode)
 {
-	s32 Flags = 0;
-	u16 Mode  = 0;
+	sys_open_flags Flags = 0;
+	sys_open_mode  Mode	 = 0;
 
 	// TODO Append is incorrect, need to handle offsets better with win32
 
@@ -319,7 +336,7 @@ internal void
 Platform_CloseFile(file_handle FileHandle)
 { VALIDATE(Sys_Close(FileHandle.FileDescriptor), "Failed to close the file"); }
 
-internal void
+internal b08
 Platform_GetFileTime(
 	c08		 *FileName,
 	datetime *CreationTime,
@@ -330,20 +347,26 @@ Platform_GetFileTime(
 	sys_statx Stat;
 
 	file_handle FileHandle;
-	Platform_OpenFile(&FileHandle, FileName, FILE_READ);
+	if (!Platform_OpenFile(&FileHandle, FileName, FILE_READ)) return FALSE;
+
 	s32 Result = Sys_StatX(
 		FileHandle.FileDescriptor,
 		"",
 		SYS_STATX_FLAG_EMPTY_PATH,
-		SYS_STATX_MASK_ATIME | SYS_STATX_MASK_BTIME | SYS_STATX_MASK_CTIME,
+		SYS_STATX_MASK_ATIME | SYS_STATX_MASK_BTIME | SYS_STATX_MASK_MTIME,
 		&Stat
 	);
 	Platform_CloseFile(FileHandle);
-	VALIDATE(Result, "Failed to stat the file");
+	if (Result < 0) return FALSE;
 
-	if (CreationTime) CreationTime->Value = Stat.CreationTime;
-	if (LastAccessTime) LastAccessTime->Value = Stat.LastAccessTime;
-	if (LastWriteTime) LastWriteTime->Value = Stat.LastWriteTime;
+	if (CreationTime && (Stat.Mask & SYS_STATX_MASK_BTIME))
+		CreationTime->Value = Stat.CreationTime;
+	if (LastAccessTime && (Stat.Mask & SYS_STATX_MASK_ATIME))
+		LastAccessTime->Value = Stat.LastAccessTime;
+	if (LastWriteTime && (Stat.Mask & SYS_STATX_MASK_MTIME))
+		LastWriteTime->Value = Stat.LastWriteTime;
+
+	return TRUE;
 }
 
 internal timestamp
@@ -421,7 +444,7 @@ Platform_CloseModuleBackend(platform_module *Module)
 internal void __attribute__((noreturn))
 Platform_Exit(u32 ExitCode)
 {
-	Sys_Exit(ExitCode);
+	Sys_ExitGroup(ExitCode);
 	while (1);
 }
 

@@ -87,22 +87,26 @@ typedef enum sys_errno {
 	SYS_ENOSYS		 = 38, /* Invalid system call number */
 } sys_errno;
 
-#define SYS_OPEN_READONLY  0x0000
-#define SYS_OPEN_WRITEONLY 0x0001
-#define SYS_OPEN_READWRITE 0x0002
-#define SYS_OPEN_CREATE    0x0100
-#define SYS_OPEN_TRUNCATE  0x1000
-#define SYS_OPEN_APPEND    0x2000
+typedef enum sys_open_flags : s32 {
+	SYS_OPEN_READONLY  = 0x0000,
+	SYS_OPEN_WRITEONLY = 0x0001,
+	SYS_OPEN_READWRITE = 0x0002,
+	SYS_OPEN_CREATE	   = 0x0040,
+	SYS_OPEN_TRUNCATE  = 0x0200,
+	SYS_OPEN_APPEND	   = 0x0400,
+} sys_open_flags;
 
-#define SYS_CREATE_OTHERS_EXEC  0x00001
-#define SYS_CREATE_OTHERS_WRITE 0x00002
-#define SYS_CREATE_OTHERS_READ  0x00004
-#define SYS_CREATE_GROUP_EXEC   0x00010
-#define SYS_CREATE_GROUP_WRITE  0x00020
-#define SYS_CREATE_GROUP_READ   0x00040
-#define SYS_CREATE_USER_EXEC    0x00100
-#define SYS_CREATE_USER_WRITE   0x00200
-#define SYS_CREATE_USER_READ    0x00400
+typedef enum sys_open_mode : u16 {
+	SYS_CREATE_OTHERS_EXEC	= 0x0001,
+	SYS_CREATE_OTHERS_WRITE = 0x0002,
+	SYS_CREATE_OTHERS_READ	= 0x0004,
+	SYS_CREATE_GROUP_EXEC	= 0x0010,
+	SYS_CREATE_GROUP_WRITE	= 0x0020,
+	SYS_CREATE_GROUP_READ	= 0x0040,
+	SYS_CREATE_USER_EXEC	= 0x0100,
+	SYS_CREATE_USER_WRITE	= 0x0200,
+	SYS_CREATE_USER_READ	= 0x0400,
+} sys_open_mode;
 
 #define SYS_RUNTIME_LOADER_LAZY     0x0001
 #define SYS_RUNTIME_LOADER_NOW      0x0002
@@ -343,6 +347,7 @@ typedef enum sys_clone_flags {
 	SYS_CLONE_FILES			 = 0x00000400,
 	SYS_CLONE_SIGHAND		 = 0x00000800,
 	SYS_CLONE_THREAD		 = 0x00010000,
+	SYS_CLONE_PARENT_SETTID	 = 0x00100000,
 	SYS_CLONE_CHILD_CLEARTID = 0x00200000,
 	SYS_CLONE_IO			 = 0x80000000,
 } sys_clone_flags;
@@ -363,7 +368,7 @@ extern s32	dlclose(vptr Handle);
 #define LINUX_SYSCALLS \
 	SYSCALL(0,   Read,         ssize,   u32 FileDescriptor, c08 *Buffer, u64 Count) \
 	SYSCALL(1,   Write,        ssize,   u32 FileDescriptor, c08 *Buffer, u64 Count) \
-	SYSCALL(2,   Open,         s32,     c08 *Filename, s32 Flags, u16 Mode) \
+	SYSCALL(2,   Open,         s32,     c08 *Filename, sys_open_flags Flags, sys_open_mode Mode) \
 	SYSCALL(3,   Close,        s32,     u32 FileDescriptor) \
 	SYSCALL(5,   FileStat,     s32,     u32 FileDescriptor, sys_stat *Stat) \
 	SYSCALL(7,   Poll,         s32,     sys_pollfd *FileDescriptors, s32 FileDescriptorCount, s32 Timeout) \
@@ -378,7 +383,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(44,  SendTo,       ssize,   s32 SocketFileDescriptor, vptr Buffer, usize Size, sys_msg_flags Flags, sys_sockaddr *Address, u32 AddressLength) \
 	SYSCALL(46,  SendMsg,      ssize,   s32 SocketFileDescriptor, sys_msghdr *Message, sys_msg_flags Flags) \
 	SYSCALL(47,  RecvMsg,      ssize,   s32 SocketFileDescriptor, sys_msghdr *Message, sys_msg_flags Flags) \
-	SYSCALL(56,  Clone,        sys_pid, sys_clone_flags Flags, vptr Stack, s32 *ParentTidOut, usize TLS, s32 *ChildTidOut) \
+	SYSCALL(56,  Clone,        sys_pid, sys_clone_flags Flags, vptr Stack, s32 *ParentTidOut, s32 *ChildTidOut, usize TLS) \
 	SYSCALL(57,  Fork,         sys_pid, void) \
 	SYSCALL(60,  Exit,         void,    s32 ErrorCode) \
 	SYSCALL(72,  FileControl,  s32,     s32 FileDescriptor, s32 Op) \
@@ -388,6 +393,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(186, GetTid,       s32,     void) \
 	SYSCALL(202, Futex,        s32,     u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
 	SYSCALL(228, GetClockTime, s32,     sys_clock Clock, sys_timespec *Timespec) \
+	SYSCALL(231, ExitGroup,    s32,     s32 Status) \
 	SYSCALL(319, MemfdCreate,  s32,     c08 *Name, u32 Flags) \
 	SYSCALL(332, StatX,        s32,     s32 Fd, c08 *Path, sys_statx_flags Flags, sys_statx_mask_flags Mask, sys_statx *Stat) \
 	//
