@@ -1083,7 +1083,7 @@ Wayland_Deinit(void)
 {
 	if (!Wayland_IsConnected()) return;
 
-	if (_G.Wayland.ThreadRunning) {
+	if (_G.Wayland.EventThread.ThreadId) {
 		_G.Wayland.ThreadRunning = FALSE;
 		Platform_JoinThread(_G.Wayland.EventThread);
 	}

@@ -50,6 +50,7 @@ typedef enum platform_updates {
 
 typedef enum execution_state {
 	EXECUTION_UNINITIALIZED,
+	EXECUTION_INITIALIZING,
 	EXECUTION_RUNNING,
 	EXECUTION_PAUSED,
 	EXECUTION_ENDED,

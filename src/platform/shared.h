@@ -67,10 +67,10 @@ struct file_handle {
 };
 
 struct thread_handle {
-	s32	  ThreadId;
-	s32	 *TidLock;
-	vptr  Stack;
-	usize MemSize;
+	s32			 ThreadId;
+	_Atomic s32 *TidLock;
+	vptr		 Stack;
+	usize		 MemSize;
 };
 
 #define NULL_FILE_HANDLE (file_handle){ .FileDescriptor = SYS_FILE_NONE }

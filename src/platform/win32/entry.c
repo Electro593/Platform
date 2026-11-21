@@ -902,6 +902,8 @@ Platform_Entry(void)
 	};
 	_G.Funcs = &_F;
 
+	_G.ExecutionState = EXECUTION_INITIALIZING;
+
 	Platform_LoadWin32();
 	Win32_QueryPerformanceFrequency(&CounterFrequency);
 

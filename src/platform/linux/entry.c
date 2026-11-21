@@ -21,7 +21,7 @@ __asm__(
 	"	                           \n"
 	".globl Platform_ThreadThunk   \n"
 	"Platform_ThreadThunk:         \n"
-	"	sub $8, %rsp               \n"
+	"	add $8, %rsp               \n"
 	"	pop %rdi                   \n"
 	"	pop %rax                   \n"
 	"	mov %rsp, %rbp             \n"
@@ -170,8 +170,8 @@ Platform_CreateThread(
 	ThreadHandle->ThreadId = Sys_Clone(
 		Flags,
 		StackTop,
-		ThreadHandle->TidLock,
-		ThreadHandle->TidLock,
+		(s32 *) ThreadHandle->TidLock,
+		(s32 *) ThreadHandle->TidLock,
 		0
 	);
 
@@ -187,7 +187,7 @@ internal b08
 Platform_JoinThread(thread_handle ThreadHandle)
 {
 	while (TRUE) {
-		if (ThreadHandle.TidLock == 0) break;
+		if (*ThreadHandle.TidLock == 0) break;
 
 		s32 Result = Sys_Futex(
 			(u32 *) ThreadHandle.TidLock,
@@ -515,7 +515,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 	usize EnvCount = 0;
 	for (; EnvParams[EnvCount]; EnvCount++);
 
-	_G.WindowSize = (v2u32){ 800, 600 };
+	_G.WindowSize	  = (v2u32){ 800, 600 };
+	_G.ExecutionState = EXECUTION_INITIALIZING;
 
 	platform_module *UtilModule = Platform_LoadModule(UTIL_MODULE_NAME);
 
@@ -526,23 +527,25 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 
 	timestamp StartTime = Platform_GetTimestamp();
 
-	HASHMAP_FOREACH (
-		I,
-		Hash,
-		string,
-		Key,
-		platform_module *,
-		Module,
-		&_G.ModuleTable
-	)
-	{
-		stack Stack;
-		if (_G.UtilIsLoaded) Stack = *Stack_Get();
-		Module->Init(&_G);
-		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
-	}
+	if (_G.ExecutionState == EXECUTION_INITIALIZING) {
+		HASHMAP_FOREACH (
+			I,
+			Hash,
+			string,
+			Key,
+			platform_module *,
+			Module,
+			&_G.ModuleTable
+		)
+		{
+			stack Stack;
+			if (_G.UtilIsLoaded) Stack = *Stack_Get();
+			Module->Init(&_G);
+			if (_G.UtilIsLoaded) *Stack_Get() = Stack;
+		}
 
-	Platform_WriteConsole(CStringL("Completed initialization!\n"));
+		Platform_WriteConsole(CStringL("Completed initialization!\n"));
+	}
 
 	while (_G.ExecutionState == EXECUTION_RUNNING) {
 		HASHMAP_FOREACH (
@@ -565,6 +568,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		r64		  Elapsed = Platform_GetSecondsElapsed(StartTime, EndTime);
 		StartTime		  = EndTime;
 		_G.FPS			  = 1.0f / Elapsed;
+
+		// TODO: Handle paused execution
 	}
 
 	HASHMAP_FOREACH (
