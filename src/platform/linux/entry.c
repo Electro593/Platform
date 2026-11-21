@@ -137,6 +137,7 @@ Platform_CreateThread(
 	sys_clone_flags Flags = SYS_CLONE_FILES
 						  | SYS_CLONE_FS
 						  | SYS_CLONE_IO
+						  | SYS_CLONE_CHILD_CLEARTID
 						  | SYS_CLONE_SIGHAND
 						  | SYS_CLONE_THREAD
 						  | SYS_CLONE_VM;
@@ -148,9 +149,12 @@ Platform_CreateThread(
 	Words[2]	   = UserData;
 	Words[1]	   = 0;
 	Words[0]	   = Platform_ThreadThunk;
+#else
+#error
 #endif
 
-	sys_pid ProcessId = Sys_Clone(Flags, StackTop, NULL, 0, NULL);
+	sys_pid ProcessId =
+		Sys_Clone(Flags, StackTop, NULL, 0, (s32*) &Words[1]);
 	if (ProcessId < 0) return FALSE;
 
 	*ThreadHandle = (thread_handle){
@@ -164,10 +168,16 @@ Platform_CreateThread(
 internal b08
 Platform_JoinThread(thread_handle ThreadHandle)
 {
-	s32 Status;
-	s32 Result = Sys_Wait4(ThreadHandle.ThreadId, &Status, 0, NULL);
-	if (Result) Platform_FreeMemory(ThreadHandle.Stack, ThreadHandle.StackSize);
-	return !Result;
+	u32 *Lock = (u32*)ThreadHandle.Stack + 1;
+
+	while (TRUE) {
+		if (*Lock == 0) break;
+		s32 Result = Sys_Futex(Lock, SYS_FUTEX_WAIT, ThreadHandle.ThreadId, NULL, NULL, 0);
+		if (Result < 0 && Result != -SYS_EAGAIN) return FALSE;
+	}
+
+	Platform_FreeMemory(ThreadHandle.Stack, ThreadHandle.StackSize);
+	return TRUE;
 }
 
 internal void
@@ -390,7 +400,10 @@ Platform_OpenModuleBackend(platform_module *Module)
 #ifdef _USE_LOADER
 	Module->ELF = Loader_OpenShared(Module->FileName);
 #else
-	Module->ELF = dlopen(Module->FileName, SYS_RUNTIME_LOADER_LAZY | SYS_RUNTIME_LOADER_GLOBAL);
+	Module->ELF = dlopen(
+		Module->FileName,
+		SYS_RUNTIME_LOADER_LAZY | SYS_RUNTIME_LOADER_GLOBAL
+	);
 #endif
 }
 

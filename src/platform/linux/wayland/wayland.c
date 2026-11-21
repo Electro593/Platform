@@ -52,6 +52,25 @@ typedef struct wayland_window_state {
 } wayland_window_state;
 
 typedef struct wayland_state {
+	wayland_event_queue EventQueue;
+
+	thread_handle EventThread;
+	b08			  ThreadRunning;
+
+	wayland_display	 *Display;
+	wayland_registry *Registry;
+
+	wayland_compositor						*Compositor;
+	u32										 CompositorName;
+	wayland_fixes							*Fixes;
+	u32										 FixesName;
+	wayland_xdg_wm_base						*XdgWmBase;
+	u32										 XdgWmBaseName;
+	wayland_zwp_linux_dmabuf_v1				*ZwpLinuxDmabufV1;
+	u32										 ZwpLinuxDmabufV1Name;
+	wayland_zwp_relative_pointer_manager_v1 *ZwpRelativePointerManagerV1;
+	u32										 ZwpRelativePointerManagerV1Name;
+
 	s32					DrmFd;
 	drm_format			DrmFormat;
 	drm_format_modifier DrmFormatModifier;
@@ -59,23 +78,8 @@ typedef struct wayland_state {
 	gbm Gbm;
 	egl Egl;
 
-	thread_handle		EventThread;
-	wayland_event_queue EventQueue;
-
 	mutex_handle SyncLock;
 	b08			 Syncing;
-
-	wayland_display	 *Display;
-	wayland_registry *Registry;
-
-	wayland_compositor						*Compositor;
-	u32										 CompositorName;
-	wayland_xdg_wm_base						*XdgWmBase;
-	u32										 XdgWmBaseName;
-	wayland_zwp_linux_dmabuf_v1				*ZwpLinuxDmabufV1;
-	u32										 ZwpLinuxDmabufV1Name;
-	wayland_zwp_relative_pointer_manager_v1 *ZwpRelativePointerManagerV1;
-	u32										 ZwpRelativePointerManagerV1Name;
 
 	usize						 DrmFormatsSize;
 	wayland_dmabuf_format_entry *DrmFormats;
@@ -93,6 +97,7 @@ typedef struct wayland_state {
 
 #define WAYLAND_USER_FUNCS \
 	EXPORT(b08,               Wayland_TryInit,        void) \
+	EXPORT(void,              Wayland_Deinit,         void) \
 	EXPORT(wayland_surface *, Wayland_CreateGLWindow, c08 *Title, usize Width, usize Height) \
 	EXPORT(void,              Wayland_SwapBuffers,    void) \
 	\
@@ -105,9 +110,9 @@ typedef struct wayland_state {
 #ifdef _LINUX
 #ifdef INCLUDE_SOURCE
 
-internal wayland_zwp_relative_pointer_v1 *Wayland_ZwpRelativePointerV1_New(
-	wayland_zwp_relative_pointer_manager_v1 *ZwpRelativePointerManagerV1,
-	wayland_pointer							*Pointer
+internal void Wayland_ModifySeatEntryCapabilities(
+	wayland_seat_entry	   *Entry,
+	wayland_seat_capability Capabilities
 );
 
 internal void
@@ -146,14 +151,6 @@ Wayland_Display_Error(
 		CString(Message)
 	);
 	Wayland_Disconnect();
-}
-
-internal void
-Wayland_Display_DeleteId(wayland_display *This, u32 Id)
-{
-	Wayland_DebugLog(This, "Requested to delete id %u\n", Id);
-
-	Wayland_FreeObjectId(Id);
 }
 
 internal void
@@ -295,44 +292,7 @@ Wayland_Seat_Capabilities(
 	wayland_seat_entry *Entry = &_G.Wayland.Seat;
 	Assert(Entry->Seat);
 
-	b08 HasPointer = Capabilities & WAYLAND_SEAT_CAPABILITY_POINTER;
-	if (HasPointer && !Entry->Pointer) {
-		Entry->Pointer		   = Wayland_Seat_GetPointer(This);
-		Entry->Pointer->Motion = Wayland_Pointer_Motion;
-		Entry->Pointer->Frame  = Wayland_Pointer_Frame;
-		Wayland_LinkEventQueue((vptr) Entry->Pointer, &_G.Wayland.EventQueue);
-
-		Entry->ZwpRelativePointerV1 = Wayland_ZwpRelativePointerV1_New(
-			_G.Wayland.ZwpRelativePointerManagerV1,
-			Entry->Pointer
-		);
-	} else if (!HasPointer && Entry->Pointer) {
-		Wayland_ZwpRelativePointerV1_Destroy(Entry->ZwpRelativePointerV1);
-		Entry->ZwpRelativePointerV1 = NULL;
-
-		Wayland_Pointer_Release(Entry->Pointer);
-		Entry->Pointer = NULL;
-	}
-
-	b08 HasKeyboard = Capabilities & WAYLAND_SEAT_CAPABILITY_KEYBOARD;
-	if (HasKeyboard && !Entry->Keyboard) {
-		Entry->Keyboard			= Wayland_Seat_GetKeyboard(This);
-		Entry->Keyboard->Keymap = Wayland_Keyboard_Keymap;
-		Entry->Keyboard->Enter	= Wayland_Keyboard_Enter;
-		Entry->Keyboard->Leave	= Wayland_Keyboard_Leave;
-		Wayland_LinkEventQueue((vptr) Entry->Keyboard, &_G.Wayland.EventQueue);
-	} else if (!HasKeyboard && Entry->Keyboard) {
-		if (Entry->KeymapData) {
-			Sys_MemUnmap(Entry->KeymapData, Entry->KeymapSize);
-			Entry->KeymapFormat = 0;
-			Entry->KeymapData	= NULL;
-			Entry->KeymapSize	= 0;
-		}
-		Wayland_Keyboard_Release(Entry->Keyboard);
-		Entry->Keyboard = NULL;
-	}
-
-	Entry->Capabilities = Capabilities;
+	Wayland_ModifySeatEntryCapabilities(Entry, Capabilities);
 }
 
 internal void
@@ -344,42 +304,6 @@ Wayland_Seat_Name(wayland_seat *This, c08 *Name)
 	Assert(Entry->Seat);
 
 	Entry->Name = HString(_G.Heap, Name);
-}
-
-internal void
-Wayland_Surface_Enter(wayland_surface *This, wayland_output *Output)
-{
-	Wayland_DebugLog(
-		This,
-		"Entering output object with id %d\n",
-		Output->Interface.Id
-	);
-}
-
-internal void
-Wayland_Surface_Leave(wayland_surface *This, wayland_output *Output)
-{
-	Wayland_DebugLog(
-		This,
-		"Leaving output object with id %d\n",
-		Output->Interface.Id
-	);
-}
-
-internal void
-Wayland_Surface_PreferredBufferScale(wayland_surface *This, s32 Factor)
-{
-	Wayland_DebugLog(This, "Requested scaling factor of %d\n", Factor);
-
-	_G.Wayland.PreferredBufferScale = Factor;
-}
-
-internal void
-Wayland_Surface_PreferredBufferTransform(wayland_surface *This, u32 Transform)
-{
-	Wayland_DebugLog(This, "Requested buffer transform of %u\n", Transform);
-
-	_G.Wayland.PreferredBufferTransform = Transform;
 }
 
 internal void
@@ -638,103 +562,6 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheFlags(
 { Wayland_DebugLog(This, "Sent flags for this tranche: %#x\n", Flags); }
 
 internal void
-Wayland_Registry_Global(
-	wayland_registry *This,
-	u32				  Name,
-	c08				 *Interface,
-	u32				  Version
-)
-{
-	Wayland_DebugLog(
-		This,
-		"Offered global #%d, named %s-v%d\n",
-		Name,
-		CString(Interface),
-		Version
-	);
-
-	string Str = CString(Interface);
-	if (String_Cmp(Str, CStringL("wl_compositor")) == 0) {
-		_G.Wayland.CompositorName = Name;
-		_G.Wayland.Compositor	  = (wayland_compositor *)
-			Wayland_Registry_Bind(This, Name, Interface, Version);
-		Wayland_LinkEventQueue(
-			(vptr) _G.Wayland.Compositor,
-			&_G.Wayland.EventQueue
-		);
-		Wayland_DebugLog(
-			This,
-			"Bound %s\n",
-			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
-		);
-	} else if (String_Cmp(Str, CStringL("wl_seat")) == 0) {
-		if (!_G.Wayland.Seat.Seat) {
-			wayland_seat *Seat = (wayland_seat *)
-				Wayland_Registry_Bind(This, Name, Interface, Version);
-			Seat->Capabilities = Wayland_Seat_Capabilities;
-			Seat->Name		   = Wayland_Seat_Name;
-			_G.Wayland.Seat	   = (wayland_seat_entry){
-				.Seat		= Seat,
-				.GlobalName = Name,
-			};
-			Wayland_LinkEventQueue((vptr) Seat, &_G.Wayland.EventQueue);
-		}
-	} else if (String_Cmp(Str, CStringL("xdg_wm_base")) == 0) {
-		_G.Wayland.XdgWmBaseName = Name;
-		_G.Wayland.XdgWmBase	 = (wayland_xdg_wm_base *)
-			Wayland_Registry_Bind(This, Name, Interface, Version);
-		_G.Wayland.XdgWmBase->Ping = Wayland_XdgWmBase_Ping;
-		Wayland_LinkEventQueue(
-			(vptr) _G.Wayland.XdgWmBase,
-			&_G.Wayland.EventQueue
-		);
-		Wayland_DebugLog(
-			This,
-			"Bound %s\n",
-			Wayland_GetObjectName((wayland_interface *) _G.Wayland.XdgWmBase)
-		);
-	} else if (String_Cmp(Str, CStringL("zwp_linux_dmabuf_v1")) == 0) {
-		if (Version < 4) return;
-		_G.Wayland.ZwpLinuxDmabufV1Name = Name;
-		_G.Wayland.ZwpLinuxDmabufV1		= (wayland_zwp_linux_dmabuf_v1 *)
-			Wayland_Registry_Bind(This, Name, Interface, Version);
-		Wayland_LinkEventQueue(
-			(vptr) _G.Wayland.ZwpLinuxDmabufV1,
-			&_G.Wayland.EventQueue
-		);
-		Wayland_DebugLog(
-			This,
-			"Bound %s\n",
-			Wayland_GetObjectName(
-				(wayland_interface *) _G.Wayland.ZwpLinuxDmabufV1
-			)
-		);
-	} else if (
-		String_Cmp(
-			Str,
-			CString(Wayland_ZwpRelativePointerManagerV1_Prototype.Name)
-		)
-		== 0
-	)
-	{
-		_G.Wayland.ZwpRelativePointerManagerV1Name = Name;
-		_G.Wayland.ZwpRelativePointerManagerV1 =
-			(vptr) Wayland_Registry_Bind(This, Name, Interface, Version);
-		Wayland_LinkEventQueue(
-			(vptr) _G.Wayland.ZwpRelativePointerManagerV1,
-			&_G.Wayland.EventQueue
-		);
-		Wayland_DebugLog(
-			This,
-			"Bound %s\n",
-			Wayland_GetObjectName(
-				(wayland_interface *) _G.Wayland.ZwpRelativePointerManagerV1
-			)
-		);
-	}
-}
-
-internal void
 Wayland_ZwpRelativePointerV1_RelativeMotion(
 	wayland_zwp_relative_pointer_v1 *This,
 	u32								 MicroTimeHigh,
@@ -758,6 +585,120 @@ Wayland_ZwpRelativePointerV1_RelativeMotion(
 }
 
 internal void
+Wayland_ModifySeatEntryCapabilities(
+	wayland_seat_entry	   *Entry,
+	wayland_seat_capability Capabilities
+)
+{
+	b08 HasPointer = Capabilities & WAYLAND_SEAT_CAPABILITY_POINTER;
+	if (HasPointer && !Entry->Pointer) {
+		Entry->Pointer		   = Wayland_Seat_GetPointer(Entry->Seat);
+		Entry->Pointer->Motion = Wayland_Pointer_Motion;
+		Entry->Pointer->Frame  = Wayland_Pointer_Frame;
+		Wayland_LinkEventQueue((vptr) Entry->Pointer, &_G.Wayland.EventQueue);
+
+		Entry->ZwpRelativePointerV1 =
+			Wayland_ZwpRelativePointerManagerV1_GetRelativePointer(
+				_G.Wayland.ZwpRelativePointerManagerV1,
+				Entry->Pointer
+			);
+		Entry->ZwpRelativePointerV1->RelativeMotion =
+			Wayland_ZwpRelativePointerV1_RelativeMotion;
+		Wayland_LinkEventQueue(
+			(vptr) Entry->ZwpRelativePointerV1,
+			&_G.Wayland.EventQueue
+		);
+	} else if (!HasPointer && Entry->Pointer) {
+		Wayland_ZwpRelativePointerV1_Destroy(Entry->ZwpRelativePointerV1);
+		Entry->ZwpRelativePointerV1 = NULL;
+
+		Wayland_Pointer_Release(Entry->Pointer);
+		Entry->Pointer = NULL;
+	}
+
+	b08 HasKeyboard = Capabilities & WAYLAND_SEAT_CAPABILITY_KEYBOARD;
+	if (HasKeyboard && !Entry->Keyboard) {
+		Entry->Keyboard			= Wayland_Seat_GetKeyboard(Entry->Seat);
+		Entry->Keyboard->Keymap = Wayland_Keyboard_Keymap;
+		Entry->Keyboard->Enter	= Wayland_Keyboard_Enter;
+		Entry->Keyboard->Leave	= Wayland_Keyboard_Leave;
+		Wayland_LinkEventQueue((vptr) Entry->Keyboard, &_G.Wayland.EventQueue);
+	} else if (!HasKeyboard && Entry->Keyboard) {
+		if (Entry->KeymapData) {
+			Sys_MemUnmap(Entry->KeymapData, Entry->KeymapSize);
+			Entry->KeymapFormat = 0;
+			Entry->KeymapData	= NULL;
+			Entry->KeymapSize	= 0;
+		}
+		Wayland_Keyboard_Release(Entry->Keyboard);
+		Entry->Keyboard = NULL;
+	}
+
+	Entry->Capabilities = Capabilities;
+}
+
+internal void
+Wayland_Registry_Global(
+	wayland_registry *This,
+	u32				  Name,
+	c08				 *Interface,
+	u32				  Version
+)
+{
+#define MATCHES(ShortName) (String_Cmp(Str, CString(Wayland_##ShortName##_Prototype.Name)) == 0)
+#define BIND() (Bound = (vptr) Wayland_Registry_Bind(This, Name, Interface, Version))
+
+	Wayland_DebugLog(
+		This,
+		"Offered global #%d, named %s-v%d\n",
+		Name,
+		CString(Interface),
+		Version
+	);
+
+	vptr   Bound = NULL;
+	string Str	 = CString(Interface);
+
+	// TODO: Global table by name
+
+	if (MATCHES(Compositor)) {
+		_G.Wayland.CompositorName = Name;
+		_G.Wayland.Compositor	  = BIND();
+	} else if (MATCHES(Fixes)) {
+		_G.Wayland.FixesName = Name;
+		_G.Wayland.Fixes	 = BIND();
+	} else if (MATCHES(Seat)) {
+		if (!_G.Wayland.Seat.Seat) {
+			wayland_seat *Seat		   = BIND();
+			Seat->Capabilities		   = Wayland_Seat_Capabilities;
+			Seat->Name				   = Wayland_Seat_Name;
+			_G.Wayland.Seat.Seat	   = Seat;
+			_G.Wayland.Seat.GlobalName = Name;
+		}
+	} else if (MATCHES(XdgWmBase)) {
+		_G.Wayland.XdgWmBaseName   = Name;
+		_G.Wayland.XdgWmBase	   = BIND();
+		_G.Wayland.XdgWmBase->Ping = Wayland_XdgWmBase_Ping;
+	} else if (MATCHES(ZwpLinuxDmabufV1)) {
+		if (Version >= 4) {
+			_G.Wayland.ZwpLinuxDmabufV1Name = Name;
+			_G.Wayland.ZwpLinuxDmabufV1		= BIND();
+		}
+	} else if (MATCHES(ZwpRelativePointerManagerV1)) {
+		_G.Wayland.ZwpRelativePointerManagerV1Name = Name;
+		_G.Wayland.ZwpRelativePointerManagerV1	   = BIND();
+	}
+
+	if (Bound) {
+		Wayland_DebugLog(This, "Bound %s\n", Wayland_GetObjectName(Bound));
+		Wayland_LinkEventQueue(Bound, &_G.Wayland.EventQueue);
+	}
+
+#undef MATCHES
+#undef BIND
+}
+
+internal void
 Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 {
 	Wayland_DebugLog(This, "Requested to remove global %d\n", Name);
@@ -769,7 +710,17 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 			"Destroying %s\n",
 			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
 		);
-		Wayland_DestroyObject(_G.Wayland.Compositor);
+		if (Wayland_GetVersion(_G.Wayland.Compositor) >= 7)
+			Wayland_Compositor_Release(_G.Wayland.Compositor);
+		else Wayland_DestroyClientObject((vptr) _G.Wayland.Compositor);
+	} else if (_G.Wayland.FixesName == Name) {
+		_G.Wayland.FixesName = 0;
+		Wayland_DebugLog(
+			This,
+			"Destroying %s\n",
+			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Fixes)
+		);
+		Wayland_Fixes_Destroy(_G.Wayland.Fixes);
 	} else if (_G.Wayland.Seat.GlobalName == Name) {
 		_G.Wayland.Seat.GlobalName = 0;
 		Wayland_DebugLog(
@@ -777,8 +728,10 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 			"Destroying %s\n",
 			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Seat.Seat)
 		);
-		Wayland_Seat_Capabilities(_G.Wayland.Seat.Seat, 0);
-		Wayland_DestroyObject(_G.Wayland.Seat.Seat);
+		Wayland_ModifySeatEntryCapabilities(&_G.Wayland.Seat, 0);
+		if (Wayland_GetVersion(_G.Wayland.Seat.Seat) >= 5)
+			Wayland_Seat_Release(_G.Wayland.Seat.Seat);
+		else Wayland_DestroyClientObject((vptr) _G.Wayland.Seat.Seat);
 		_G.Wayland.Seat.Seat = NULL;
 	} else if (_G.Wayland.XdgWmBaseName == Name) {
 		_G.Wayland.XdgWmBaseName = 0;
@@ -787,7 +740,7 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 			"Destroying %s\n",
 			Wayland_GetObjectName((wayland_interface *) _G.Wayland.XdgWmBase)
 		);
-		Wayland_DestroyObject(_G.Wayland.XdgWmBase);
+		Wayland_XdgWmBase_Destroy(_G.Wayland.XdgWmBase);
 	} else if (_G.Wayland.ZwpLinuxDmabufV1Name == Name) {
 		_G.Wayland.ZwpLinuxDmabufV1Name = 0;
 		Wayland_DebugLog(
@@ -797,8 +750,10 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 				(wayland_interface *) _G.Wayland.ZwpLinuxDmabufV1
 			)
 		);
-		Wayland_DestroyObject(_G.Wayland.ZwpLinuxDmabufV1);
+		Wayland_ZwpLinuxDmabufV1_Destroy(_G.Wayland.ZwpLinuxDmabufV1);
 	}
+
+	Wayland_Fixes_AckGlobalRemove(_G.Wayland.Fixes, _G.Wayland.Registry, Name);
 }
 
 internal void
@@ -816,29 +771,13 @@ Wayland_Callback_Done_Frame(wayland_callback *This, u32 CallbackData)
 	Wayland_SwapBuffers();
 }
 
-internal wayland_zwp_relative_pointer_v1 *
-Wayland_ZwpRelativePointerV1_New(
-	wayland_zwp_relative_pointer_manager_v1 *ZwpRelativePointerManagerV1,
-	wayland_pointer							*Pointer
-)
-{
-	wayland_zwp_relative_pointer_v1 *This =
-		Wayland_ZwpRelativePointerManagerV1_GetRelativePointer(
-			ZwpRelativePointerManagerV1,
-			Pointer
-		);
-	This->RelativeMotion = Wayland_ZwpRelativePointerV1_RelativeMotion;
-	Wayland_LinkEventQueue((vptr) This, &_G.Wayland.EventQueue);
-	return This;
-}
-
 internal s32
 Wayland_EventHandlerThread(vptr Data)
 {
 	usize DebugCounter = 0;
 
 	usize PollsSinceLastEvent = 0;
-	while (Wayland_IsConnected()) {
+	while (_G.Wayland.ThreadRunning && Wayland_IsConnected()) {
 		Platform_LockMutex(&_G.Wayland.SyncLock);
 
 		wayland_event Event;
@@ -922,7 +861,6 @@ Wayland_TryInit(void)
 
 		wayland_display *Display = Wayland_GetDisplay();
 		Display->Error			 = Wayland_Display_Error;
-		Display->DeleteId		 = Wayland_Display_DeleteId;
 		_G.Wayland.Display		 = Display;
 		Wayland_LinkEventQueue((vptr) Display, &_G.Wayland.EventQueue);
 
@@ -933,7 +871,8 @@ Wayland_TryInit(void)
 		_G.Wayland.Registry	   = Registry;
 		Wayland_LinkEventQueue((vptr) Registry, &_G.Wayland.EventQueue);
 
-		b08 Success = Platform_CreateThread(
+		_G.Wayland.ThreadRunning = TRUE;
+		b08 Success				 = Platform_CreateThread(
 			&_G.Wayland.EventThread,
 			Wayland_EventHandlerThread,
 			NULL
@@ -956,7 +895,7 @@ Wayland_TryInit(void)
 	return Wayland_IsConnected();
 
 error:
-	Wayland_Disconnect();
+	Wayland_Deinit();
 	return FALSE;
 }
 
@@ -1018,11 +957,6 @@ Wayland_CreateGLWindow(c08 *Title, usize Width, usize Height)
 
 	Surface = Wayland_Compositor_CreateSurface(_G.Wayland.Compositor);
 	if (!Surface) goto error;
-	Surface->Enter				  = Wayland_Surface_Enter;
-	Surface->Leave				  = Wayland_Surface_Leave;
-	Surface->PreferredBufferScale = Wayland_Surface_PreferredBufferScale;
-	Surface->PreferredBufferTransform =
-		Wayland_Surface_PreferredBufferTransform;
 	Wayland_LinkEventQueue((vptr) Surface, &_G.Wayland.EventQueue);
 
 	Feedback = Wayland_ZwpLinuxDmabufV1_GetSurfaceFeedback(
@@ -1145,12 +1079,16 @@ error:
 }
 
 internal void
-Wayland_Deinit()
+Wayland_Deinit(void)
 {
 	if (!Wayland_IsConnected()) return;
 
-	ARRAY_LIST_FOREACH(&_G.Wayland.DrmTranches, wayland_dmabuf_tranche_entry)
-	{
+	if (_G.Wayland.ThreadRunning) {
+		_G.Wayland.ThreadRunning = FALSE;
+		Platform_JoinThread(_G.Wayland.EventThread);
+	}
+
+	ARRAY_LIST_FOREACH (&_G.Wayland.DrmTranches, wayland_dmabuf_tranche_entry) {
 		Wayland_FreeArray(It.Device);
 		Wayland_FreeArray(It.FormatIndices);
 	}
@@ -1159,7 +1097,34 @@ Wayland_Deinit()
 	Egl_Deinit(&_G.Wayland.Egl);
 	Gbm_Deinit(&_G.Wayland.Gbm);
 
+	if (_G.Wayland.Registry) {
+		if (Wayland_GetVersion(_G.Wayland.Fixes) >= 2)
+			Wayland_Fixes_DestroyRegistry(
+				_G.Wayland.Fixes,
+				_G.Wayland.Registry
+			);
+		else Wayland_DestroyClientObject((vptr) _G.Wayland.Registry);
+	}
+
+	if (_G.Wayland.Compositor) {
+		if (Wayland_GetVersion(_G.Wayland.Compositor) >= 7)
+			Wayland_Compositor_Release(_G.Wayland.Compositor);
+		else Wayland_DestroyClientObject((vptr) _G.Wayland.Compositor);
+	}
+	if (_G.Wayland.Fixes) Wayland_Fixes_Destroy(_G.Wayland.Fixes);
+	if (_G.Wayland.XdgWmBase) Wayland_XdgWmBase_Destroy(_G.Wayland.XdgWmBase);
+	if (_G.Wayland.ZwpLinuxDmabufV1)
+		Wayland_ZwpLinuxDmabufV1_Destroy(_G.Wayland.ZwpLinuxDmabufV1);
+	if (_G.Wayland.ZwpRelativePointerManagerV1)
+		Wayland_ZwpRelativePointerManagerV1_Destroy(
+			_G.Wayland.ZwpRelativePointerManagerV1
+		);
+
+	Wayland_DestroyEventQueue(&_G.Wayland.EventQueue);
+
 	Wayland_Disconnect();
+
+	Mem_Set(&_G.Wayland, 0, sizeof(wayland_state));
 }
 
 #undef CALL

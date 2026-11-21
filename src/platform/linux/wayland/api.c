@@ -11,6 +11,8 @@
 
 #define WAYLAND_DISPLAY_ID 1
 
+#define WAYLAND_INTERFACE vptr
+
 #ifndef SECTION_TYPES
 
 typedef u32 wayland_fixed;
@@ -73,6 +75,7 @@ struct wayland_param {
 struct wayland_event_queue {
 	array_deque	 Deque;
 	mutex_handle Lock;
+	usize		 RefCount;
 };
 
 struct wayland_interface {
@@ -196,15 +199,18 @@ typedef struct wayland_api_state {
 	INTERN(wayland_fixed, Wayland_R32ToFixed, r32 Value) \
 	INTERN(wayland_array, Wayland_CopyArray,  heap *Heap, wayland_array Array) \
 	INTERN(void,          Wayland_FreeArray,  wayland_array Array) \
+	INTERN(u16,           Wayland_GetVersion, WAYLAND_INTERFACE Object) \
 	\
-	INTERN(void,             Wayland_FreeObjectId, u32 ObjectId) \
-	INTERN(wayland_display*, Wayland_GetDisplay,   void) \
+	INTERN(wayland_display*,   Wayland_GetDisplay,          void) \
+	INTERN(wayland_prototype*, Wayland_FindPrototype,       string Name) \
+	INTERN(void,               Wayland_DestroyClientObject, wayland_interface *Interface) \
 	\
 	INTERN(b08,  Wayland_IsConnected, void) \
 	INTERN(void, Wayland_Disconnect,  void) \
 	INTERN(b08,  Wayland_Connect,     void) \
 	\
 	INTERN(wayland_event_queue, Wayland_CreateEventQueue, void) \
+	INTERN(void,                Wayland_DestroyEventQueue, wayland_event_queue *EventQueue) \
 	INTERN(b08,                 Wayland_DequeueEvent,     wayland_event_queue *EventQueue, wayland_event *EventOut) \
 	INTERN(void,                Wayland_LinkEventQueue,   wayland_interface *Object, wayland_event_queue *EventQueue) \
 	\
@@ -243,89 +249,95 @@ internal void
 Wayland_FreeArray(wayland_array Array)
 { Heap_FreeA(Array.Data); }
 
+internal u16
+Wayland_GetVersion(WAYLAND_INTERFACE Object)
+{
+	if (!Object) return 0;
+	return ((wayland_interface *) Object)->Version;
+}
+
 #endif
 
 #ifndef SECTION_OBJECT_MANAGEMENT
 
-extern wayland_prototype WaylandDisplayPrototype;
-extern wayland_prototype WaylandRegistryPrototype;
-extern wayland_prototype WaylandCallbackPrototype;
-extern wayland_prototype WaylandCompositorPrototype;
-extern wayland_prototype WaylandShmPoolPrototype;
-extern wayland_prototype WaylandShmPrototype;
-extern wayland_prototype WaylandBufferPrototype;
-extern wayland_prototype WaylandDataOfferPrototype;
-extern wayland_prototype WaylandDataSourcePrototype;
-extern wayland_prototype WaylandDataDevicePrototype;
-extern wayland_prototype WaylandDataDeviceManagerPrototype;
-extern wayland_prototype WaylandShellPrototype;
-extern wayland_prototype WaylandShellSurfacePrototype;
-extern wayland_prototype WaylandSurfacePrototype;
-extern wayland_prototype WaylandSeatPrototype;
-extern wayland_prototype WaylandPointerPrototype;
-extern wayland_prototype WaylandKeyboardPrototype;
-extern wayland_prototype WaylandTouchPrototype;
-extern wayland_prototype WaylandOutputPrototype;
-extern wayland_prototype WaylandRegionPrototype;
-extern wayland_prototype WaylandSubcompositorPrototype;
-extern wayland_prototype WaylandSubsurfacePrototype;
-extern wayland_prototype WaylandFixesPrototype;
-extern wayland_prototype WaylandXdgWmBasePrototype;
-extern wayland_prototype WaylandXdgPositionerPrototype;
-extern wayland_prototype WaylandXdgSurfacePrototype;
-extern wayland_prototype WaylandXdgToplevelPrototype;
-extern wayland_prototype WaylandXdgPopupPrototype;
-extern wayland_prototype WaylandDrmPrototype;
-extern wayland_prototype WaylandZwpLinuxDmabufV1Prototype;
-extern wayland_prototype WaylandZwpLinuxBufferParamsV1Prototype;
-extern wayland_prototype WaylandZwpLinuxDmabufFeedbackV1Prototype;
+extern wayland_prototype Wayland_Display_Prototype;
+extern wayland_prototype Wayland_Registry_Prototype;
+extern wayland_prototype Wayland_Callback_Prototype;
+extern wayland_prototype Wayland_Compositor_Prototype;
+extern wayland_prototype Wayland_ShmPool_Prototype;
+extern wayland_prototype Wayland_Shm_Prototype;
+extern wayland_prototype Wayland_Buffer_Prototype;
+extern wayland_prototype Wayland_DataOffer_Prototype;
+extern wayland_prototype Wayland_DataSource_Prototype;
+extern wayland_prototype Wayland_DataDevice_Prototype;
+extern wayland_prototype Wayland_DataDeviceManager_Prototype;
+extern wayland_prototype Wayland_Shell_Prototype;
+extern wayland_prototype Wayland_ShellSurface_Prototype;
+extern wayland_prototype Wayland_Surface_Prototype;
+extern wayland_prototype Wayland_Seat_Prototype;
+extern wayland_prototype Wayland_Pointer_Prototype;
+extern wayland_prototype Wayland_Keyboard_Prototype;
+extern wayland_prototype Wayland_Touch_Prototype;
+extern wayland_prototype Wayland_Output_Prototype;
+extern wayland_prototype Wayland_Region_Prototype;
+extern wayland_prototype Wayland_Subcompositor_Prototype;
+extern wayland_prototype Wayland_Subsurface_Prototype;
+extern wayland_prototype Wayland_Fixes_Prototype;
+extern wayland_prototype Wayland_XdgWmBase_Prototype;
+extern wayland_prototype Wayland_XdgPositioner_Prototype;
+extern wayland_prototype Wayland_XdgSurface_Prototype;
+extern wayland_prototype Wayland_XdgToplevel_Prototype;
+extern wayland_prototype Wayland_XdgPopup_Prototype;
+extern wayland_prototype Wayland_Drm_Prototype;
+extern wayland_prototype Wayland_ZwpLinuxDmabufV1_Prototype;
+extern wayland_prototype Wayland_ZwpLinuxBufferParamsV1_Prototype;
+extern wayland_prototype Wayland_ZwpLinuxDmabufFeedbackV1_Prototype;
 extern wayland_prototype Wayland_ZwpRelativePointerManagerV1_Prototype;
 extern wayland_prototype Wayland_ZwpRelativePointerV1_Prototype;
 
 wayland_prototype *WaylandPrototypes[] = {
-	&WaylandBufferPrototype,
-	&WaylandCallbackPrototype,
-	&WaylandCompositorPrototype,
-	&WaylandDataDevicePrototype,
-	&WaylandDataDeviceManagerPrototype,
-	&WaylandDataOfferPrototype,
-	&WaylandDataSourcePrototype,
-	&WaylandDisplayPrototype,
-	&WaylandDrmPrototype,
-	&WaylandFixesPrototype,
-	&WaylandKeyboardPrototype,
-	&WaylandOutputPrototype,
-	&WaylandPointerPrototype,
-	&WaylandRegionPrototype,
-	&WaylandRegistryPrototype,
-	&WaylandSeatPrototype,
-	&WaylandShellPrototype,
-	&WaylandShellSurfacePrototype,
-	&WaylandShmPrototype,
-	&WaylandShmPoolPrototype,
-	&WaylandSubcompositorPrototype,
-	&WaylandSubsurfacePrototype,
-	&WaylandSurfacePrototype,
-	&WaylandTouchPrototype,
-	&WaylandXdgPopupPrototype,
-	&WaylandXdgPositionerPrototype,
-	&WaylandXdgSurfacePrototype,
-	&WaylandXdgToplevelPrototype,
-	&WaylandXdgWmBasePrototype,
-	&WaylandZwpLinuxBufferParamsV1Prototype,
-	&WaylandZwpLinuxDmabufFeedbackV1Prototype,
-	&WaylandZwpLinuxDmabufV1Prototype,
+	&Wayland_Buffer_Prototype,
+	&Wayland_Callback_Prototype,
+	&Wayland_Compositor_Prototype,
+	&Wayland_DataDevice_Prototype,
+	&Wayland_DataDeviceManager_Prototype,
+	&Wayland_DataOffer_Prototype,
+	&Wayland_DataSource_Prototype,
+	&Wayland_Display_Prototype,
+	&Wayland_Drm_Prototype,
+	&Wayland_Fixes_Prototype,
+	&Wayland_Keyboard_Prototype,
+	&Wayland_Output_Prototype,
+	&Wayland_Pointer_Prototype,
+	&Wayland_Region_Prototype,
+	&Wayland_Registry_Prototype,
+	&Wayland_Seat_Prototype,
+	&Wayland_Shell_Prototype,
+	&Wayland_ShellSurface_Prototype,
+	&Wayland_Shm_Prototype,
+	&Wayland_ShmPool_Prototype,
+	&Wayland_Subcompositor_Prototype,
+	&Wayland_Subsurface_Prototype,
+	&Wayland_Surface_Prototype,
+	&Wayland_Touch_Prototype,
+	&Wayland_XdgPopup_Prototype,
+	&Wayland_XdgPositioner_Prototype,
+	&Wayland_XdgSurface_Prototype,
+	&Wayland_XdgToplevel_Prototype,
+	&Wayland_XdgWmBase_Prototype,
+	&Wayland_ZwpLinuxBufferParamsV1_Prototype,
+	&Wayland_ZwpLinuxDmabufFeedbackV1_Prototype,
+	&Wayland_ZwpLinuxDmabufV1_Prototype,
 	&Wayland_ZwpRelativePointerManagerV1_Prototype,
 	&Wayland_ZwpRelativePointerV1_Prototype,
 };
 
 internal wayland_prototype *
-Wayland_FindPrototype(c08 *Name)
+Wayland_FindPrototype(string Name)
 {
 	usize  Start  = 0;
 	usize  End	  = sizeof(WaylandPrototypes) / sizeof(wayland_prototype *);
 	usize  Index  = 0;
-	string Target = CString(Name);
 
 	wayland_prototype *Curr = NULL;
 
@@ -333,7 +345,7 @@ Wayland_FindPrototype(c08 *Name)
 		Index = Start + (End - Start) / 2;
 		Curr  = WaylandPrototypes[Index];
 
-		s32 Cmp = String_Cmp(Target, CString(Curr->Name));
+		s32 Cmp = String_Cmp(Name, CString(Curr->Name));
 
 		if (Cmp > 0) Start = Index + 1;
 		else if (Cmp < 0) End = Index;
@@ -445,81 +457,76 @@ Wayland_CreateObject(wayland_prototype *Prototype, u32 ObjectId, u32 Version)
 	Platform_CreateMutex(&Object->LinkLock);
 	Object->LinkedEventQueue   = NULL;
 	Object->InternalEventQueue = Wayland_CreateEventQueue();
+	Object->InternalEventQueue.RefCount++;
 
 	HashMap_Add(&_G.WaylandApi.IdTable, &ObjectId, &Object);
 	return Object;
 }
 
 internal void
-Wayland_DestroyObject(vptr Object)
+Wayland_DestroyClientObject(wayland_interface *Object)
 {
-	wayland_interface *Interface = Object;
-	if (!Interface->Id) return;
+	if (!Object || !Object->Id) return;
 
-	HashMap_Remove(&_G.WaylandApi.IdTable, &Interface->Id, NULL, NULL);
-
-	Mem_Set(Interface, 0, Interface->Size);
-	Heap_FreeA(Interface);
-}
-
-internal void
-Wayland_FreeObjectId(u32 ObjectId)
-{
 	Platform_LockMutex(&_G.WaylandApi.Lock);
 
-	wayland_interface *Object = Wayland_GetObject(ObjectId);
-	if (Object) Wayland_DestroyObject(Object);
+	HashMap_Remove(&_G.WaylandApi.IdTable, &Object->Id, NULL, NULL);
 
 	// Store a pointer to the entry pointer to allow inserting a new record
 	// after the previous.
 	wayland_api_id_entry **Entry = &_G.WaylandApi.NextIdEntry;
 
 	// Find the appropriate location to insert
-	while (*Entry && (*Entry)->BaseId + (*Entry)->Count < ObjectId)
+	while (*Entry && (*Entry)->BaseId + (*Entry)->Count < Object->Id)
 		Entry = &(*Entry)->Next;
 
 	// Add a new record after prev
-	if (!*Entry || ObjectId < (*Entry)->BaseId - 1) {
+	if (!*Entry || Object->Id < (*Entry)->BaseId - 1) {
 		wayland_api_id_entry *NewEntry =
 			Heap_AllocateA(_G.WaylandApi.Heap, sizeof(wayland_api_id_entry));
 
-		NewEntry->BaseId = ObjectId;
+		NewEntry->BaseId = Object->Id;
 		NewEntry->Count	 = 1;
 		NewEntry->Next	 = *Entry;
 
 		*Entry = NewEntry;
-
-		Platform_UnlockMutex(&_G.WaylandApi.Lock);
-		return;
-	}
-
-	// Expand this record right and potentially merge the next
-	if ((*Entry)->BaseId + (*Entry)->Count == ObjectId) {
+	} else if ((*Entry)->BaseId + (*Entry)->Count == Object->Id) {
+		// Expand this record right and potentially merge the next
 		(*Entry)->Count += 1;
 
 		wayland_api_id_entry *Next = (*Entry)->Next;
-		if (Next && Next->BaseId == ObjectId + 1) {
+		if (Next && Next->BaseId == Object->Id + 1) {
 			(*Entry)->Count += Next->Count;
 			(*Entry)->Next	 = Next->Next;
 			Heap_FreeA(Next);
 		}
-
-		Platform_UnlockMutex(&_G.WaylandApi.Lock);
-		return;
-	}
-
-	// Expand this record left. We don't need to try to merge, since if it was
-	// possible, we already would've above.
-	if ((*Entry)->BaseId == ObjectId + 1) {
+	} else if ((*Entry)->BaseId == Object->Id + 1) {
+		// Expand this record left. We don't need to try to merge, since if it
+		// was possible, we already would've above.
 		(*Entry)->BaseId -= 1;
 		(*Entry)->Count	 += 1;
-
-		Platform_UnlockMutex(&_G.WaylandApi.Lock);
-		return;
 	}
 
-	// Shouldn't get here
-	Assert(FALSE);
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
+
+	Object->InternalEventQueue.RefCount--;
+	Wayland_LinkEventQueue(Object, NULL);
+	Wayland_DestroyEventQueue(&Object->InternalEventQueue);
+
+#if defined(_DEBUG)
+	Mem_Set(Object, 0, Object->Size);
+#endif
+	Heap_FreeA(Object);
+}
+
+internal void
+Wayland_Display_DeleteId(wayland_display *This, u32 Id)
+{
+	Platform_LockMutex(&_G.WaylandApi.Lock);
+	wayland_interface *Object = Wayland_GetObject(Id);
+	Platform_UnlockMutex(&_G.WaylandApi.Lock);
+
+	if (Object) Wayland_DestroyClientObject(Object);
 }
 
 internal wayland_display *
@@ -528,12 +535,14 @@ Wayland_GetDisplay()
 	Platform_LockMutex(&_G.WaylandApi.Lock);
 	wayland_display *Display = Wayland_GetObject(WAYLAND_DISPLAY_ID);
 
-	if (!Display)
+	if (!Display) {
 		Display = Wayland_CreateObject(
-			&WaylandDisplayPrototype,
+			&Wayland_Display_Prototype,
 			WAYLAND_DISPLAY_ID,
 			1
 		);
+		Display->DeleteId = Wayland_Display_DeleteId;
+	}
 
 	Platform_UnlockMutex(&_G.WaylandApi.Lock);
 	return Display;
@@ -656,11 +665,26 @@ end:
 internal wayland_event_queue
 Wayland_CreateEventQueue(void)
 {
-	wayland_event_queue EventQueue;
-	EventQueue.Deque =
-		ArrayDeque_Init(_G.WaylandApi.Heap, sizeof(wayland_event), 16);
+	wayland_event_queue EventQueue = {
+		.Deque = ArrayDeque_Init(_G.WaylandApi.Heap, sizeof(wayland_event), 16),
+	};
 	Platform_CreateMutex(&EventQueue.Lock);
 	return EventQueue;
+}
+
+internal void
+Wayland_DestroyEventQueue(wayland_event_queue *EventQueue)
+{
+	if (!EventQueue || !EventQueue->Deque.Data) return;
+	Assert(
+		EventQueue->RefCount == 0,
+		"Cannot destroy an event queue while objects still reference it!"
+	);
+
+	Platform_DestroyMutex(&EventQueue->Lock);
+	ArrayDeque_Free(&EventQueue->Deque);
+
+	Mem_Set(EventQueue, 0, sizeof(wayland_event_queue));
 }
 
 internal void
@@ -709,10 +733,16 @@ Wayland_LinkEventQueue(
 	// This can deadlock if an event queue lock is already held!
 	Platform_LockMutex(&Object->LinkLock);
 
-	Object->LinkedEventQueue = EventQueue;
-	if (EventQueue) {
-		wayland_event Event;
+	if (Object->LinkedEventQueue) {
+		Platform_LockMutex(&Object->LinkedEventQueue->Lock);
+		Object->LinkedEventQueue->RefCount--;
+		Platform_UnlockMutex(&Object->LinkedEventQueue->Lock);
+	} else if (EventQueue) {
+		Platform_LockMutex(&EventQueue->Lock);
+		EventQueue->RefCount++;
+		Platform_UnlockMutex(&EventQueue->Lock);
 
+		wayland_event Event;
 		while (1) {
 			b08 Popped = FALSE;
 
@@ -730,6 +760,8 @@ Wayland_LinkEventQueue(
 			Platform_UnlockMutex(&EventQueue->Lock);
 		}
 	}
+
+	Object->LinkedEventQueue = EventQueue;
 
 	Platform_UnlockMutex(&Object->LinkLock);
 }
@@ -942,7 +974,7 @@ Wayland_FillRequestParams(wayland_prepared_method PreparedMethod, va_list Args)
 				} else {
 					c08 *Name	 = VA_Next(Args, c08 *);
 					u32	 Version = VA_Next(Args, u32);
-					Prototype	 = Wayland_FindPrototype(Name);
+					Prototype	 = Wayland_FindPrototype(CString(Name));
 					Assert(
 						Prototype,
 						"Failed to find prototype for constructed object"
@@ -983,7 +1015,7 @@ Wayland_DestroyDestructorParams(wayland_prepared_method PreparedMethod)
 		wayland_param *Param = &PreparedMethod.Params[I];
 		if (Param->Type == WAYLAND_PARAM_OBJECT && Param->Object.Destructor) {
 			wayland_interface *Object = Param->Object.Data;
-			if (Object) Wayland_DestroyObject(Object);
+			if (Object) Wayland_DestroyClientObject(Object);
 		}
 	}
 }
@@ -1168,7 +1200,7 @@ Wayland_DeserializeParam(
 				u32 NameSize = Words[WI++];
 				Assert(NameSize);
 				c08 *Name = (c08 *) &Words[WI];
-				Prototype = Wayland_FindPrototype(Name);
+				Prototype = Wayland_FindPrototype(CString(Name));
 				Assert(Prototype);
 				WI		+= (NameSize + 3) / 4;
 				Version	 = Words[WI++];

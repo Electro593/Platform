@@ -40,6 +40,7 @@ typedef enum wayland_output_transform		wayland_output_transform;
 typedef enum wayland_output_mode			wayland_output_mode;
 typedef enum wayland_subcompositor_error	wayland_subcompositor_error;
 typedef enum wayland_subsurface_error		wayland_subsurface_error;
+typedef enum wayland_fixes_error			wayland_fixes_error;
 
 typedef struct wayland_display			   wayland_display;
 typedef struct wayland_registry			   wayland_registry;
@@ -385,6 +386,7 @@ enum wayland_surface_error {
 	WAYLAND_SURFACE_ERROR_INVALID_SIZE		  = 2,
 	WAYLAND_SURFACE_ERROR_INVALID_OFFSET	  = 3,
 	WAYLAND_SURFACE_ERROR_DEFUNCT_ROLE_OBJECT = 4,
+	WAYLAND_SURFACE_ERROR_NO_BUFFER			  = 5,
 };
 
 struct wayland_surface {
@@ -653,6 +655,10 @@ enum wayland_subsurface_error {
 
 struct wayland_subsurface {
 	wayland_interface Interface;
+};
+
+enum wayland_fixes_error {
+	WAYLAND_FIXES_ERROR_INVALID_ACK_REMOVE = 0,
 };
 
 struct wayland_fixes {
@@ -1015,6 +1021,7 @@ struct wayland_zwp_relative_pointer_v1 {
 	INTERN(void,                   Wayland_Surface_Offset,             wayland_surface *This, s32 X, s32 Y) \
 	INTERN(void,                   Wayland_Fixes_Destroy,              wayland_fixes *This) \
 	INTERN(void,                   Wayland_Fixes_DestroyRegistry,      wayland_fixes *This, wayland_registry *Registry) \
+	INTERN(void,                   Wayland_Fixes_AckGlobalRemove,      wayland_fixes *This, wayland_registry *Registry, u32 name) \
 	\
 	INTERN(void,            Wayland_Drm_Authenticate,       wayland_drm *This, u32 Id) \
 	INTERN(wayland_buffer*, Wayland_Drm_CreateBuffer,       wayland_drm *This, u32 Name, s32 Width, s32 Height, u32 Stride, wayland_shm_format Format) \
@@ -1084,15 +1091,15 @@ struct wayland_zwp_relative_pointer_v1 {
 
 #ifndef SECTION_WAYLAND
 
-wayland_prototype WaylandDisplayPrototype = {
+wayland_prototype Wayland_Display_Prototype = {
 	.Name		  = "wl_display",
-	.Version	  = 1,
+	.Version	  = 0,
 	.RequestCount = 2,
 	.EventCount	  = 2,
 	.Requests =
 		M{
-		  { "sync", "on", P{ &WaylandCallbackPrototype } },
-		  { "get_registry", "on", P{ &WaylandRegistryPrototype } },
+		  { "sync", "on", P{ &Wayland_Callback_Prototype } },
+		  { "get_registry", "on", P{ &Wayland_Registry_Prototype } },
 		  },
 	.Events =
 		M{
@@ -1101,9 +1108,9 @@ wayland_prototype WaylandDisplayPrototype = {
 		  },
 };
 
-wayland_prototype WaylandRegistryPrototype = {
+wayland_prototype Wayland_Registry_Prototype = {
 	.Name		  = "wl_registry",
-	.Version	  = 1,
+	.Version	  = 0,
 	.RequestCount = 1,
 	.EventCount	  = 2,
 	.Requests =
@@ -1117,7 +1124,7 @@ wayland_prototype WaylandRegistryPrototype = {
 		  },
 };
 
-wayland_prototype WaylandCallbackPrototype = {
+wayland_prototype Wayland_Callback_Prototype = {
 	.Name		  = "wl_callback",
 	.Version	  = 0,
 	.RequestCount = 0,
@@ -1126,41 +1133,40 @@ wayland_prototype WaylandCallbackPrototype = {
 	.Events		  = M{ { "done", "ou", NULL } },
 };
 
-wayland_prototype WaylandCompositorPrototype = {
+wayland_prototype Wayland_Compositor_Prototype = {
 	.Name		  = "wl_compositor",
-	.Version	  = 6,
-	.RequestCount = 2,
-	.EventCount	  = 0,
+	.Version	  = 7,
+	.RequestCount = 3,
 	.Requests =
 		M{
-		  { "create_surface", "on", P{ &WaylandSurfacePrototype } },
-		  { "create_region", "on", P{ &WaylandRegionPrototype } },
-		  },
-	.Events = NULL,
+		  { "create_surface", "on", P{ &Wayland_Surface_Prototype } },
+		  { "create_region", "on", P{ &Wayland_Region_Prototype } },
+		  { "release", "7d", NULL },
+		  }
 };
 
-wayland_prototype WaylandShmPoolPrototype = {
+wayland_prototype Wayland_ShmPool_Prototype = {
 	.Name		  = "wl_shm_pool",
 	.Version	  = 2,
 	.RequestCount = 3,
 	.EventCount	  = 0,
 	.Requests =
 		M{
-		  { "create_buffer", "oniiiiu", P{ &WaylandBufferPrototype } },
+		  { "create_buffer", "oniiiiu", P{ &Wayland_Buffer_Prototype } },
 		  { "destroy", "d", NULL },
 		  { "resize", "oi", NULL },
 		  },
 	.Events = NULL,
 };
 
-wayland_prototype WaylandShmPrototype = {
+wayland_prototype Wayland_Shm_Prototype = {
 	.Name		  = "wl_shm",
 	.Version	  = 2,
 	.RequestCount = 2,
 	.EventCount	  = 1,
 	.Requests =
 		M{
-		  { "create_pool", "onfi", P{ &WaylandShmPoolPrototype } },
+		  { "create_pool", "onfi", P{ &Wayland_ShmPool_Prototype } },
 		  { "release", "2d", NULL },
 		  },
 	.Events =
@@ -1169,7 +1175,7 @@ wayland_prototype WaylandShmPrototype = {
 		  },
 };
 
-wayland_prototype WaylandBufferPrototype = {
+wayland_prototype Wayland_Buffer_Prototype = {
 	.Name		  = "wl_buffer",
 	.Version	  = 0,
 	.RequestCount = 1,
@@ -1178,7 +1184,7 @@ wayland_prototype WaylandBufferPrototype = {
 	.Events		  = M{ { "release", "o", NULL } },
 };
 
-wayland_prototype WaylandDataOfferPrototype = {
+wayland_prototype Wayland_DataOffer_Prototype = {
 	.Name		  = "wl_data_offer",
 	.Version	  = 3,
 	.RequestCount = 5,
@@ -1199,7 +1205,7 @@ wayland_prototype WaylandDataOfferPrototype = {
 		  },
 };
 
-wayland_prototype WaylandDataSourcePrototype = {
+wayland_prototype Wayland_DataSource_Prototype = {
 	.Name		  = "wl_data_source",
 	.Version	  = 3,
 	.RequestCount = 3,
@@ -1221,7 +1227,7 @@ wayland_prototype WaylandDataSourcePrototype = {
 		  },
 };
 
-wayland_prototype WaylandDataDevicePrototype = {
+wayland_prototype Wayland_DataDevice_Prototype = {
 	.Name		  = "wl_data_device",
 	.Version	  = 3,
 	.RequestCount = 3,
@@ -1234,7 +1240,7 @@ wayland_prototype WaylandDataDevicePrototype = {
 		  },
 	.Events =
 		M{
-		  { "data_offer", "on", P{ &WaylandDataOfferPrototype } },
+		  { "data_offer", "on", P{ &Wayland_DataOffer_Prototype } },
 		  { "enter", "ouorr?o", NULL },
 		  { "leave", "o", NULL },
 		  { "motion", "ourr", NULL },
@@ -1243,7 +1249,7 @@ wayland_prototype WaylandDataDevicePrototype = {
 		  },
 };
 
-wayland_prototype WaylandDataDeviceManagerPrototype = {
+wayland_prototype Wayland_DataDeviceManager_Prototype = {
 	.Name		  = "wl_data_device_manager",
 	.Version	  = 3,
 	.RequestCount = 2,
@@ -1253,28 +1259,30 @@ wayland_prototype WaylandDataDeviceManagerPrototype = {
 		  {
 				"create_data_source",
 				"on",
-				P{ &WaylandDataSourcePrototype },
+				P{ &Wayland_DataSource_Prototype },
 			}, {
 				"get_data_device",
 				"ono",
-				P{ &WaylandDataDevicePrototype },
+				P{ &Wayland_DataDevice_Prototype },
 			}, },
 	.Events = NULL,
 };
 
-wayland_prototype WaylandShellPrototype = {
+wayland_prototype Wayland_Shell_Prototype = {
 	.Name		  = "wl_shell",
 	.Version	  = 1,
 	.RequestCount = 1,
 	.EventCount	  = 0,
 	.Requests =
 		M{
-		  { "get_shell_surface", "_ono", P{ &WaylandShellSurfacePrototype } },
+		  { "get_shell_surface",
+				"_ono",
+				P{ &Wayland_ShellSurface_Prototype } },
 		  },
 	.Events = NULL,
 };
 
-wayland_prototype WaylandShellSurfacePrototype = {
+wayland_prototype Wayland_ShellSurface_Prototype = {
 	.Name		  = "wl_shell_surface",
 	.Version	  = 1,
 	.RequestCount = 10,
@@ -1300,17 +1308,17 @@ wayland_prototype WaylandShellSurfacePrototype = {
 		  },
 };
 
-wayland_prototype WaylandSurfacePrototype = {
+wayland_prototype Wayland_Surface_Prototype = {
 	.Name		  = "wl_surface",
-	.Version	  = 6,
-	.RequestCount = 11,
+	.Version	  = 7,
+	.RequestCount = 12,
 	.EventCount	  = 4,
 	.Requests =
 		M{
 		  { "destroy", "d", NULL },
 		  { "attach", "o?oii", NULL },
 		  { "damage", "oiiii", NULL },
-		  { "frame", "on", P{ &WaylandCallbackPrototype } },
+		  { "frame", "on", P{ &Wayland_Callback_Prototype } },
 		  { "set_opaque_region", "o?o", NULL },
 		  { "set_input_region", "o?o", NULL },
 		  { "commit", "o", NULL },
@@ -1318,6 +1326,7 @@ wayland_prototype WaylandSurfacePrototype = {
 		  { "set_buffer_scale", "3oi", NULL },
 		  { "damage_buffer", "4oiiii", NULL },
 		  { "offset", "5oii", NULL },
+		  { "get_release", "7on", P{ &Wayland_Callback_Prototype } },
 		  },
 	.Events =
 		M{
@@ -1328,16 +1337,16 @@ wayland_prototype WaylandSurfacePrototype = {
 		  },
 };
 
-wayland_prototype WaylandSeatPrototype = {
+wayland_prototype Wayland_Seat_Prototype = {
 	.Name		  = "wl_seat",
 	.Version	  = 11,
 	.RequestCount = 4,
 	.EventCount	  = 2,
 	.Requests =
 		M{
-		  { "get_pointer", "on", P{ &WaylandPointerPrototype } },
-		  { "get_keyboard", "on", P{ &WaylandKeyboardPrototype } },
-		  { "get_touch", "on", P{ &WaylandTouchPrototype } },
+		  { "get_pointer", "on", P{ &Wayland_Pointer_Prototype } },
+		  { "get_keyboard", "on", P{ &Wayland_Keyboard_Prototype } },
+		  { "get_touch", "on", P{ &Wayland_Touch_Prototype } },
 		  { "release", "5d", NULL },
 		  },
 	.Events =
@@ -1347,7 +1356,7 @@ wayland_prototype WaylandSeatPrototype = {
 		  },
 };
 
-wayland_prototype WaylandPointerPrototype = {
+wayland_prototype Wayland_Pointer_Prototype = {
 	.Name		  = "wl_pointer",
 	.Version	  = 11,
 	.RequestCount = 2,
@@ -1374,7 +1383,7 @@ wayland_prototype WaylandPointerPrototype = {
 		  },
 };
 
-wayland_prototype WaylandKeyboardPrototype = {
+wayland_prototype Wayland_Keyboard_Prototype = {
 	.Name		  = "wl_keyboard",
 	.Version	  = 11,
 	.RequestCount = 1,
@@ -1394,7 +1403,7 @@ wayland_prototype WaylandKeyboardPrototype = {
 		  },
 };
 
-wayland_prototype WaylandTouchPrototype = {
+wayland_prototype Wayland_Touch_Prototype = {
 	.Name		  = "wl_touch",
 	.Version	  = 11,
 	.RequestCount = 1,
@@ -1415,7 +1424,7 @@ wayland_prototype WaylandTouchPrototype = {
 		  },
 };
 
-wayland_prototype WaylandOutputPrototype = {
+wayland_prototype Wayland_Output_Prototype = {
 	.Name		  = "wl_output",
 	.Version	  = 4,
 	.RequestCount = 1,
@@ -1435,9 +1444,9 @@ wayland_prototype WaylandOutputPrototype = {
 		  },
 };
 
-wayland_prototype WaylandRegionPrototype = {
+wayland_prototype Wayland_Region_Prototype = {
 	.Name		  = "wl_region",
-	.Version	  = 1,
+	.Version	  = 7,
 	.RequestCount = 3,
 	.EventCount	  = 0,
 	.Requests =
@@ -1449,7 +1458,7 @@ wayland_prototype WaylandRegionPrototype = {
 	.Events = NULL,
 };
 
-wayland_prototype WaylandSubcompositorPrototype = {
+wayland_prototype Wayland_Subcompositor_Prototype = {
 	.Name		  = "wl_subcompositor",
 	.Version	  = 1,
 	.RequestCount = 2,
@@ -1457,12 +1466,12 @@ wayland_prototype WaylandSubcompositorPrototype = {
 	.Requests =
 		M{
 		  { "destroy", "d", NULL },
-		  { "get_subsurface", "onoo", P{ &WaylandSubsurfacePrototype } },
+		  { "get_subsurface", "onoo", P{ &Wayland_Subsurface_Prototype } },
 		  },
 	.Events = NULL,
 };
 
-wayland_prototype WaylandSubsurfacePrototype = {
+wayland_prototype Wayland_Subsurface_Prototype = {
 	.Name		  = "wl_subsurface",
 	.Version	  = 1,
 	.RequestCount = 6,
@@ -1479,50 +1488,63 @@ wayland_prototype WaylandSubsurfacePrototype = {
 	.Events = NULL,
 };
 
-wayland_prototype WaylandFixesPrototype = {
+wayland_prototype Wayland_Fixes_Prototype = {
 	.Name		  = "wl_fixes",
-	.Version	  = 1,
-	.RequestCount = 2,
+	.Version	  = 2,
+	.RequestCount = 3,
 	.EventCount	  = 0,
 	.Requests =
 		M{
 		  { "destroy", "d", NULL },
 		  { "destroy_registry", "od", NULL },
+		  { "ack_global_remove", "2oou", NULL },
 		  },
 	.Events = NULL,
 };
 
 internal void
 Wayland_Buffer_Destroy(wayland_buffer *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal wayland_surface *
 Wayland_Compositor_CreateSurface(wayland_compositor *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 0); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 0); }
 
 internal wayland_region *
 Wayland_Compositor_CreateRegion(wayland_compositor *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 1); }
+
+internal void
+Wayland_Compositor_Release(wayland_compositor *This)
+{ return Wayland_HandleRequest((vptr) This, 2); }
 
 internal wayland_callback *
 Wayland_Display_Sync(wayland_display *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 0); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 0); }
 
 internal wayland_registry *
 Wayland_Display_GetRegistry(wayland_display *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 1); }
 
 internal void
 Wayland_Fixes_Destroy(wayland_fixes *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_Fixes_DestroyRegistry(wayland_fixes *This, wayland_registry *Registry)
-{ Wayland_HandleRequest((wayland_interface *) This, 1, Registry); }
+{ Wayland_HandleRequest((vptr) This, 1, Registry); }
+
+internal void
+Wayland_Fixes_AckGlobalRemove(
+	wayland_fixes	 *This,
+	wayland_registry *Registry,
+	u32				  Name
+)
+{ Wayland_HandleRequest((vptr) This, 2, Registry, Name); }
 
 internal void
 Wayland_Keyboard_Release(wayland_keyboard *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_Pointer_SetCursor(
@@ -1532,20 +1554,11 @@ Wayland_Pointer_SetCursor(
 	s32				 HotspotX,
 	s32				 HotspotY
 )
-{
-	Wayland_HandleRequest(
-		(wayland_interface *) This,
-		0,
-		Serial,
-		Surface,
-		HotspotX,
-		HotspotY
-	);
-}
+{ Wayland_HandleRequest((vptr) This, 0, Serial, Surface, HotspotX, HotspotY); }
 
 internal void
 Wayland_Pointer_Release(wayland_pointer *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 1); }
+{ Wayland_HandleRequest((vptr) This, 1); }
 
 internal wayland_interface *
 Wayland_Registry_Bind(
@@ -1556,7 +1569,7 @@ Wayland_Registry_Bind(
 )
 {
 	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
+		(vptr) This,
 		0,
 		Name,
 		Interface,
@@ -1566,33 +1579,27 @@ Wayland_Registry_Bind(
 
 internal wayland_pointer *
 Wayland_Seat_GetPointer(wayland_seat *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 0); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 0); }
 
 internal wayland_keyboard *
 Wayland_Seat_GetKeyboard(wayland_seat *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 1); }
 
 internal wayland_touch *
 Wayland_Seat_GetTouch(wayland_seat *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 2); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 2); }
 
 internal void
 Wayland_Seat_Release(wayland_seat *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 3); }
+{ Wayland_HandleRequest((vptr) This, 3); }
 
 internal wayland_shell_surface *
 Wayland_Shell_GetShellSurface(wayland_shell *This, wayland_surface *Surface)
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		0,
-		Surface
-	);
-}
+{ return Wayland_HandleConstructorRequest((vptr) This, 0, Surface); }
 
 internal void
 Wayland_ShellSurface_Pong(wayland_shell_surface *This, u32 Serial)
-{ Wayland_HandleRequest((wayland_interface *) This, 0, Serial); }
+{ Wayland_HandleRequest((vptr) This, 0, Serial); }
 
 internal void
 Wayland_ShellSurface_Move(
@@ -1600,7 +1607,7 @@ Wayland_ShellSurface_Move(
 	wayland_seat		  *Seat,
 	u32					   Serial
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 1, Seat, Serial); }
+{ Wayland_HandleRequest((vptr) This, 1, Seat, Serial); }
 
 internal void
 Wayland_ShellSurface_Resize(
@@ -1609,11 +1616,11 @@ Wayland_ShellSurface_Resize(
 	u32							 Serial,
 	wayland_shell_surface_resize Edges
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 2, Seat, Serial, Edges); }
+{ Wayland_HandleRequest((vptr) This, 2, Seat, Serial, Edges); }
 
 internal void
 Wayland_ShellSurface_SetToplevel(wayland_shell_surface *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 3); }
+{ Wayland_HandleRequest((vptr) This, 3); }
 
 internal void
 Wayland_ShellSurface_SetTransient(
@@ -1623,7 +1630,7 @@ Wayland_ShellSurface_SetTransient(
 	s32								Y,
 	wayland_shell_surface_transient Flags
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 4, Parent, X, Y, Flags); }
+{ Wayland_HandleRequest((vptr) This, 4, Parent, X, Y, Flags); }
 
 internal void
 Wayland_ShellSurface_SetFullscreen(
@@ -1632,15 +1639,7 @@ Wayland_ShellSurface_SetFullscreen(
 	u32										Framerate,
 	wayland_output						   *Output
 )
-{
-	Wayland_HandleRequest(
-		(wayland_interface *) This,
-		5,
-		Method,
-		Framerate,
-		Output
-	);
-}
+{ Wayland_HandleRequest((vptr) This, 5, Method, Framerate, Output); }
 
 internal void
 Wayland_ShellSurface_SetPopup(
@@ -1652,48 +1651,30 @@ Wayland_ShellSurface_SetPopup(
 	s32								 Y,
 	wayland_shell_surface_transient *Flags
 )
-{
-	Wayland_HandleRequest(
-		(wayland_interface *) This,
-		6,
-		Seat,
-		Serial,
-		Parent,
-		X,
-		Y,
-		Flags
-	);
-}
+{ Wayland_HandleRequest((vptr) This, 6, Seat, Serial, Parent, X, Y, Flags); }
 
 internal void
 Wayland_ShellSurface_SetMaximized(
 	wayland_shell_surface *This,
 	wayland_output		  *Output
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 7, Output); }
+{ Wayland_HandleRequest((vptr) This, 7, Output); }
 
 internal void
 Wayland_ShellSurface_SetTitle(wayland_shell_surface *This, c08 *Title)
-{ Wayland_HandleRequest((wayland_interface *) This, 8, Title); }
+{ Wayland_HandleRequest((vptr) This, 8, Title); }
 
 internal void
 Wayland_ShellSurface_SetClass(wayland_shell_surface *This, c08 *Class)
-{ Wayland_HandleRequest((wayland_interface *) This, 9, Class); }
+{ Wayland_HandleRequest((vptr) This, 9, Class); }
 
 internal wayland_shm_pool *
 Wayland_Shm_CreatePool(wayland_shm *This, s32 Fd, s32 Size)
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		0,
-		Fd,
-		Size
-	);
-}
+{ return Wayland_HandleConstructorRequest((vptr) This, 0, Fd, Size); }
 
 internal void
 Wayland_Shm_Release(wayland_shm *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 1); }
+{ Wayland_HandleRequest((vptr) This, 1); }
 
 internal wayland_buffer *
 Wayland_ShmPool_CreateBuffer(
@@ -1706,7 +1687,7 @@ Wayland_ShmPool_CreateBuffer(
 )
 {
 	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
+		(vptr) This,
 		0,
 		Offset,
 		Width,
@@ -1718,15 +1699,15 @@ Wayland_ShmPool_CreateBuffer(
 
 internal void
 Wayland_ShmPool_Destroy(wayland_shm_pool *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 1); }
+{ Wayland_HandleRequest((vptr) This, 1); }
 
 internal void
 Wayland_ShmPool_Resize(wayland_shm_pool *This, s32 Size)
-{ Wayland_HandleRequest((wayland_interface *) This, 2, Size); }
+{ Wayland_HandleRequest((vptr) This, 2, Size); }
 
 internal void
 Wayland_Surface_Destroy(wayland_surface *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_Surface_Attach(
@@ -1735,7 +1716,7 @@ Wayland_Surface_Attach(
 	s32				 X,
 	s32				 Y
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 1, Buffer, X, Y); }
+{ Wayland_HandleRequest((vptr) This, 1, Buffer, X, Y); }
 
 internal void
 Wayland_Surface_Damage(
@@ -1745,34 +1726,34 @@ Wayland_Surface_Damage(
 	s32				 Width,
 	s32				 Height
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 2, X, Y, Width, Height); }
+{ Wayland_HandleRequest((vptr) This, 2, X, Y, Width, Height); }
 
 internal wayland_callback *
 Wayland_Surface_Frame(wayland_surface *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 3); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 3); }
 
 internal void
 Wayland_Surface_SetOpaqueRegion(wayland_surface *This, wayland_region *Region)
-{ Wayland_HandleRequest((wayland_interface *) This, 4, Region); }
+{ Wayland_HandleRequest((vptr) This, 4, Region); }
 
 internal void
 Wayland_Surface_SetInputRegion(wayland_surface *This, wayland_region *Region)
-{ Wayland_HandleRequest((wayland_interface *) This, 5, Region); }
+{ Wayland_HandleRequest((vptr) This, 5, Region); }
 
 internal void
 Wayland_Surface_Commit(wayland_surface *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 6); }
+{ Wayland_HandleRequest((vptr) This, 6); }
 
 internal void
 Wayland_Surface_SetBufferTransform(
 	wayland_surface			*This,
 	wayland_output_transform Transform
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 7, Transform); }
+{ Wayland_HandleRequest((vptr) This, 7, Transform); }
 
 internal void
 Wayland_Surface_SetBufferScale(wayland_surface *This, s32 Scale)
-{ Wayland_HandleRequest((wayland_interface *) This, 8, Scale); }
+{ Wayland_HandleRequest((vptr) This, 8, Scale); }
 
 internal void
 Wayland_Surface_DamageBuffer(
@@ -1782,25 +1763,29 @@ Wayland_Surface_DamageBuffer(
 	s32				 Width,
 	s32				 Height
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 9, X, Y, Width, Height); }
+{ Wayland_HandleRequest((vptr) This, 9, X, Y, Width, Height); }
 
 internal void
 Wayland_Surface_Offset(wayland_surface *This, s32 X, s32 Y)
-{ Wayland_HandleRequest((wayland_interface *) This, 10, X, Y); }
+{ Wayland_HandleRequest((vptr) This, 10, X, Y); }
+
+internal wayland_callback *
+Wayland_Surface_GetRelease(wayland_surface *This)
+{ return Wayland_HandleConstructorRequest((vptr) This, 11); }
 
 internal void
 Wayland_Touch_Release(wayland_touch *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_Output_Release(wayland_output *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 #endif
 
 #ifndef SECTION_XDG_SHELL
 
-wayland_prototype WaylandXdgWmBasePrototype = {
+wayland_prototype Wayland_XdgWmBase_Prototype = {
 	.Name		  = "xdg_wm_base",
 	.Version	  = 7,
 	.RequestCount = 4,
@@ -1808,8 +1793,10 @@ wayland_prototype WaylandXdgWmBasePrototype = {
 	.Requests =
 		M{
 		  { "destroy", "d", NULL },
-		  { "create_positioner", "on", P{ &WaylandXdgPositionerPrototype } },
-		  { "get_xdg_surface", "ono", P{ &WaylandXdgSurfacePrototype } },
+		  { "create_positioner",
+				"on",
+				P{ &Wayland_XdgPositioner_Prototype } },
+		  { "get_xdg_surface", "ono", P{ &Wayland_XdgSurface_Prototype } },
 		  { "pong", "ou", NULL },
 		  },
 	.Events =
@@ -1818,7 +1805,7 @@ wayland_prototype WaylandXdgWmBasePrototype = {
 		  },
 };
 
-wayland_prototype WaylandXdgPositionerPrototype = {
+wayland_prototype Wayland_XdgPositioner_Prototype = {
 	.Name		  = "xdg_positioner",
 	.Version	  = 7,
 	.RequestCount = 10,
@@ -1839,7 +1826,7 @@ wayland_prototype WaylandXdgPositionerPrototype = {
 	.Events = NULL,
 };
 
-wayland_prototype WaylandXdgSurfacePrototype = {
+wayland_prototype Wayland_XdgSurface_Prototype = {
 	.Name		  = "xdg_surface",
 	.Version	  = 7,
 	.RequestCount = 5,
@@ -1847,8 +1834,8 @@ wayland_prototype WaylandXdgSurfacePrototype = {
 	.Requests =
 		M{
 		  { "destroy", "d", NULL },
-		  { "get_toplevel", "on", P{ &WaylandXdgToplevelPrototype } },
-		  { "get_popup", "on?oo", P{ &WaylandXdgPopupPrototype } },
+		  { "get_toplevel", "on", P{ &Wayland_XdgToplevel_Prototype } },
+		  { "get_popup", "on?oo", P{ &Wayland_XdgPopup_Prototype } },
 		  { "set_window_geometry", "oiiii", NULL },
 		  { "ack_configure", "ou", NULL },
 		  },
@@ -1858,7 +1845,7 @@ wayland_prototype WaylandXdgSurfacePrototype = {
 		  },
 };
 
-wayland_prototype WaylandXdgToplevelPrototype = {
+wayland_prototype Wayland_XdgToplevel_Prototype = {
 	.Name		  = "xdg_toplevel",
 	.Version	  = 7,
 	.RequestCount = 14,
@@ -1889,7 +1876,7 @@ wayland_prototype WaylandXdgToplevelPrototype = {
 		  },
 };
 
-wayland_prototype WaylandXdgPopupPrototype = {
+wayland_prototype Wayland_XdgPopup_Prototype = {
 	.Name		  = "xdg_popup",
 	.Version	  = 7,
 	.RequestCount = 3,
@@ -1910,32 +1897,26 @@ wayland_prototype WaylandXdgPopupPrototype = {
 
 internal void
 Wayland_XdgWmBase_Destroy(wayland_xdg_wm_base *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal wayland_xdg_positioner *
 Wayland_XdgWmBase_CreatePositioner(wayland_xdg_wm_base *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 1); }
 
 internal wayland_xdg_surface *
 Wayland_XdgWmBase_GetXdgSurface(
 	wayland_xdg_wm_base *This,
 	wayland_surface		*Surface
 )
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		2,
-		Surface
-	);
-}
+{ return Wayland_HandleConstructorRequest((vptr) This, 2, Surface); }
 
 internal void
 Wayland_XdgWmBase_Pong(wayland_xdg_wm_base *This, u32 Serial)
-{ Wayland_HandleRequest((wayland_interface *) This, 3, Serial); }
+{ Wayland_HandleRequest((vptr) This, 3, Serial); }
 
 internal void
 Wayland_XdgPositioner_Destroy(wayland_xdg_positioner *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_XdgPositioner_SetSize(
@@ -1943,7 +1924,7 @@ Wayland_XdgPositioner_SetSize(
 	s32						Width,
 	s32						Height
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 1, Width, Height); }
+{ Wayland_HandleRequest((vptr) This, 1, Width, Height); }
 
 internal void
 Wayland_XdgPositioner_SetAnchorRect(
@@ -1953,36 +1934,36 @@ Wayland_XdgPositioner_SetAnchorRect(
 	s32						Width,
 	s32						Height
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 2, X, Y, Width, Height); }
+{ Wayland_HandleRequest((vptr) This, 2, X, Y, Width, Height); }
 
 internal void
 Wayland_XdgPositioner_SetAnchor(
 	wayland_xdg_positioner		 *This,
 	wayland_xdg_positioner_anchor Anchor
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 3, Anchor); }
+{ Wayland_HandleRequest((vptr) This, 3, Anchor); }
 
 internal void
 Wayland_XdgPositioner_SetGravity(
 	wayland_xdg_positioner		  *This,
 	wayland_xdg_positioner_gravity Gravity
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 4, Gravity); }
+{ Wayland_HandleRequest((vptr) This, 4, Gravity); }
 
 internal void
 Wayland_XdgPositioner_SetConstraintAdjustment(
 	wayland_xdg_positioner						*This,
 	wayland_xdg_positioner_constraint_adjustment ConstraintAdjustment
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 5, ConstraintAdjustment); }
+{ Wayland_HandleRequest((vptr) This, 5, ConstraintAdjustment); }
 
 internal void
 Wayland_XdgPositioner_SetOffset(wayland_xdg_positioner *This, s32 X, s32 Y)
-{ Wayland_HandleRequest((wayland_interface *) This, 6, X, Y); }
+{ Wayland_HandleRequest((vptr) This, 6, X, Y); }
 
 internal void
 Wayland_XdgPositioner_SetReactive(wayland_xdg_positioner *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 7); }
+{ Wayland_HandleRequest((vptr) This, 7); }
 
 internal void
 Wayland_XdgPositioner_SetParentSize(
@@ -1990,29 +1971,22 @@ Wayland_XdgPositioner_SetParentSize(
 	s32						ParentWidth,
 	s32						ParentHeight
 )
-{
-	Wayland_HandleRequest(
-		(wayland_interface *) This,
-		8,
-		ParentWidth,
-		ParentHeight
-	);
-}
+{ Wayland_HandleRequest((vptr) This, 8, ParentWidth, ParentHeight); }
 
 internal void
 Wayland_XdgPositioner_SetParentConfigure(
 	wayland_xdg_positioner *This,
 	u32						Serial
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 9, Serial); }
+{ Wayland_HandleRequest((vptr) This, 9, Serial); }
 
 internal void
 Wayland_XdgSurface_Destroy(wayland_xdg_surface *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal wayland_xdg_toplevel *
 Wayland_XdgSurface_GetToplevel(wayland_xdg_surface *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 1); }
 
 internal wayland_xdg_popup *
 Wayland_XdgSurface_GetPopup(
@@ -2020,14 +1994,7 @@ Wayland_XdgSurface_GetPopup(
 	wayland_xdg_surface	   *Parent,
 	wayland_xdg_positioner *Positioner
 )
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		2,
-		Parent,
-		Positioner
-	);
-}
+{ return Wayland_HandleConstructorRequest((vptr) This, 2, Parent, Positioner); }
 
 internal void
 Wayland_XdgSurface_SetWindowGeometry(
@@ -2037,30 +2004,30 @@ Wayland_XdgSurface_SetWindowGeometry(
 	s32					 Width,
 	s32					 Height
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 3, X, Y, Width, Height); }
+{ Wayland_HandleRequest((vptr) This, 3, X, Y, Width, Height); }
 
 internal void
 Wayland_XdgSurface_AckConfigure(wayland_xdg_surface *This, u32 Serial)
-{ Wayland_HandleRequest((wayland_interface *) This, 4, Serial); }
+{ Wayland_HandleRequest((vptr) This, 4, Serial); }
 
 internal void
 Wayland_XdgToplevel_Destroy(wayland_xdg_toplevel *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_XdgToplevel_SetParent(
 	wayland_xdg_toplevel *This,
 	wayland_xdg_toplevel *Parent
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 1, Parent); }
+{ Wayland_HandleRequest((vptr) This, 1, Parent); }
 
 internal void
 Wayland_XdgToplevel_SetTitle(wayland_xdg_toplevel *This, c08 *Title)
-{ Wayland_HandleRequest((wayland_interface *) This, 2, Title); }
+{ Wayland_HandleRequest((vptr) This, 2, Title); }
 
 internal void
 Wayland_XdgToplevel_SetAppId(wayland_xdg_toplevel *This, c08 *AppId)
-{ Wayland_HandleRequest((wayland_interface *) This, 3, AppId); }
+{ Wayland_HandleRequest((vptr) This, 3, AppId); }
 
 internal void
 Wayland_XdgToplevel_ShowWindowMenu(
@@ -2070,7 +2037,7 @@ Wayland_XdgToplevel_ShowWindowMenu(
 	s32					  X,
 	s32					  Y
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 4, Seat, Serial, X, Y); }
+{ Wayland_HandleRequest((vptr) This, 4, Seat, Serial, X, Y); }
 
 internal void
 Wayland_XdgToplevel_Move(
@@ -2078,7 +2045,7 @@ Wayland_XdgToplevel_Move(
 	wayland_seat		 *Seat,
 	u32					  Serial
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 5, Seat, Serial); }
+{ Wayland_HandleRequest((vptr) This, 5, Seat, Serial); }
 
 internal void
 Wayland_XdgToplevel_Resize(
@@ -2087,7 +2054,7 @@ Wayland_XdgToplevel_Resize(
 	u32								 Serial,
 	wayland_xdg_toplevel_resize_edge Edges
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 6, Seat, Serial, Edges); }
+{ Wayland_HandleRequest((vptr) This, 6, Seat, Serial, Edges); }
 
 internal void
 Wayland_XdgToplevel_SetMaxSize(
@@ -2095,7 +2062,7 @@ Wayland_XdgToplevel_SetMaxSize(
 	s32					  Width,
 	s32					  Height
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 7, Width, Height); }
+{ Wayland_HandleRequest((vptr) This, 7, Width, Height); }
 
 internal void
 Wayland_XdgToplevel_SetMinSize(
@@ -2103,35 +2070,35 @@ Wayland_XdgToplevel_SetMinSize(
 	s32					  Width,
 	s32					  Height
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 8, Width, Height); }
+{ Wayland_HandleRequest((vptr) This, 8, Width, Height); }
 
 internal void
 Wayland_XdgToplevel_SetMaximized(wayland_xdg_toplevel *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 9); }
+{ Wayland_HandleRequest((vptr) This, 9); }
 
 internal void
 Wayland_XdgToplevel_UnsetMaximized(wayland_xdg_toplevel *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 10); }
+{ Wayland_HandleRequest((vptr) This, 10); }
 
 internal void
 Wayland_XdgToplevel_SetFullscreen(wayland_xdg_toplevel *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 11); }
+{ Wayland_HandleRequest((vptr) This, 11); }
 
 internal void
 Wayland_XdgToplevel_UnsetFullscreen(wayland_xdg_toplevel *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 12); }
+{ Wayland_HandleRequest((vptr) This, 12); }
 
 internal void
 Wayland_XdgToplevel_SetMinimized(wayland_xdg_toplevel *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 13); }
+{ Wayland_HandleRequest((vptr) This, 13); }
 
 internal void
 Wayland_XdgPopup_Destroy(wayland_xdg_popup *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_XdgPopup_Grab(wayland_xdg_popup *This, wayland_seat *Seat, u32 Serial)
-{ Wayland_HandleRequest((wayland_interface *) This, 1, Seat, Serial); }
+{ Wayland_HandleRequest((vptr) This, 1, Seat, Serial); }
 
 internal void
 Wayland_XdgPopup_Reposition(
@@ -2139,13 +2106,13 @@ Wayland_XdgPopup_Reposition(
 	wayland_xdg_positioner *Positioner,
 	u32						Token
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 2, Positioner, Token); }
+{ Wayland_HandleRequest((vptr) This, 2, Positioner, Token); }
 
 #endif
 
 #ifndef SECTION_DRM
 
-wayland_prototype WaylandDrmPrototype = {
+wayland_prototype Wayland_Drm_Prototype = {
 	.Name		  = "wl_drm",
 	.Version	  = 2,
 	.RequestCount = 4,
@@ -2153,13 +2120,13 @@ wayland_prototype WaylandDrmPrototype = {
 	.Requests =
 		M{
 		  { "authenticate", "ou", NULL },
-		  { "create_buffer", "onuiiuu", P{ &WaylandBufferPrototype } },
+		  { "create_buffer", "onuiiuu", P{ &Wayland_Buffer_Prototype } },
 		  { "create_planar_buffer",
 		  "onuiiuiiiiii",
-		  P{ &WaylandBufferPrototype } },
+		  P{ &Wayland_Buffer_Prototype } },
 		  { "create_prime_buffer",
 		  "onfiiuiiiiii",
-		  P{ &WaylandBufferPrototype } },
+		  P{ &Wayland_Buffer_Prototype } },
 		  },
 	.Events =
 		M{
@@ -2172,7 +2139,7 @@ wayland_prototype WaylandDrmPrototype = {
 
 internal void
 Wayland_Drm_Authenticate(wayland_drm *This, u32 Id)
-{ Wayland_HandleRequest((wayland_interface *) This, 0, Id); }
+{ Wayland_HandleRequest((vptr) This, 0, Id); }
 
 internal wayland_buffer *
 Wayland_Drm_CreateBuffer(
@@ -2185,7 +2152,7 @@ Wayland_Drm_CreateBuffer(
 )
 {
 	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
+		(vptr) This,
 		1,
 		Name,
 		Width,
@@ -2211,7 +2178,7 @@ Wayland_Drm_CreatePlanarBuffer(
 )
 {
 	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
+		(vptr) This,
 		1,
 		Name,
 		Width,
@@ -2242,7 +2209,7 @@ Wayland_Drm_CreatePrimeBuffer(
 )
 {
 	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
+		(vptr) This,
 		2,
 		Name,
 		Width,
@@ -2261,7 +2228,7 @@ Wayland_Drm_CreatePrimeBuffer(
 
 #ifndef SECTION_ZWP_LINUX_DMABUF
 
-wayland_prototype WaylandZwpLinuxDmabufV1Prototype = {
+wayland_prototype Wayland_ZwpLinuxDmabufV1_Prototype = {
 	.Name		  = "zwp_linux_dmabuf_v1",
 	.Version	  = 6,
 	.RequestCount = 4,
@@ -2271,13 +2238,13 @@ wayland_prototype WaylandZwpLinuxDmabufV1Prototype = {
 		  { "destroy", "d", NULL },
 		  { "create_params",
 				"on",
-				P{ &WaylandZwpLinuxBufferParamsV1Prototype } },
+				P{ &Wayland_ZwpLinuxBufferParamsV1_Prototype } },
 		  { "get_default_feedback",
 				"4on",
-				P{ &WaylandZwpLinuxDmabufFeedbackV1Prototype } },
+				P{ &Wayland_ZwpLinuxDmabufFeedbackV1_Prototype } },
 		  { "get_surface_feedback",
 				"4ono",
-				P{ &WaylandZwpLinuxDmabufFeedbackV1Prototype } },
+				P{ &Wayland_ZwpLinuxDmabufFeedbackV1_Prototype } },
 		  },
 	.Events =
 		M{
@@ -2286,7 +2253,7 @@ wayland_prototype WaylandZwpLinuxDmabufV1Prototype = {
 		  },
 };
 
-wayland_prototype WaylandZwpLinuxBufferParamsV1Prototype = {
+wayland_prototype Wayland_ZwpLinuxBufferParamsV1_Prototype = {
 	.Name		  = "zwp_linux_buffer_params_v1",
 	.Version	  = 6,
 	.RequestCount = 5,
@@ -2296,17 +2263,17 @@ wayland_prototype WaylandZwpLinuxBufferParamsV1Prototype = {
 		  { "destroy", "d", NULL },
 		  { "add", "ofuuuuu", NULL },
 		  { "create", "oiiuu", NULL },
-		  { "create_immed", "2oniiuu", P{ &WaylandBufferPrototype } },
+		  { "create_immed", "2oniiuu", P{ &Wayland_Buffer_Prototype } },
 		  { "set_sampling_device", "6oa", NULL },
 		  },
 	.Events =
 		M{
-		  { "created", "on", P{ &WaylandBufferPrototype } },
+		  { "created", "on", P{ &Wayland_Buffer_Prototype } },
 		  { "failed", "o", NULL },
 		  },
 };
 
-wayland_prototype WaylandZwpLinuxDmabufFeedbackV1Prototype = {
+wayland_prototype Wayland_ZwpLinuxDmabufFeedbackV1_Prototype = {
 	.Name		  = "zwp_linux_dmabuf_feedback_v1",
 	.Version	  = 6,
 	.RequestCount = 1,
@@ -2329,32 +2296,26 @@ wayland_prototype WaylandZwpLinuxDmabufFeedbackV1Prototype = {
 
 internal void
 Wayland_ZwpLinuxDmabufV1_Destroy(wayland_zwp_linux_dmabuf_v1 *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal wayland_zwp_linux_buffer_params_v1 *
 Wayland_ZwpLinuxDmabufV1_CreateParams(wayland_zwp_linux_dmabuf_v1 *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 1); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 1); }
 
 internal wayland_zwp_linux_dmabuf_feedback_v1 *
 Wayland_ZwpLinuxDmabufV1_GetDefaultFeedback(wayland_zwp_linux_dmabuf_v1 *This)
-{ return Wayland_HandleConstructorRequest((wayland_interface *) This, 2); }
+{ return Wayland_HandleConstructorRequest((vptr) This, 2); }
 
 internal wayland_zwp_linux_dmabuf_feedback_v1 *
 Wayland_ZwpLinuxDmabufV1_GetSurfaceFeedback(
 	wayland_zwp_linux_dmabuf_v1 *This,
 	wayland_surface				*Surface
 )
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		3,
-		Surface
-	);
-}
+{ return Wayland_HandleConstructorRequest((vptr) This, 3, Surface); }
 
 internal void
 Wayland_ZwpLinuxBufferParamsV1_Destroy(wayland_zwp_linux_buffer_params_v1 *This)
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 internal void
 Wayland_ZwpLinuxBufferParamsV1_Add(
@@ -2368,7 +2329,7 @@ Wayland_ZwpLinuxBufferParamsV1_Add(
 )
 {
 	Wayland_HandleRequest(
-		(wayland_interface *) This,
+		(vptr) This,
 		1,
 		Fd,
 		PlaneIndex,
@@ -2387,16 +2348,7 @@ Wayland_ZwpLinuxBufferParamsV1_Create(
 	u32										 Format,
 	wayland_zwp_linux_buffer_params_v1_flags Flags
 )
-{
-	Wayland_HandleRequest(
-		(wayland_interface *) This,
-		2,
-		Width,
-		Height,
-		Format,
-		Flags
-	);
-}
+{ Wayland_HandleRequest((vptr) This, 2, Width, Height, Format, Flags); }
 
 internal wayland_buffer *
 Wayland_ZwpLinuxBufferParamsV1_CreateImmed(
@@ -2408,7 +2360,7 @@ Wayland_ZwpLinuxBufferParamsV1_CreateImmed(
 )
 {
 	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
+		(vptr) This,
 		3,
 		Width,
 		Height,
@@ -2422,13 +2374,13 @@ Wayland_ZwpLinuxBufferParamsV1_SetSamplingDevice(
 	wayland_zwp_linux_buffer_params_v1 *This,
 	wayland_array						Device
 )
-{ return Wayland_HandleRequest((wayland_interface *) This, 4, Device); }
+{ return Wayland_HandleRequest((vptr) This, 4, Device); }
 
 internal void
 Wayland_ZwpLinuxDmabufFeedbackV1_Destroy(
 	wayland_zwp_linux_dmabuf_feedback_v1 *This
 )
-{ Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ Wayland_HandleRequest((vptr) This, 0); }
 
 #endif
 
@@ -2460,24 +2412,18 @@ internal void
 Wayland_ZwpRelativePointerManagerV1_Destroy(
 	wayland_zwp_relative_pointer_manager_v1 *This
 )
-{ return Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ return Wayland_HandleRequest((vptr) This, 0); }
 
 internal wayland_zwp_relative_pointer_v1 *
 Wayland_ZwpRelativePointerManagerV1_GetRelativePointer(
 	wayland_zwp_relative_pointer_manager_v1 *This,
 	wayland_pointer							*Pointer
 )
-{
-	return Wayland_HandleConstructorRequest(
-		(wayland_interface *) This,
-		1,
-		Pointer
-	);
-}
+{ return Wayland_HandleConstructorRequest((vptr) This, 1, Pointer); }
 
 internal void
 Wayland_ZwpRelativePointerV1_Destroy(wayland_zwp_relative_pointer_v1 *This)
-{ return Wayland_HandleRequest((wayland_interface *) This, 0); }
+{ return Wayland_HandleRequest((vptr) This, 0); }
 
 #endif
 

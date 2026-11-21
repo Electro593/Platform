@@ -338,12 +338,13 @@ typedef enum sys_wait_options {
 } sys_wait_options;
 
 typedef enum sys_clone_flags {
-	SYS_CLONE_VM	  = 0x00000100,
-	SYS_CLONE_FS	  = 0x00000200,
-	SYS_CLONE_FILES	  = 0x00000400,
-	SYS_CLONE_SIGHAND = 0x00000800,
-	SYS_CLONE_THREAD  = 0x00010000,
-	SYS_CLONE_IO	  = 0x80000000,
+	SYS_CLONE_VM			 = 0x00000100,
+	SYS_CLONE_FS			 = 0x00000200,
+	SYS_CLONE_FILES			 = 0x00000400,
+	SYS_CLONE_SIGHAND		 = 0x00000800,
+	SYS_CLONE_THREAD		 = 0x00010000,
+	SYS_CLONE_CHILD_CLEARTID = 0x00200000,
+	SYS_CLONE_IO			 = 0x80000000,
 } sys_clone_flags;
 
 typedef enum sys_futex_op {
@@ -380,7 +381,6 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(56,  Clone,        sys_pid, sys_clone_flags Flags, vptr Stack, s32 *ParentTidOut, usize TLS, s32 *ChildTidOut) \
 	SYSCALL(57,  Fork,         sys_pid, void) \
 	SYSCALL(60,  Exit,         void,    s32 ErrorCode) \
-	SYSCALL(61,  Wait4,        sys_pid, sys_pid ProcessId, s32 *StatusOut, s32 Options, sys_rusage *ResourceUsageOut) \
 	SYSCALL(72,  FileControl,  s32,     s32 FileDescriptor, s32 Op) \
 	SYSCALL(76,  Truncate,     s32,     c08 *Path, usize Length) \
 	SYSCALL(77,  FTruncate,    s32,     s32 FileDescriptor, usize Length) \
