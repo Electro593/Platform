@@ -40,11 +40,19 @@ extern s32 Platform_ThreadThunk(void);
 
 #define CHECK(Status) ((ssize)(Status) >= 0 || (ssize)(Status) < -4096)
 
+#if defined(_DEBUG)
 #define VALIDATE(Result, ErrorMessage) \
 	do { \
 		ssize Status = (ssize) Result; \
 		Assert(CHECK(Status), ErrorMessage); \
 	} while(0)
+#else
+#define VALIDATE(Result, ErrorMessage) \
+	do { \
+		ssize Status = (ssize) Result; \
+		if (!CHECK(Status)) Platform_Exit(Status); \
+	} while (0)
+#endif
 
 internal opengl_funcs OpenGLFuncs;
 
@@ -131,9 +139,26 @@ Platform_CreateThread(
 	vptr UserData
 )
 {
-	usize StackSize = 8 * 1024 * 1024;
-	vptr  Stack		= Platform_AllocateMemory(StackSize);
+	ThreadHandle->MemSize = 8 * 1024 * 1024;
+	ThreadHandle->Stack	  = Platform_AllocateMemory(ThreadHandle->MemSize);
+	vptr StackTop		  = ThreadHandle->Stack + ThreadHandle->MemSize;
 
+	// Make room for the tid
+	StackTop			  -= sizeof(s32);
+	ThreadHandle->TidLock  = StackTop;
+
+	// Set up the call stack, aligned to 16 bytes
+	StackTop = (vptr) ((usize) StackTop & ~0xFull);
+#ifdef _X64
+	StackTop	-= 4 * sizeof(vptr);
+	vptr *Words	 = StackTop;
+	Words[3]	 = Callback;			  // Popped into RAX and called
+	Words[2]	 = UserData;			  // Popped into RDX, first argument
+	Words[1]	 = 0;					  // Popped into RSI, second argument
+	Words[0]	 = Platform_ThreadThunk;  // Clone RETs into here
+#else
+#error
+#endif
 	sys_clone_flags Flags = SYS_CLONE_VM
 						  | SYS_CLONE_FS
 						  | SYS_CLONE_FILES
@@ -143,53 +168,42 @@ Platform_CreateThread(
 						  | SYS_CLONE_CHILD_CLEARTID
 						  | SYS_CLONE_IO;
 
-#ifdef _X64
-	vptr  StackTop = Stack + StackSize - 4 * sizeof(vptr);
-	vptr *Words	   = StackTop;
-	Words[3]	   = Callback;
-	Words[2]	   = UserData;
-	Words[1]	   = 0;
-	Words[0]	   = Platform_ThreadThunk;
-#else
-#error
-#endif
+	ThreadHandle->ThreadId = Sys_Clone(
+		Flags,
+		StackTop,
+		ThreadHandle->TidLock,
+		ThreadHandle->TidLock,
+		0
+	);
 
-	s32	   *TidPtr	  = (s32 *) &Words[1];
-	sys_pid ProcessId = Sys_Clone(Flags, StackTop, TidPtr, TidPtr, 0);
-
-	if (ProcessId < 0) {
-		Platform_FreeMemory(Stack, StackSize);
+	if (ThreadHandle->ThreadId < 0) {
+		Platform_FreeMemory(ThreadHandle->Stack, ThreadHandle->MemSize);
 		return FALSE;
 	}
 
-	*ThreadHandle = (thread_handle){
-		.ThreadId  = ProcessId,
-		.Stack	   = Stack,
-		.StackSize = StackSize,
-	};
 	return TRUE;
 }
 
 internal b08
 Platform_JoinThread(thread_handle ThreadHandle)
 {
-	u32 *Lock =
-		(u32 *) (ThreadHandle.Stack + ThreadHandle.StackSize - 2 * sizeof(u32));
-
 	while (TRUE) {
-		if (*Lock == 0) break;
+		if (ThreadHandle.TidLock == 0) break;
+
 		s32 Result = Sys_Futex(
-			Lock,
+			(u32 *) &ThreadHandle.TidLock,
 			SYS_FUTEX_WAIT,
 			ThreadHandle.ThreadId,
 			NULL,
 			NULL,
 			0
 		);
-		if (Result < 0 && Result != -SYS_EAGAIN) return FALSE;
+
+		if (Result < 0 && (Result != -SYS_EAGAIN || Result == -SYS_EINTR))
+			return FALSE;
 	}
 
-	Platform_FreeMemory(ThreadHandle.Stack, ThreadHandle.StackSize);
+	Platform_FreeMemory(ThreadHandle.Stack, ThreadHandle.MemSize);
 	return TRUE;
 }
 
@@ -234,7 +248,7 @@ Platform_LockMutex(mutex_handle *Mutex)
 		// immediately and we'll try again. Otherwise, we'll sleep until WAKE is
 		// signalled, at which point we'll try again.
 		s32 Result = Sys_Futex(Value, SYS_FUTEX_WAIT, 2, NULL, NULL, 0);
-		if (Result < 0) Assert(Result == -SYS_EAGAIN);
+		if (Result < 0) Assert(Result == -SYS_EAGAIN || Result == -SYS_EINTR);
 	}
 }
 
@@ -349,22 +363,25 @@ Platform_GetFileTime(
 	file_handle FileHandle;
 	if (!Platform_OpenFile(&FileHandle, FileName, FILE_READ)) return FALSE;
 
+	sys_statx_mask_flags MaskFlags = 0;
+	if (CreationTime) MaskFlags |= SYS_STATX_MASK_BTIME;
+	if (LastAccessTime) MaskFlags |= SYS_STATX_MASK_ATIME;
+	if (LastWriteTime) MaskFlags |= SYS_STATX_MASK_MTIME;
+
 	s32 Result = Sys_StatX(
 		FileHandle.FileDescriptor,
 		"",
 		SYS_STATX_FLAG_EMPTY_PATH,
-		SYS_STATX_MASK_ATIME | SYS_STATX_MASK_BTIME | SYS_STATX_MASK_MTIME,
+		MaskFlags,
 		&Stat
 	);
 	Platform_CloseFile(FileHandle);
 	if (Result < 0) return FALSE;
+	if ((Stat.Mask & MaskFlags) != MaskFlags) return FALSE;
 
-	if (CreationTime && (Stat.Mask & SYS_STATX_MASK_BTIME))
-		CreationTime->Value = Stat.CreationTime;
-	if (LastAccessTime && (Stat.Mask & SYS_STATX_MASK_ATIME))
-		LastAccessTime->Value = Stat.LastAccessTime;
-	if (LastWriteTime && (Stat.Mask & SYS_STATX_MASK_MTIME))
-		LastWriteTime->Value = Stat.LastWriteTime;
+	if (CreationTime) CreationTime->Value = Stat.CreationTime;
+	if (LastAccessTime) LastAccessTime->Value = Stat.LastAccessTime;
+	if (LastWriteTime) LastWriteTime->Value = Stat.LastWriteTime;
 
 	return TRUE;
 }
@@ -569,6 +586,8 @@ Platform_CEntry(usize ArgCount, c08 **Args, c08 **EnvParams)
 		if (_G.UtilIsLoaded) *Stack_Get() = Stack;
 		Platform_UnloadModule(Module);
 	}
+
+	Wayland_Deinit();
 
 	Heap_FreeA(_G.Args);
 	HashMap_Free(&_G.EnvTable);
