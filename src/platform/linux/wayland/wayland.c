@@ -353,7 +353,8 @@ Wayland_XdgToplevel_Close(wayland_xdg_toplevel *This)
 {
 	Wayland_DebugLog(This, "Requested to close\n");
 
-	_G.ExecutionState = EXECUTION_ENDED;
+	_G.ExecutionState		 = EXECUTION_ENDED;
+	_G.Wayland.ThreadRunning = FALSE;
 }
 
 internal void
@@ -1081,8 +1082,6 @@ error:
 internal void
 Wayland_Deinit(void)
 {
-	if (!Wayland_IsConnected()) return;
-
 	if (_G.Wayland.EventThread.ThreadId) {
 		_G.Wayland.ThreadRunning = FALSE;
 		Platform_JoinThread(_G.Wayland.EventThread);
@@ -1097,32 +1096,35 @@ Wayland_Deinit(void)
 	Egl_Deinit(&_G.Wayland.Egl);
 	Gbm_Deinit(&_G.Wayland.Gbm);
 
-	if (_G.Wayland.Registry) {
-		if (Wayland_GetVersion(_G.Wayland.Fixes) >= 2)
-			Wayland_Fixes_DestroyRegistry(
-				_G.Wayland.Fixes,
-				_G.Wayland.Registry
-			);
-		else Wayland_DestroyClientObject((vptr) _G.Wayland.Registry);
-	}
+	if (Wayland_IsConnected()) {
+		if (_G.Wayland.Registry) {
+			if (Wayland_GetVersion(_G.Wayland.Fixes) >= 2)
+				Wayland_Fixes_DestroyRegistry(
+					_G.Wayland.Fixes,
+					_G.Wayland.Registry
+				);
+			else Wayland_DestroyClientObject((vptr) _G.Wayland.Registry);
+		}
 
-	if (_G.Wayland.Compositor) {
-		if (Wayland_GetVersion(_G.Wayland.Compositor) >= 7)
-			Wayland_Compositor_Release(_G.Wayland.Compositor);
-		else Wayland_DestroyClientObject((vptr) _G.Wayland.Compositor);
+		if (_G.Wayland.Compositor) {
+			if (Wayland_GetVersion(_G.Wayland.Compositor) >= 7)
+				Wayland_Compositor_Release(_G.Wayland.Compositor);
+			else Wayland_DestroyClientObject((vptr) _G.Wayland.Compositor);
+		}
+		if (_G.Wayland.Fixes) Wayland_Fixes_Destroy(_G.Wayland.Fixes);
+		if (_G.Wayland.XdgWmBase)
+			Wayland_XdgWmBase_Destroy(_G.Wayland.XdgWmBase);
+		if (_G.Wayland.ZwpLinuxDmabufV1)
+			Wayland_ZwpLinuxDmabufV1_Destroy(_G.Wayland.ZwpLinuxDmabufV1);
+		if (_G.Wayland.ZwpRelativePointerManagerV1)
+			Wayland_ZwpRelativePointerManagerV1_Destroy(
+				_G.Wayland.ZwpRelativePointerManagerV1
+			);
+
+		Wayland_Disconnect();
 	}
-	if (_G.Wayland.Fixes) Wayland_Fixes_Destroy(_G.Wayland.Fixes);
-	if (_G.Wayland.XdgWmBase) Wayland_XdgWmBase_Destroy(_G.Wayland.XdgWmBase);
-	if (_G.Wayland.ZwpLinuxDmabufV1)
-		Wayland_ZwpLinuxDmabufV1_Destroy(_G.Wayland.ZwpLinuxDmabufV1);
-	if (_G.Wayland.ZwpRelativePointerManagerV1)
-		Wayland_ZwpRelativePointerManagerV1_Destroy(
-			_G.Wayland.ZwpRelativePointerManagerV1
-		);
 
 	Wayland_DestroyEventQueue(&_G.Wayland.EventQueue);
-
-	Wayland_Disconnect();
 
 	Mem_Set(&_G.Wayland, 0, sizeof(wayland_state));
 }

@@ -391,7 +391,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(77,  FTruncate,    s32,     s32 FileDescriptor, usize Length) \
 	SYSCALL(79,  GetCwd,       s32,     c08 *Buffer, ssize Size) \
 	SYSCALL(186, GetTid,       s32,     void) \
-	SYSCALL(202, Futex,        s32,     u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
+	SYSCALL(202, Futex,        s32,     _Atomic u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
 	SYSCALL(228, GetClockTime, s32,     sys_clock Clock, sys_timespec *Timespec) \
 	SYSCALL(231, ExitGroup,    s32,     s32 Status) \
 	SYSCALL(319, MemfdCreate,  s32,     c08 *Name, u32 Flags) \

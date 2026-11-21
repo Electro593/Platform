@@ -59,7 +59,7 @@ struct timestamp {
 };
 
 struct mutex_handle {
-	u32 Value;
+	_Atomic u32 Value;
 };
 
 struct file_handle {
@@ -68,7 +68,7 @@ struct file_handle {
 
 struct thread_handle {
 	s32			 ThreadId;
-	_Atomic s32 *TidLock;
+	_Atomic u32 *TidLock;
 	vptr		 Stack;
 	usize		 MemSize;
 };

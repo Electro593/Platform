@@ -138,13 +138,13 @@ Platform_CreateThread(
 	vptr UserData
 )
 {
-	ThreadHandle->MemSize = 8 * 1024 * 1024;
-	ThreadHandle->Stack	  = Platform_AllocateMemory(ThreadHandle->MemSize);
-	vptr StackTop		  = ThreadHandle->Stack + ThreadHandle->MemSize;
+	usize MemSize  = 8 * 1024 * 1024;
+	vptr  Stack	   = Platform_AllocateMemory(MemSize);
+	vptr  StackTop = Stack + MemSize;
 
 	// Make room for the tid
-	StackTop			  -= sizeof(s32);
-	ThreadHandle->TidLock  = StackTop;
+	StackTop	 -= sizeof(s32);
+	s32 *TidLock  = StackTop;
 
 	// Set up the call stack, aligned to 16 bytes
 	StackTop = (vptr) ((usize) StackTop & ~0xFull);
@@ -167,18 +167,19 @@ Platform_CreateThread(
 						  | SYS_CLONE_CHILD_CLEARTID
 						  | SYS_CLONE_IO;
 
-	ThreadHandle->ThreadId = Sys_Clone(
-		Flags,
-		StackTop,
-		(s32 *) ThreadHandle->TidLock,
-		(s32 *) ThreadHandle->TidLock,
-		0
-	);
+	s32 ThreadId = Sys_Clone(Flags, StackTop, TidLock, TidLock, 0);
 
-	if (ThreadHandle->ThreadId < 0) {
-		Platform_FreeMemory(ThreadHandle->Stack, ThreadHandle->MemSize);
+	if (ThreadId < 0) {
+		Platform_FreeMemory(Stack, MemSize);
 		return FALSE;
 	}
+
+	*ThreadHandle = (thread_handle){
+		.TidLock  = (_Atomic u32 *) TidLock,
+		.ThreadId = ThreadId,
+		.Stack	  = Stack,
+		.MemSize  = MemSize,
+	};
 
 	return TRUE;
 }
@@ -190,7 +191,7 @@ Platform_JoinThread(thread_handle ThreadHandle)
 		if (*ThreadHandle.TidLock == 0) break;
 
 		s32 Result = Sys_Futex(
-			(u32 *) ThreadHandle.TidLock,
+			ThreadHandle.TidLock,
 			SYS_FUTEX_WAIT,
 			ThreadHandle.ThreadId,
 			NULL,
@@ -225,8 +226,8 @@ Platform_LockMutex(mutex_handle *Mutex)
 {
 	Assert(Mutex);
 
-	s32	 Tid   = Sys_GetTid();
-	u32 *Value = &Mutex->Value;
+	s32			 Tid   = Sys_GetTid();
+	_Atomic u32 *Value = &Mutex->Value;
 
 	// If it's unlocked, lock it and return.
 	s32 OldValue = Intrin_CompareExchange32(Value, 0, 1);
@@ -256,8 +257,8 @@ Platform_UnlockMutex(mutex_handle *Mutex)
 {
 	Assert(Mutex);
 
-	s32	 Tid   = Sys_GetTid();
-	u32 *Value = &Mutex->Value;
+	s32			 Tid   = Sys_GetTid();
+	_Atomic u32 *Value = &Mutex->Value;
 
 	// Unlock the mutex.
 	s32 OldValue = Intrin_Exchange32(Value, 0);
