@@ -362,6 +362,7 @@ struct egl {
 	IMPORT(egl_boolean, Egl, eglDestroySurface,      Egl_DestroySurface,      egl_display Display, egl_surface Surface) \
 	IMPORT(egl_boolean, Egl, eglGetConfigAttrib,     Egl_GetConfigAttrib,     egl_display Display, egl_config Config, egl_config_attrib Attrib, egl_int *ValueOut) \
 	IMPORT(egl_boolean, Egl, eglGetConfigs,          Egl_GetConfigs,          egl_display Display, egl_config *ConfigsOut, egl_int ConfigSize, egl_int *ConfigCountOut) \
+	IMPORT(egl_context, Egl, eglGetCurrentContext,   Egl_GetCurrentContext,   void) \
 	IMPORT(egl_display, Egl, eglGetDisplay,          Egl_GetDisplay,          egl_native_display_type Display) \
 	IMPORT(egl_int,     Egl, eglGetError,            Egl_GetError,            void) \
 	IMPORT(egl_display, Egl, eglGetPlatformDisplay,  Egl_GetPlatformDisplay,  egl_platform Platform, egl_native_display_type Display, egl_attrib *Attribs) \
@@ -385,8 +386,6 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 
 	egl_api Api = EGL_NONE;
 	egl_int Major, Minor;
-
-	egl_config *Configs = NULL;
 
 	b08 HasApiOpenGl						= FALSE;
 	b08 HasEglKhrPlatformGbm				= FALSE;
@@ -523,12 +522,6 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			goto error;
 		}
 
-		Configs = Heap_AllocateA(Heap, ConfigCount * sizeof(egl_config));
-		if (!Configs) {
-			FPrintL("Failed to allocate space for egl configs\n");
-			goto error;
-		}
-
 		// clang-format off
 		egl_int ConfigAttribs[] = {
 			EGL_CONFIG_RED_SIZE,          1,
@@ -536,10 +529,6 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			EGL_CONFIG_BLUE_SIZE,         1,
 			EGL_CONFIG_ALPHA_SIZE,        0,
 			EGL_CONFIG_COLOR_BUFFER_TYPE, EGL_COLOR_BUFFER_RGB,
-
-			EGL_CONFIG_DEPTH_SIZE,        24,
-			EGL_CONFIG_STENCIL_SIZE,      8,
-
 			EGL_CONFIG_SURFACE_TYPE,      0,
 			EGL_CONFIG_CONFORMANT,        EGL_CONFORMANCE_OPENGL,
 			EGL_CONFIG_RENDERABLE_TYPE,   EGL_RENDERABLE_TYPE_OPENGL,
@@ -551,8 +540,8 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		egl_boolean Success	   = Egl_ChooseConfig(
 			Egl.Display,
 			ConfigAttribs,
-			Configs,
-			ConfigCount,
+			&Egl.Config,
+			1,
 			&MatchCount
 		);
 		if (!Success) {
@@ -562,35 +551,10 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			);
 			goto error;
 		}
-
-		egl_int SelectedIndex = -1;
-		for (egl_int I = 0; I < MatchCount; I++) {
-			egl_int Value;
-			Success = Egl_GetConfigAttrib(
-				Egl.Display,
-				Configs[I],
-				EGL_CONFIG_NATIVE_VISUAL_ID,
-				&Value
-			);
-			if (!Success) {
-				FPrintL(
-					"Failed to query egl config attrib: code %#x\n",
-					Egl_GetError()
-				);
-				goto error;
-			}
-
-			if (Value == Gbm->Format) {
-				SelectedIndex = I;
-				break;
-			}
-		}
-		if (SelectedIndex == -1) {
+		if (!MatchCount) {
 			FPrintL("No applicable egl configs were found\n");
 			goto error;
 		}
-
-		Egl.Config = Configs[SelectedIndex];
 	}
 
 	// Create context
@@ -660,10 +624,12 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 		for (usize I = 0; I < 2; I++) {
 			gbm_bo *Bo = Gbm->BufferObjects[I];
 
-			drm_format_modifier Modifier = Gbm_BoGetModifier(Bo);
+			drm_format_modifier Modifier   = Gbm_BoGetModifier(Bo);
+			s32					PlaneCount = Gbm_BoGetPlaneCount(Bo);
+			Assert(PlaneCount > 0 && PlaneCount <= 4);
 
 			s32 BoFds[4];
-			for (s32 PI = 0; PI < Gbm_BoGetPlaneCount(Bo); PI++) {
+			for (s32 PI = 0; PI < PlaneCount; PI++) {
 				BoFds[PI] = Gbm_BoGetFdForPlane(Bo, PI);
 				if (BoFds[PI] < 0) {
 					for (s32 PJ = 0; PJ < PI; PJ++) Sys_Close(BoFds[PJ]);
@@ -709,7 +675,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 			ImageAttribs[2 * AI++ + 1] = Gbm_BoGetWidth(Bo);
 			ImageAttribs[2 * AI++ + 1] = Gbm_BoGetHeight(Bo);
 			ImageAttribs[2 * AI++ + 1] = Gbm_BoGetFormat(Bo);
-			for (s32 PI = 0; PI < Gbm_BoGetPlaneCount(Bo); PI++) {
+			for (s32 PI = 0; PI < PlaneCount; PI++) {
 				ImageAttribs[2 * AI++ + 1] = BoFds[PI];
 				ImageAttribs[2 * AI++ + 1] = Gbm_BoGetOffset(Bo, PI);
 				ImageAttribs[2 * AI++ + 1] = Gbm_BoGetStrideForPlane(Bo, PI);
@@ -726,8 +692,7 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 				ImageAttribs
 			);
 
-			for (s32 PI = 0; PI < Gbm_BoGetPlaneCount(Bo); PI++)
-				Sys_Close(BoFds[PI]);
+			for (s32 PI = 0; PI < PlaneCount; PI++) Sys_Close(BoFds[PI]);
 
 			if (!Egl.Images[I]) {
 				FPrintL(
@@ -780,12 +745,10 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 	}
 
 	FPrintL("Successfully initialized egl!\n");
-	Heap_FreeA(Configs);
 	*EglOut = Egl;
 	return TRUE;
 
 error:
-	if (Configs) Heap_FreeA(Configs);
 	Egl_Deinit(&Egl);
 	return FALSE;
 
@@ -806,25 +769,27 @@ Egl_Deinit(egl *Egl)
 			if (It != EGL_NO_IMAGE) Egl_DestroyImage(Egl->Display, It);
 
 		if (Egl->Context != EGL_NO_CONTEXT) {
-			OpenGL_DeleteRenderbuffers(
-				ARRAY_COUNT(Egl->RenderbufferIds),
-				Egl->RenderbufferIds
-			);
-			OpenGL_DeleteFramebuffers(
-				ARRAY_COUNT(Egl->FramebufferIds),
-				Egl->FramebufferIds
-			);
-			OpenGL_DeleteTextures(
-				ARRAY_COUNT(Egl->TextureIds),
-				Egl->TextureIds
-			);
+			if (Egl_GetCurrentContext() == Egl->Context) {
+				OpenGL_DeleteRenderbuffers(
+					ARRAY_COUNT(Egl->RenderbufferIds),
+					Egl->RenderbufferIds
+				);
+				OpenGL_DeleteFramebuffers(
+					ARRAY_COUNT(Egl->FramebufferIds),
+					Egl->FramebufferIds
+				);
+				OpenGL_DeleteTextures(
+					ARRAY_COUNT(Egl->TextureIds),
+					Egl->TextureIds
+				);
 
-			Egl_MakeCurrent(
-				Egl->Display,
-				EGL_NO_SURFACE,
-				EGL_NO_SURFACE,
-				EGL_NO_CONTEXT
-			);
+				Egl_MakeCurrent(
+					Egl->Display,
+					EGL_NO_SURFACE,
+					EGL_NO_SURFACE,
+					EGL_NO_CONTEXT
+				);
+			}
 
 			Egl_DestroyContext(Egl->Display, Egl->Context);
 		}

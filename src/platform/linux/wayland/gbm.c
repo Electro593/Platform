@@ -98,7 +98,7 @@ Gbm_Init(
 
 	ARRAY_FOREACH_PTR (Gbm.BufferObjects) {
 		if (Modifier != DRM_FORMAT_MOD_INVALID) {
-			if (Gbm_BoCreateWithModifiers2)
+			if (Gbm_BoCreateWithModifiers2) {
 				*It = Gbm_BoCreateWithModifiers2(
 					Gbm.Device,
 					Width,
@@ -108,6 +108,18 @@ Gbm_Init(
 					1,
 					GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING
 				);
+
+				if (!*It)
+					*It = Gbm_BoCreateWithModifiers2(
+						Gbm.Device,
+						Width,
+						Height,
+						Format,
+						&Modifier,
+						1,
+						GBM_BO_USE_RENDERING
+					);
+			}
 
 			if (!*It)
 				*It = Gbm_BoCreateWithModifiers(
@@ -126,6 +138,15 @@ Gbm_Init(
 				Format,
 				GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING
 			);
+
+			if (!*It)
+				*It = Gbm_BoCreate(
+					Gbm.Device,
+					Width,
+					Height,
+					Format,
+					GBM_BO_USE_RENDERING
+				);
 		}
 
 		if (!*It) {

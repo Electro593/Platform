@@ -369,6 +369,7 @@ typedef struct fstring_format_list {
 	EXPORT(string, String_TrimWhitespace,       string Str) \
 	EXPORT(usize,  String_FindCharFromLeft,     string Str, c32 Target) \
 	EXPORT(string, String_SplitLeftByCodepoint, string *Str, c32 Codepoint) \
+	EXPORT(b08,    String_BeginsWith,           string Str, string Target) \
 	EXPORT(usize,  String_Cpy,                  string Dest, string Src) \
 	EXPORT(usize,  String_Fill,                 string Dest, u32 Codepoint, usize Count) \
 	\
@@ -577,6 +578,22 @@ String_SplitLeftByCodepoint(string *Str, c32 Codepoint)
 	Str->Count	= 0;
 	Str->Text	= Left.Text + Left.Length;
 	return Left;
+}
+
+/// @brief Check whether a string begins with another, respecting encoding.
+/// @param Str The string to check against.
+/// @param Target The substring to find within @p Str.
+/// @return Whether @p Str begins with @p Target.
+internal b08
+String_BeginsWith(string Str, string Target)
+{
+	while (Str.Length && Target.Length) {
+		u32 A = String_NextCodepoint(&Str);
+		u32 B = String_NextCodepoint(&Target);
+		if (A != B) return FALSE;
+	}
+
+	return Str.Length >= Target.Length;
 }
 
 /// @brief Copy a string's entire contents into another, respecting encoding.

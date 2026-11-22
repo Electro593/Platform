@@ -88,12 +88,14 @@ typedef enum sys_errno {
 } sys_errno;
 
 typedef enum sys_open_flags : s32 {
-	SYS_OPEN_READONLY  = 0x0000,
-	SYS_OPEN_WRITEONLY = 0x0001,
-	SYS_OPEN_READWRITE = 0x0002,
-	SYS_OPEN_CREATE	   = 0x0040,
-	SYS_OPEN_TRUNCATE  = 0x0200,
-	SYS_OPEN_APPEND	   = 0x0400,
+	SYS_OPEN_READONLY  = 0x00000,
+	SYS_OPEN_WRITEONLY = 0x00001,
+	SYS_OPEN_READWRITE = 0x00002,
+	SYS_OPEN_CREATE	   = 0x00040,
+	SYS_OPEN_TRUNCATE  = 0x00200,
+	SYS_OPEN_APPEND	   = 0x00400,
+	SYS_OPEN_DIRECTORY = 0x10000,
+	SYS_OPEN_CLOEXEC   = 0x80000,
 } sys_open_flags;
 
 typedef enum sys_open_mode : u16 {
@@ -128,10 +130,13 @@ typedef enum sys_open_mode : u16 {
 
 #define SYS_SOCKET_STREAM 1
 
+#define SYS_STAT_MODE_IS_CHARACTER(Mode) (((Mode) & SYS_STAT_FILE_TYPE_MASK) == SYS_STAT_FILE_TYPE_CHARACTER)
+
 #define SYS_DEV_MAJOR(ID) (((ID & 0x00000000000FFF00ull) >> 8) | ((ID & 0xFFFFF00000000000ull) >> 32))
 #define SYS_DEV_MINOR(ID) (((ID & 0x00000000000000FFull) >> 0) | ((ID & 0x00000FFFFFF00000ull) >> 12))
 
 typedef s32 sys_pid;
+typedef u64 sys_dev;
 
 typedef struct sys_sockaddr_unix {
 	u16 Family;
@@ -196,12 +201,31 @@ typedef struct sys_timespec {
 	u64 Nano;
 } sys_timespec;
 
+typedef enum sys_dirent_file_type : u08 {
+	SYS_DIRENT_FILE_TYPE_UNKNOWN   = 0,
+	SYS_DIRENT_FILE_TYPE_FIFO	   = 1,
+	SYS_DIRENT_FILE_TYPE_CHARACTER = 2,
+	SYS_DIRENT_FILE_TYPE_DIRECTORY = 4,
+	SYS_DIRENT_FILE_TYPE_BLOCK	   = 6,
+	SYS_DIRENT_FILE_TYPE_REGULAR   = 8,
+	SYS_DIRENT_FILE_TYPE_LINK	   = 10,
+	SYS_DIRENT_FILE_TYPE_SOCKET	   = 12,
+} sys_dirent_file_type;
+
+typedef struct sys_dirent64 {
+	u64					 Inode;
+	s64					 Off;
+	u16					 EntrySize;
+	sys_dirent_file_type FileType;
+	c08					 Name[];
+} sys_dirent64;
+
 typedef struct sys_stat {
 	u64 DeviceId;
 	u64 Inode;
 	u64 Protection;
 
-	u32 HardLinkCount;
+	u32 Mode;
 	u32 UserID;
 	u32 GroupID;
 	u32 _Padding0;
@@ -392,6 +416,7 @@ extern s32	dlclose(vptr Handle);
 	SYSCALL(79,  GetCwd,       s32,     c08 *Buffer, ssize Size) \
 	SYSCALL(186, GetTid,       s32,     void) \
 	SYSCALL(202, Futex,        s32,     _Atomic u32 *Value, sys_futex_op Op, u32 Target, sys_timespec *Time, u32 *Value2, u32 Target2) \
+	SYSCALL(217, GetDirEnts64, ssize,   s32 Fd, sys_dirent64 *DirEntriesOut, u32 Count) \
 	SYSCALL(228, GetClockTime, s32,     sys_clock Clock, sys_timespec *Timespec) \
 	SYSCALL(231, ExitGroup,    s32,     s32 Status) \
 	SYSCALL(319, MemfdCreate,  s32,     c08 *Name, u32 Flags) \

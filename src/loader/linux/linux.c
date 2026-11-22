@@ -63,7 +63,7 @@ typedef struct sys_stat {
 	u64 Inode;
 	u64 Protection;
 
-	u32 HardLinkCount;
+	u32 Mode;
 	u32 UserID;
 	u32 GroupID;
 	u32 _Padding0;

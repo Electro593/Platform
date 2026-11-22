@@ -60,7 +60,19 @@ Drm_IoCtl(s32 Fd, usize Op, vptr Data)
 
 internal s32
 Drm_OpenDriver(string Name)
-{ return Sys_Open(Name.Text, SYS_OPEN_READWRITE, 0); }
+{
+	s32 Fd = Sys_Open(Name.Text, SYS_OPEN_READWRITE | SYS_OPEN_CLOEXEC, 0);
+	if (Fd < 0) return Fd;
+
+	sys_stat Stat;
+	s32		 Result = Sys_FileStat(Fd, &Stat);
+	if (Result < 0 || !SYS_STAT_MODE_IS_CHARACTER(Stat.Mode)) {
+		Sys_Close(Fd);
+		return -SYS_ENODEV;
+	}
+
+	return Fd;
+}
 
 internal s32
 Drm_CloseDriver(s32 Fd)
@@ -89,31 +101,47 @@ Drm_GetMagicNumber(s32 Fd, u32 *MagicOut)
 { return Drm_IoCtl(Fd, DRM_IOCTL_GET_MAGIC, MagicOut); }
 
 internal s32
-Drm_OpenDriverFromVersion(s32 Major, s32 Minor)
+Drm_OpenRenderNodeFromDevice(sys_dev DeviceId)
 {
-	string UeventName = FNStringL("/sys/dev/char/%d:%d/uevent", Major, Minor);
-	s32	   UeventFd	  = Sys_Open(UeventName.Text, SYS_OPEN_READONLY, 0);
-	if (UeventFd < 0) return UeventFd;
+	u32 Major = SYS_DEV_MAJOR(DeviceId);
+	u32 Minor = SYS_DEV_MINOR(DeviceId);
 
-	c08 Buffer[256];
-	Buffer[255]		= 0;
-	ssize BytesRead = Sys_Read(UeventFd, Buffer, 255);
-	if (BytesRead < 0) return (s32) BytesRead;
+	string PathName = FNStringL("/sys/dev/char/%d:%d/device/drm", Major, Minor);
+	s32	   PathFd	= Sys_Open(
+		PathName.Text,
+		SYS_OPEN_READONLY | SYS_OPEN_DIRECTORY | SYS_OPEN_CLOEXEC,
+		0
+	);
+	if (PathFd < 0) return PathFd;
+	ssize FdResult = 0;
 
-	string Str = CString(Buffer);
-	while (Str.Length) {
-		string Line	 = String_SplitLeftByCodepoint(&Str, '\n');
-		string Key	 = String_SplitLeftByCodepoint(&Line, '=');
-		string Value = String_TrimWhitespace(Line);
-		Key			 = String_TrimWhitespace(Key);
+	sys_dirent64  DirEntries[16];
+	sys_dirent64 *Entry;
+	while (TRUE) {
+		FdResult =
+			Sys_GetDirEnts64(PathFd, DirEntries, ARRAY_COUNT(DirEntries));
+		if (FdResult < 0) break;
+		if (FdResult == 0) {
+			FdResult = -SYS_ENODEV;
+			break;
+		}
 
-		if (String_Cmp(Key, CStringL("DEVNAME")) == 0) {
-			string Path = FNStringL("/dev/%s", Value);
-			return Drm_OpenDriver(Path);
+		Entry = DirEntries;
+		while (FdResult > 0) {
+			string EntryName = CString(Entry->Name);
+			if (String_BeginsWith(EntryName, CStringL("renderD"))) {
+				string Path = FNStringL("/dev/dri/%s", EntryName);
+				FdResult	= Drm_OpenDriver(Path);
+				if (FdResult >= 0) break;
+			}
+
+			FdResult -= Entry->EntrySize;
+			Entry	  = (vptr) ((usize) Entry + Entry->EntrySize);
 		}
 	}
 
-	return SYS_ENODEV;
+	Sys_Close(PathFd);
+	return FdResult;
 }
 
 #endif

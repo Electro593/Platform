@@ -495,12 +495,11 @@ Wayland_ZwpLinuxDmabufFeedbackV1_TrancheTargetDevice(
 		*(u64 *) Device.Data
 	);
 
-	u64 SpecialDeviceId = *(u64 *) Device.Data;
+	Assert(Device.Size == sizeof(sys_dev));
+	sys_dev DeviceId = Device.Data[0];
+	if (Device.Size == 8) DeviceId |= (sys_dev) Device.Data[1] << 32;
 
-	s32 Fd = Drm_OpenDriverFromVersion(
-		SYS_DEV_MAJOR(SpecialDeviceId),
-		SYS_DEV_MINOR(SpecialDeviceId)
-	);
+	s32 Fd = Drm_OpenRenderNodeFromDevice(DeviceId);
 	if (Fd < 0) {
 		Wayland_DebugLog(This, "Failed to open device node! code %d\n", -Fd);
 		goto error;
@@ -1095,6 +1094,7 @@ Wayland_Deinit(void)
 
 	Egl_Deinit(&_G.Wayland.Egl);
 	Gbm_Deinit(&_G.Wayland.Gbm);
+	if (_G.Wayland.DrmFd >= 0) Drm_CloseDriver(_G.Wayland.DrmFd);
 
 	if (Wayland_IsConnected()) {
 		if (_G.Wayland.Registry) {
