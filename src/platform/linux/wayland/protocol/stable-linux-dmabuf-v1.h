@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <platform/linux/wayland/drm.h>
+
 #include "core.h"
 
 #define ZWP_LINUX_DMABUF_V1                                          \
@@ -19,9 +21,9 @@
 		R((GetSurfaceFeedback, 4),                                   \
 			N(ZWP_LINUX_DMABUF_FEEDBACK_V1),                         \
 			O(Surface, WL_SURFACE)),                                 \
-		E((Format, 1, 3), U(Format, wl_drm_format)),                 \
+		E((Format, 1, 3), U(Format, drm_format)),                    \
 		E((Modifier, 3, 3),                                          \
-			U(Format, wl_drm_format),                                \
+			U(Format, drm_format),                                   \
 			U(ModifierHigh),                                         \
 			U(ModifierLow)))
 
@@ -38,13 +40,13 @@
 		R((Create),                                           \
 			I(Width),                                         \
 			I(Height),                                        \
-			U(Format, wl_drm_format),                         \
+			U(Format, drm_format),                            \
 			U(Flags, zwp_linux_buffer_params_v1_flags)),      \
 		R((CreateImmed, 2),                                   \
 			N(WL_BUFFER),                                     \
 			I(Width),                                         \
 			I(Height),                                        \
-			U(Format, wl_drm_format),                         \
+			U(Format, drm_format),                            \
 			U(Flags, zwp_linux_buffer_params_v1_flags)),      \
 		R((SetSamplingDevice, 6), A(Device)),                 \
 		E((Created), N(Buffer, WL_BUFFER)),                   \
@@ -86,7 +88,5 @@ typedef enum zwp_linux_dmabuf_feedback_v1_tranche_flags {
 } zwp_linux_dmabuf_feedback_v1_tranche_flags;
 
 WLI_DECLARE(ZWP_LINUX_DMABUF_V1)
-
 WLI_DECLARE(ZWP_LINUX_BUFFER_PARAMS_V1)
-
 WLI_DECLARE(ZWP_LINUX_DMABUF_FEEDBACK_V1)
