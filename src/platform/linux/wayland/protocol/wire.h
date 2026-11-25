@@ -52,7 +52,10 @@ typedef struct wayland_interface_header {
 
 	wayland_prototype *Prototype;
 
-	mutex_handle		 LinkLock;
+	mutex_handle Lock;
+
+	vptr UserData;
+
 	wayland_event_queue *LinkedEventQueue;
 	wayland_event_queue	 InternalEventQueue;
 } wayland_interface_header;

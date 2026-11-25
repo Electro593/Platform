@@ -13,18 +13,18 @@
 
 #include "core.h"
 
-#define ZWP_LINUX_DMABUF_V1                                            \
-	((ZwpLinuxDmabufV1, zwp_linux_dmabuf_v1, 6),                       \
-		D((Destroy)),                                                  \
-		R((CreateParams), N(, ZWP_LINUX_BUFFER_PARAMS_V1)),            \
-		R((GetDefaultFeedback, 4), N(, ZWP_LINUX_DMABUF_FEEDBACK_V1)), \
-		R((GetSurfaceFeedback, 4),                                     \
-			N(, ZWP_LINUX_DMABUF_FEEDBACK_V1),                         \
-			O(Surface, WL_SURFACE)),                                   \
-		E((Format, 1, 3), U(Format, drm_format)),                      \
-		E((Modifier, 3, 3),                                            \
-			U(Format, drm_format),                                     \
-			U(ModifierHigh),                                           \
+#define ZWP_LINUX_DMABUF_V1                                          \
+	((ZwpLinuxDmabufV1, zwp_linux_dmabuf_v1, 6),                     \
+		D((Destroy)),                                                \
+		R((CreateParams), N(ZWP_LINUX_BUFFER_PARAMS_V1)),            \
+		R((GetDefaultFeedback, 4), N(ZWP_LINUX_DMABUF_FEEDBACK_V1)), \
+		R((GetSurfaceFeedback, 4),                                   \
+			N(ZWP_LINUX_DMABUF_FEEDBACK_V1),                         \
+			O(Surface, WL_SURFACE)),                                 \
+		E((Format, 1, 3), U(Format, drm_format)),                    \
+		E((Modifier, 3, 3),                                          \
+			U(Format, drm_format),                                   \
+			U(ModifierHigh),                                         \
 			U(ModifierLow)))
 
 #define ZWP_LINUX_BUFFER_PARAMS_V1                            \
@@ -43,7 +43,7 @@
 			U(Format, drm_format),                            \
 			U(Flags, zwp_linux_buffer_params_v1_flags)),      \
 		R((CreateImmed, 2),                                   \
-			N(, WL_BUFFER),                                   \
+			N(WL_BUFFER),                                     \
 			I(Width),                                         \
 			I(Height),                                        \
 			U(Format, drm_format),                            \
@@ -52,7 +52,7 @@
 		E((Created), N(Buffer, WL_BUFFER)),                   \
 		E((Failed)))
 
-typedef enum zwp_linux_buffer_params_v1_error {
+typedef enum zwp_linux_buffer_params_v1_error : u32 {
 	ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_ALREADY_USED		= 0,
 	ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX			= 1,
 	ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_SET			= 2,
@@ -64,7 +64,7 @@ typedef enum zwp_linux_buffer_params_v1_error {
 	ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DEV_T_SIZE = 8,  // v6
 } zwp_linux_buffer_params_v1_error;
 
-typedef enum zwp_linux_buffer_params_v1_flags {
+typedef enum zwp_linux_buffer_params_v1_flags : u32 {
 	ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT	  = 0x01,
 	ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_INTERLACED	  = 0x02,
 	ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_BOTTOM_FIRST = 0x04,
@@ -82,7 +82,7 @@ typedef enum zwp_linux_buffer_params_v1_flags {
 		E((Tranche_flags),                                         \
 			U(Flags, zwp_linux_dmabuf_feedback_v1_tranche_flags)))
 
-typedef enum zwp_linux_dmabuf_feedback_v1_tranche_flags {
+typedef enum zwp_linux_dmabuf_feedback_v1_tranche_flags : u32 {
 	ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SCANOUT	= 0x01,	 // v4
 	ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SAMPLING = 0x02,	 // v6
 } zwp_linux_dmabuf_feedback_v1_tranche_flags;

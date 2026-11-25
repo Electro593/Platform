@@ -11,15 +11,15 @@
 
 #include "core.h"
 
-#define XDG_WM_BASE                                                   \
-	((XdgWmBase, xdg_wm_base, 7),                                     \
-		D((Destroy)),                                                 \
-		R((CreatePositioner), N(, XDG_POSITIONER)),                   \
-		R((GetXdgSurface), N(, XDG_SURFACE), O(Surface, WL_SURFACE)), \
-		R((Pong), U(Serial)),                                         \
+#define XDG_WM_BASE                                                 \
+	((XdgWmBase, xdg_wm_base, 7),                                   \
+		D((Destroy)),                                               \
+		R((CreatePositioner), N(XDG_POSITIONER)),                   \
+		R((GetXdgSurface), N(XDG_SURFACE), O(Surface, WL_SURFACE)), \
+		R((Pong), U(Serial)),                                       \
 		E((Ping), U(Serial)))
 
-typedef enum xdg_wm_base_error {
+typedef enum xdg_wm_base_error : u32 {
 	XDG_WM_BASE_ERROR_ROLE					= 0,
 	XDG_WM_BASE_ERROR_DEFUNCT_SURFACES		= 1,
 	XDG_WM_BASE_ERROR_NOT_THE_TOPMOST_POPUP = 2,
@@ -43,11 +43,11 @@ typedef enum xdg_wm_base_error {
 		R((SetParentSize, 3), I(ParentWidth), I(ParentHeight)),             \
 		R((SetParentConfigure, 3), U(Serial)))
 
-typedef enum xdg_positioner_error {
+typedef enum xdg_positioner_error : u32 {
 	XDG_POSITIONER_ERROR_INVALID_INPUT = 0
 } xdg_positioner_error;
 
-typedef enum xdg_positioner_anchor {
+typedef enum xdg_positioner_anchor : u32 {
 	XDG_POSITIONER_ANCHOR_NONE		   = 0,
 	XDG_POSITIONER_ANCHOR_TOP		   = 1,
 	XDG_POSITIONER_ANCHOR_BOTTOM	   = 2,
@@ -59,7 +59,7 @@ typedef enum xdg_positioner_anchor {
 	XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT = 8,
 } xdg_positioner_anchor;
 
-typedef enum xdg_positioner_gravity {
+typedef enum xdg_positioner_gravity : u32 {
 	XDG_POSITIONER_GRAVITY_NONE			= 0,
 	XDG_POSITIONER_GRAVITY_TOP			= 1,
 	XDG_POSITIONER_GRAVITY_BOTTOM		= 2,
@@ -71,7 +71,7 @@ typedef enum xdg_positioner_gravity {
 	XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT = 8,
 } xdg_positioner_gravity;
 
-typedef enum xdg_positioner_constraint_adjustment {
+typedef enum xdg_positioner_constraint_adjustment : u32 {
 	XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_NONE	  = 0,
 	XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X  = 1,
 	XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y  = 2,
@@ -84,16 +84,16 @@ typedef enum xdg_positioner_constraint_adjustment {
 #define XDG_SURFACE                                              \
 	((XdgSurface, xdg_surface, 7),                               \
 		D((Destroy)),                                            \
-		R((GetToplevel), N(, XDG_TOPLEVEL)),                     \
+		R((GetToplevel), N(XDG_TOPLEVEL)),                       \
 		R((GetPopup),                                            \
-			N(, XDG_POPUP),                                      \
+			N(XDG_POPUP),                                        \
 			O(Parent, , TRUE),                                   \
 			O(Positioner, XDG_POSITIONER)),                      \
 		R((SetWindowGeometry), I(X), I(Y), I(Width), I(Height)), \
 		R((AckConfigure), U(Serial)),                            \
 		E((Configure), U(Serial)))
 
-typedef enum xdg_surface_error {
+typedef enum xdg_surface_error : u32 {
 	XDG_SURFACE_ERROR_NOT_CONSTRUCTED	  = 1,
 	XDG_SURFACE_ERROR_ALREADY_CONSTRUCTED = 2,
 	XDG_SURFACE_ERROR_UNCONFIGURED_BUFFER = 3,
@@ -132,7 +132,7 @@ typedef enum xdg_toplevel_error : u32 {
 	XDG_TOPLEVEL_ERROR_INVALID_SIZE		   = 2,
 } xdg_toplevel_error;
 
-typedef enum xdg_toplevel_resize_edge {
+typedef enum xdg_toplevel_resize_edge : u32 {
 	XDG_TOPLEVEL_RESIZE_EDGE_NONE		  = 0,
 	XDG_TOPLEVEL_RESIZE_EDGE_TOP		  = 1,
 	XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM		  = 2,
@@ -144,7 +144,7 @@ typedef enum xdg_toplevel_resize_edge {
 	XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT = 10,
 } xdg_toplevel_resize_edge;
 
-typedef enum xdg_toplevel_state {
+typedef enum xdg_toplevel_state : u32 {
 	XDG_TOPLEVEL_STATE_MAXIMIZED			   = 1,
 	XDG_TOPLEVEL_STATE_FULLSCREEN			   = 2,
 	XDG_TOPLEVEL_STATE_RESIZING				   = 3,
@@ -160,7 +160,7 @@ typedef enum xdg_toplevel_state {
 	XDG_TOPLEVEL_STATE_CONSTRAINED_BOTTOMSINCE = 13,  // v7
 } xdg_toplevel_state;
 
-typedef enum xdg_toplevel_wm_capabilities {
+typedef enum xdg_toplevel_wm_capabilities : u32 {
 	XDG_TOPLEVEL_WM_CAPABILITIES_WINDOW_MENU = 1,
 	XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE	 = 2,
 	XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN	 = 3,
@@ -176,7 +176,7 @@ typedef enum xdg_toplevel_wm_capabilities {
 		E((PopupDone)),                                              \
 		E((Repositioned, 3), U(Token)))
 
-typedef enum xdg_popup_error {
+typedef enum xdg_popup_error : u32 {
 	XDG_POPUP_ERROR_INVALID_GRAB = 0,
 } xdg_popup_error;
 

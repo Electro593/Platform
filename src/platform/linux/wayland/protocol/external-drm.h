@@ -89,14 +89,14 @@ typedef enum wl_drm_capability {
 	((WlDrm, wl_drm, 2),                             \
 		R((Authenticate), U(Id)),                    \
 		R((CreateBuffer),                            \
-			N(, BUFFER),                             \
+			N(WL_BUFFER),                            \
 			U(Name),                                 \
 			I(Width),                                \
 			I(Height),                               \
 			U(Stride),                               \
 			U(Format)),                              \
 		R((CreatePlanarBuffer),                      \
-			N(, BUFFER),                             \
+			N(WL_BUFFER),                            \
 			U(Name),                                 \
 			I(Width),                                \
 			I(Height),                               \
@@ -108,7 +108,7 @@ typedef enum wl_drm_capability {
 			I(Offset2),                              \
 			I(Stride2)),                             \
 		R((CreatePrimeBuffer, 2),                    \
-			N(, BUFFER),                             \
+			N(WL_BUFFER),                            \
 			F(Name),                                 \
 			I(Width),                                \
 			I(Height),                               \
