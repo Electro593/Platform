@@ -1,11 +1,11 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-*                                                                            *
-*  Author: Aria Seiler                                                       *
-*                                                                            *
-*  This program is in the public domain. There is no implied warranty, so    *
-*  use it at your own risk.                                                  *
-*                                                                            *
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so use *
+*  it at your own risk.                                                       *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
@@ -119,9 +119,7 @@ Gbm_Init(
 						1,
 						GBM_BO_USE_RENDERING
 					);
-			}
-
-			if (!*It)
+			} else if (Gbm_BoCreateWithModifiers) {
 				*It = Gbm_BoCreateWithModifiers(
 					Gbm.Device,
 					Width,
@@ -130,6 +128,7 @@ Gbm_Init(
 					&Modifier,
 					1
 				);
+			}
 		} else {
 			*It = Gbm_BoCreate(
 				Gbm.Device,

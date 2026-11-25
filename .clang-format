@@ -120,7 +120,7 @@ RemoveBracesLLVM: true
 RemoveEmptyLinesInUnwrappedLines: true
 RemoveParentheses: ReturnStatement
 RemoveSemicolon: true
-SkipMacroDefinitionBody: true
+SkipMacroDefinitionBody: false
 SortIncludes: Never
 SpaceAfterCStyleCast: true
 SpaceAfterLogicalNot: false

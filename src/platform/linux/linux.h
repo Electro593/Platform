@@ -1,11 +1,11 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-*                                                                            *
-*  Author: Aria Seiler                                                       *
-*                                                                            *
-*  This program is in the public domain. There is no implied warranty, so    *
-*  use it at your own risk.                                                  *
-*                                                                            *
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so use *
+*  it at your own risk.                                                       *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifndef _PLATFORM_LINUX_LINUX_H
 #define _PLATFORM_LINUX_LINUX_H
@@ -117,20 +117,22 @@ typedef enum sys_open_mode : u16 {
 #define SYS_RUNTIME_LOADER_GLOBAL   0x0100
 #define SYS_RUNTIME_LOADER_NODELETE 0x1000
 
-#define SYS_STAT_FILE_TYPE_MASK      017000
-#define SYS_STAT_FILE_TYPE_FIFO      0010000
-#define SYS_STAT_FILE_TYPE_CHARACTER 0020000
-#define SYS_STAT_FILE_TYPE_DIRECTORY 0040000
-#define SYS_STAT_FILE_TYPE_BLOCK     0060000
-#define SYS_STAT_FILE_TYPE_REGULAR   0100000
-#define SYS_STAT_FILE_TYPE_SYMLINK   0120000
-#define SYS_STAT_FILE_TYPE_SOCKET    0140000
+typedef enum sys_stat_mode : u32 {
+	SYS_STAT_MODE_FILE_TYPE_MASK	  = 0xF000,
+	SYS_STAT_MODE_FILE_TYPE_FIFO	  = 0x1000,
+	SYS_STAT_MODE_FILE_TYPE_CHARACTER = 0x2000,
+	SYS_STAT_MODE_FILE_TYPE_DIRECTORY = 0x4000,
+	SYS_STAT_MODE_FILE_TYPE_BLOCK	  = 0x6000,
+	SYS_STAT_MODE_FILE_TYPE_REGULAR	  = 0x8000,
+	SYS_STAT_MODE_FILE_TYPE_SYMLINK	  = 0xA000,
+	SYS_STAT_MODE_FILE_TYPE_SOCKET	  = 0xC000,
+} sys_stat_mode;
+
+#define SYS_STAT_MODE_IS_CHARACTER(Mode) (((Mode) & SYS_STAT_MODE_FILE_TYPE_MASK) == SYS_STAT_MODE_FILE_TYPE_CHARACTER)
 
 #define SYS_ADDRESS_FAMILY_UNIX 1
 
 #define SYS_SOCKET_STREAM 1
-
-#define SYS_STAT_MODE_IS_CHARACTER(Mode) (((Mode) & SYS_STAT_FILE_TYPE_MASK) == SYS_STAT_FILE_TYPE_CHARACTER)
 
 #define SYS_DEV_MAJOR(ID) (((ID & 0x00000000000FFF00ull) >> 8) | ((ID & 0xFFFFF00000000000ull) >> 32))
 #define SYS_DEV_MINOR(ID) (((ID & 0x00000000000000FFull) >> 0) | ((ID & 0x00000FFFFFF00000ull) >> 12))
@@ -225,10 +227,10 @@ typedef struct sys_stat {
 	u64 Inode;
 	u64 Protection;
 
-	u32 Mode;
-	u32 UserID;
-	u32 GroupID;
-	u32 _Padding0;
+	sys_stat_mode Mode;
+	u32			  UserID;
+	u32			  GroupID;
+	u32			  _Padding0;
 
 	u64 SpecialDeviceId;
 	s64 Size;

@@ -1,11 +1,11 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-*                                                                            *
-*  Author: Aria Seiler                                                       *
-*                                                                            *
-*  This program is in the public domain. There is no implied warranty, so    *
-*  use it at your own risk.                                                  *
-*                                                                            *
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so use *
+*  it at your own risk.                                                       *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
@@ -626,7 +626,13 @@ Egl_Init(gbm *Gbm, heap *Heap, egl *EglOut)
 
 			drm_format_modifier Modifier   = Gbm_BoGetModifier(Bo);
 			s32					PlaneCount = Gbm_BoGetPlaneCount(Bo);
-			Assert(PlaneCount > 0 && PlaneCount <= 4);
+			if (PlaneCount <= 0 || PlaneCount > 4) {
+				FPrintL(
+					"Invalid number of buffer planes: %d (must be 1-4)\n",
+					PlaneCount
+				);
+				goto error;
+			}
 
 			s32 BoFds[4];
 			for (s32 PI = 0; PI < PlaneCount; PI++) {

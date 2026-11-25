@@ -1,11 +1,11 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
-*                                                                            *
-*  Author: Aria Seiler                                                       *
-*                                                                            *
-*  This program is in the public domain. There is no implied warranty, so    *
-*  use it at your own risk.                                                  *
-*                                                                            *
-\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+*                                                                             *
+*  Author: Aria Seiler                                                        *
+*                                                                             *
+*  This program is in the public domain. There is no implied warranty, so use *
+*  it at your own risk.                                                       *
+*                                                                             *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifdef INCLUDE_HEADER
 
@@ -118,8 +118,7 @@ Drm_OpenRenderNodeFromDevice(sys_dev DeviceId)
 	sys_dirent64  DirEntries[16];
 	sys_dirent64 *Entry;
 	while (TRUE) {
-		FdResult =
-			Sys_GetDirEnts64(PathFd, DirEntries, ARRAY_COUNT(DirEntries));
+		FdResult = Sys_GetDirEnts64(PathFd, DirEntries, sizeof(DirEntries));
 		if (FdResult < 0) break;
 		if (FdResult == 0) {
 			FdResult = -SYS_ENODEV;
@@ -130,9 +129,12 @@ Drm_OpenRenderNodeFromDevice(sys_dev DeviceId)
 		while (FdResult > 0) {
 			string EntryName = CString(Entry->Name);
 			if (String_BeginsWith(EntryName, CStringL("renderD"))) {
-				string Path = FNStringL("/dev/dri/%s", EntryName);
-				FdResult	= Drm_OpenDriver(Path);
-				if (FdResult >= 0) break;
+				string Path		= FNStringL("/dev/dri/%s", EntryName);
+				s32	   DriverFd = Drm_OpenDriver(Path);
+				if (DriverFd >= 0) {
+					Sys_Close(PathFd);
+					return DriverFd;
+				}
 			}
 
 			FdResult -= Entry->EntrySize;

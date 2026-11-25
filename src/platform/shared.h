@@ -7,8 +7,7 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#ifndef _PLATFORM_SHARED_H
-#define _PLATFORM_SHARED_H
+#pragma once
 
 typedef struct platform_state  platform_state;
 typedef struct platform_module platform_module;
@@ -77,6 +76,4 @@ struct thread_handle {
 
 #else
 #error Unsupported platform
-#endif
-
 #endif
