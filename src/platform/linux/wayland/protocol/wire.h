@@ -11,7 +11,7 @@
 
 #include <util/set.h>
 
-#include "macro.h"
+#include "wli.h"
 
 typedef s32 wayland_fd;
 typedef u32 wayland_fixed;
@@ -22,18 +22,21 @@ typedef struct wayland_array {
 } wayland_array;
 
 typedef struct wayland_prototype_method {
-	c08						  *Format;
+	u16	 Since;
+	u16	 Until;
+	c08 *Format;
+
 	struct wayland_prototype **Prototypes;
 } wayland_prototype_method;
 
 typedef struct wayland_prototype {
 	c08 *Name;
+	u16	 MaxVersion;
+	b08	 Frozen;
+	b08	 Deprecated;
 
-	u32 Version;
 	u16 RequestCount;
 	u16 EventCount;
-
-	b08 Deprecated;
 
 	wayland_prototype_method *Requests;
 	wayland_prototype_method *Events;
