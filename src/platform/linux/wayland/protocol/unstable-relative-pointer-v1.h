@@ -13,7 +13,7 @@
 	((ZwpRelativePointerManagerV1, zwp_relative_pointer_manager_v1, 1), \
 		D((Destroy)),                                                   \
 		R((GetRelativePointer),                                         \
-			N(ZWP_RELATIVE_POINTER_V1),                                 \
+			N(, ZWP_RELATIVE_POINTER_V1),                               \
 			O(Pointer, WL_POINTER)))
 
 #define ZWP_RELATIVE_POINTER_V1                          \

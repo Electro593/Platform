@@ -11,51 +11,27 @@
 
 #include "protocol.h"
 
-wayland_prototype Wayland_Display_Prototype = {
-	.Name		  = "wl_display",
-	.Version	  = 1,
-	.RequestCount = 2,
-	.EventCount	  = 2,
-	.Requests =
-		M{
-		  { "sync", "on", P{ &Wayland_Callback_Prototype } },
-		  { "get_registry", "on", P{ &Wayland_Registry_Prototype } },
-		  },
-	.Events =
-		M{
-		  { "error", "oous", NULL },
-		  { "delete_id", "ou", NULL },
-		  },
-};
+#define WL_DISPLAY                                    \
+	((WlDisplay, wl_display, 1),                      \
+		R((Sync), N(, WL_CALLBACK)),                  \
+		R((GetRegistry), N(, WL_REGISTRY)),           \
+		E((Error), O(ObjectId), U(Code), S(Message)), \
+		E((DeleteId), U(Id)))
 
-enum wayland_display_error {
-	WAYLAND_DISPLAY_ERROR_INVALID_OBJECT = 0,
-	WAYLAND_DISPLAY_ERROR_INVALID_METHOD = 1,
-	WAYLAND_DISPLAY_ERROR_NO_MEMORY		 = 2,
-	WAYLAND_DISPLAY_ERROR_IMPLEMENTATION = 3,
-};
+typedef enum wl_display_error {
+	WL_DISPLAY_ERROR_INVALID_OBJECT = 0,
+	WL_DISPLAY_ERROR_INVALID_METHOD = 1,
+	WL_DISPLAY_ERROR_NO_MEMORY		= 2,
+	WL_DISPLAY_ERROR_IMPLEMENTATION = 3,
+} wl_display_error;
 
-wayland_prototype Wayland_Registry_Prototype = {
-	.Name		  = "wl_registry",
-	.Version	  = 1,
-	.RequestCount = 1,
-	.EventCount	  = 2,
-	.Requests =
-		M{
-		  { "bind", "oun", P{ NULL } },
-		  },
-	.Events =
-		M{
-		  { "global", "ousu", NULL },
-		  { "global_remove", "ou", NULL },
-		  },
-};
+#define WL_REGISTRY                                     \
+	((WlRegistry, wl_registry, 1),                      \
+		R((Bind), U(Name), N()),                        \
+		E((Global), U(Name), S(Interface), U(Version)), \
+		E((GlobalRemove), U(Name)))
 
-wayland_prototype Wayland_Callback_Prototype = {
-	.Name		= "wl_callback",
-	.EventCount = 1,
-	.Events		= M{ { "done", "ou", NULL } },
-};
+#define WL_CALLBACK ((WlCallback, wl_callback), C((Done), U(CallbackData)))
 
 wayland_prototype Wayland_Compositor_Prototype = {
 	.Name		  = "wl_compositor",

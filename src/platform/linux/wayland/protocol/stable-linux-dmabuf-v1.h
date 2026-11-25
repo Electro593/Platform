@@ -13,18 +13,18 @@
 
 #include "core.h"
 
-#define ZWP_LINUX_DMABUF_V1                                          \
-	((ZwpLinuxDmabufV1, zwp_linux_dmabuf_v1, 6),                     \
-		D((Destroy)),                                                \
-		R((CreateParams), N(ZWP_LINUX_BUFFER_PARAMS_V1)),            \
-		R((GetDefaultFeedback, 4), N(ZWP_LINUX_DMABUF_FEEDBACK_V1)), \
-		R((GetSurfaceFeedback, 4),                                   \
-			N(ZWP_LINUX_DMABUF_FEEDBACK_V1),                         \
-			O(Surface, WL_SURFACE)),                                 \
-		E((Format, 1, 3), U(Format, drm_format)),                    \
-		E((Modifier, 3, 3),                                          \
-			U(Format, drm_format),                                   \
-			U(ModifierHigh),                                         \
+#define ZWP_LINUX_DMABUF_V1                                            \
+	((ZwpLinuxDmabufV1, zwp_linux_dmabuf_v1, 6),                       \
+		D((Destroy)),                                                  \
+		R((CreateParams), N(, ZWP_LINUX_BUFFER_PARAMS_V1)),            \
+		R((GetDefaultFeedback, 4), N(, ZWP_LINUX_DMABUF_FEEDBACK_V1)), \
+		R((GetSurfaceFeedback, 4),                                     \
+			N(, ZWP_LINUX_DMABUF_FEEDBACK_V1),                         \
+			O(Surface, WL_SURFACE)),                                   \
+		E((Format, 1, 3), U(Format, drm_format)),                      \
+		E((Modifier, 3, 3),                                            \
+			U(Format, drm_format),                                     \
+			U(ModifierHigh),                                           \
 			U(ModifierLow)))
 
 #define ZWP_LINUX_BUFFER_PARAMS_V1                            \
@@ -43,7 +43,7 @@
 			U(Format, drm_format),                            \
 			U(Flags, zwp_linux_buffer_params_v1_flags)),      \
 		R((CreateImmed, 2),                                   \
-			N(WL_BUFFER),                                     \
+			N(, WL_BUFFER),                                   \
 			I(Width),                                         \
 			I(Height),                                        \
 			U(Format, drm_format),                            \

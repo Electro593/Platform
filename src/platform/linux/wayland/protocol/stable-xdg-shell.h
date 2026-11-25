@@ -11,12 +11,12 @@
 
 #include "core.h"
 
-#define XDG_WM_BASE                                                 \
-	((XdgWmBase, xdg_wm_base, 7),                                   \
-		D((Destroy)),                                               \
-		R((CreatePositioner), N(XDG_POSITIONER)),                   \
-		R((GetXdgSurface), N(XDG_SURFACE), O(Surface, WL_SURFACE)), \
-		R((Pong), U(Serial)),                                       \
+#define XDG_WM_BASE                                                   \
+	((XdgWmBase, xdg_wm_base, 7),                                     \
+		D((Destroy)),                                                 \
+		R((CreatePositioner), N(, XDG_POSITIONER)),                   \
+		R((GetXdgSurface), N(, XDG_SURFACE), O(Surface, WL_SURFACE)), \
+		R((Pong), U(Serial)),                                         \
 		E((Ping), U(Serial)))
 
 typedef enum xdg_wm_base_error {
@@ -84,9 +84,9 @@ typedef enum xdg_positioner_constraint_adjustment {
 #define XDG_SURFACE                                              \
 	((XdgSurface, xdg_surface, 7),                               \
 		D((Destroy)),                                            \
-		R((GetToplevel), N(XDG_TOPLEVEL)),                       \
+		R((GetToplevel), N(, XDG_TOPLEVEL)),                     \
 		R((GetPopup),                                            \
-			N(XDG_POPUP),                                        \
+			N(, XDG_POPUP),                                      \
 			O(Parent, , TRUE),                                   \
 			O(Positioner, XDG_POSITIONER)),                      \
 		R((SetWindowGeometry), I(X), I(Y), I(Width), I(Height)), \
