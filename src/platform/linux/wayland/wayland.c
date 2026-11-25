@@ -127,7 +127,7 @@ Wayland_DebugLog(vptr Object, c08 *Format, ...)
 		FPrintL(
 			"[%d] [Wayland] [%s] %s",
 			Sys_GetTid(),
-			Wayland_GetObjectName(Object),
+			Wayland_GetDisplayName(Object),
 			Message
 		);
 	} else {
@@ -146,7 +146,7 @@ Wayland_Display_Error(
 	Wayland_DebugLog(
 		This,
 		"An error occurred in %s: Error %d: %s\n",
-		Wayland_GetObjectName(Object),
+		Wayland_GetDisplayName(Object),
 		Code,
 		CString(Message)
 	);
@@ -212,7 +212,7 @@ Wayland_Keyboard_Enter(
 	Wayland_DebugLog(
 		This,
 		"Keyboard focused on %s with serial %u and %d keys pressed\n",
-		Wayland_GetObjectName((wayland_interface *) Surface),
+		Wayland_GetDisplayName(Surface),
 		Serial,
 		Keys.Size / sizeof(u32)
 	);
@@ -236,7 +236,7 @@ Wayland_Keyboard_Leave(
 	Wayland_DebugLog(
 		This,
 		"Keyboard defocused from %s with serial %u\n",
-		Wayland_GetObjectName((wayland_interface *) Surface),
+		Wayland_GetDisplayName(Surface),
 		Serial
 	);
 
@@ -399,7 +399,7 @@ Wayland_ZwpLinuxBufferParamsV1_Created(
 	Wayland_DebugLog(
 		This,
 		"Created dmabuf buffer %s\n",
-		Wayland_GetObjectName((wayland_interface *) Buffer)
+		Wayland_GetDisplayName(Buffer)
 	);
 
 	usize I = _G.Wayland.Window.Buffers[0] != NULL;
@@ -690,7 +690,7 @@ Wayland_Registry_Global(
 	}
 
 	if (Bound) {
-		Wayland_DebugLog(This, "Bound %s\n", Wayland_GetObjectName(Bound));
+		Wayland_DebugLog(This, "Bound %s\n", Wayland_GetDisplayName(Bound));
 		Wayland_LinkEventQueue(Bound, &_G.Wayland.EventQueue);
 	}
 
@@ -708,7 +708,7 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DebugLog(
 			This,
 			"Destroying %s\n",
-			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Compositor)
+			Wayland_GetDisplayName(_G.Wayland.Compositor)
 		);
 		if (Wayland_GetVersion(_G.Wayland.Compositor) >= 7)
 			Wayland_Compositor_Release(_G.Wayland.Compositor);
@@ -718,7 +718,7 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DebugLog(
 			This,
 			"Destroying %s\n",
-			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Fixes)
+			Wayland_GetDisplayName(_G.Wayland.Fixes)
 		);
 		Wayland_Fixes_Destroy(_G.Wayland.Fixes);
 	} else if (_G.Wayland.Seat.GlobalName == Name) {
@@ -726,7 +726,7 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DebugLog(
 			This,
 			"Destroying %s\n",
-			Wayland_GetObjectName((wayland_interface *) _G.Wayland.Seat.Seat)
+			Wayland_GetDisplayName(_G.Wayland.Seat.Seat)
 		);
 		Wayland_ModifySeatEntryCapabilities(&_G.Wayland.Seat, 0);
 		if (Wayland_GetVersion(_G.Wayland.Seat.Seat) >= 5)
@@ -738,7 +738,7 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DebugLog(
 			This,
 			"Destroying %s\n",
-			Wayland_GetObjectName((wayland_interface *) _G.Wayland.XdgWmBase)
+			Wayland_GetDisplayName(_G.Wayland.XdgWmBase)
 		);
 		Wayland_XdgWmBase_Destroy(_G.Wayland.XdgWmBase);
 	} else if (_G.Wayland.ZwpLinuxDmabufV1Name == Name) {
@@ -746,9 +746,7 @@ Wayland_Registry_GlobalRemove(wayland_registry *This, u32 Name)
 		Wayland_DebugLog(
 			This,
 			"Destroying %s\n",
-			Wayland_GetObjectName(
-				(wayland_interface *) _G.Wayland.ZwpLinuxDmabufV1
-			)
+			Wayland_GetDisplayName(_G.Wayland.ZwpLinuxDmabufV1)
 		);
 		Wayland_ZwpLinuxDmabufV1_Destroy(_G.Wayland.ZwpLinuxDmabufV1);
 	}
