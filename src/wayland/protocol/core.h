@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "wli.h"
 #include "wire.h"
 
 #define WL_DISPLAY                                    \

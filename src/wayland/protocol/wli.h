@@ -222,7 +222,7 @@
 #define _WLI_IA_E(...)	_WLI_IA_E3(_WLI_IA_E3(_WLI_IA_E3(__VA_ARGS__)))
 #define _WLI_IA_4(...)
 #define _WLI_IA_3() _WLI_IA_1
-#define _WLI_IA_2(C, F, S, I, ...)                          \
+#define _WLI_IA_2(C, F, S, I, ...)                            \
 	S() _WLI_IA_3 _WLI_IA_P(C, F, S, WLI_INC(I), __VA_ARGS__)
 #define _WLI_IA_1(C, F, S, I, A, ...)                                        \
 	F(C, A, I)                                                               \
@@ -232,8 +232,8 @@
 #define _WLI_IA(C, F, S, ...) _WLI_IA_E(_WLI_IA_0(C, F, S, 0, __VA_ARGS__))
 
 #define _WLI_IA_M2_(C, ...) C(__VA_ARGS__)
-#define _WLI_IA_M_(...) _WLI_IA_M2_(__VA_ARGS__)
-#define _WLI_IA_M(C, A, I) _WLI_IA_M_(WLI_ALL C, A)
+#define _WLI_IA_M_(...)		_WLI_IA_M2_(__VA_ARGS__)
+#define _WLI_IA_M(C, A, I)	_WLI_IA_M_(WLI_ALL C, A)
 #define WLI_MAP_ARGS(Interface, Method, Mapper, Separator, ...)             \
 	_WLI_IA((Mapper, Interface, Method), _WLI_IA_M, Separator, __VA_ARGS__)
 
@@ -429,18 +429,21 @@
 
 #define WLI_METHOD_FORMAT_ARG(Interface, Method, Arg) WLI_ARG_FORMAT(Arg)
 
-#define WLI_METHOD_FORMAT(Interface, Method)                      \
+#define WLI_METHOD_FORMAT(Interface, Method)                             \
 	WLI_FOREACH_ARG(Interface, Method, WLI_METHOD_FORMAT_ARG, WLI_SPACE)
 
 #define WLI_EVENT_FUNCTION_POINTER_PARAM(Interface, Method, Arg) \
 	WLI_ARG_TYPE(Interface, Arg) WLI_ARG_NAME(Interface, Arg)
 
-#define WLI_EVENT_FUNCTION_POINTER(Interface, Method)                \
-	void (*WLI_METHOD_NAME(Method))(                                 \
-		WLI_FOREACH_ARG(Interface, Method, WLI_EVENT_FUNCTION_POINTER_PARAM, WLI_COMMA) \
-	)
+#define WLI_EVENT_FUNCTION_POINTER(Interface, Method) \
+	void (*WLI_METHOD_NAME(Method))(WLI_FOREACH_ARG(  \
+		Interface,                                    \
+		Method,                                       \
+		WLI_EVENT_FUNCTION_POINTER_PARAM,             \
+		WLI_COMMA                                     \
+	))
 
-#define WLI_REQUEST_HANDLER_CALL(Interface, Method, Index, ArgMapper) \
+#define WLI_REQUEST_HANDLER_CALL(Interface, Method, Index, ArgMapper)          \
 	Wayland_HandleRequest(                                                     \
 		ArgMapper(Interface, Method, WLI_HEAD(WLI_METHOD_ARGS(Method))),       \
 		Index WLI_WHEN(WLI_IS_LIST(WLI_METHOD_ARGS(Method)))(, ) WLI_MAP_ARGS( \
@@ -510,11 +513,12 @@
 		.Until		= WLI_METHOD_UNTIL(Interface, Method),  \
 		.Format		= WLI_METHOD_FORMAT(Interface, Method), \
 		.Prototypes = WLI_IF(WLI_METHOD_CTORS(Method))(     \
-			((wayland_prototype *[]){ WLI_MAP_ARGS(     \
+			((wayland_prototype *[]){ WLI_MAP_ARGS(         \
 				Interface,                                  \
 				Method,                                     \
 				WLI_ARG_PROTO_PTR,                          \
-				WLI_COMMA, WLI_METHOD_CTORS(Method)                                   \
+				WLI_COMMA,                                  \
+				WLI_METHOD_CTORS(Method)                    \
 			) }),                                           \
 			NULL                                            \
 		),                                                  \
@@ -549,7 +553,7 @@
 	WLI_FOREACH_EVENT(Interface, WLI_DECLARE_EVENT, WLI_SPACE)
 
 #define WLI_DEFINE_STRUCT(Interface)            \
-	typedef struct WLI_TYPE_NAME(Interface) {           \
+	typedef struct WLI_TYPE_NAME(Interface) {   \
 		struct wayland_interface_header Header; \
 		WLI_DECLARE_EVENTS(Interface)           \
 	} WLI_TYPE_NAME(Interface);
