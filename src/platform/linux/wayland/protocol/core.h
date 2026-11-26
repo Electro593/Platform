@@ -15,7 +15,7 @@
 	((WlDisplay, wl_display, 1),                      \
 		R((Sync), N(WL_CALLBACK)),                    \
 		R((GetRegistry), N(WL_REGISTRY)),             \
-		E((Error), O(ObjectId), U(Code), S(Message)), \
+		E((Error), O(Object, WLI_INTERFACE), U(Code), S(Message)), \
 		E((DeleteId), U(Id)))
 
 typedef enum wl_display_error : u32 {
