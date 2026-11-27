@@ -12,14 +12,18 @@
 #include <util/string.h>
 #include <util/set.h>
 
-typedef s32 wayland_fd;
-typedef u32 wayland_fixed;
+typedef s32	   wayland_int;
+typedef u32	   wayland_uint;
+typedef u32	   wayland_fixed;
+typedef s32	   wayland_fd;
 typedef string wayland_string;
 
 typedef struct wayland_array {
 	u32	 Size;
 	u32 *Data;
 } wayland_array;
+
+typedef struct wayland_object wayland_object;
 
 typedef struct wayland_prototype_method {
 	u16	 Since;
@@ -48,7 +52,7 @@ typedef struct wayland_event_queue {
 	usize		 RefCount;
 } wayland_event_queue;
 
-typedef struct wayland_interface_header {
+typedef struct wayland_object_header {
 	u32 Id;
 	u16 Version;
 	u16 Size;
@@ -59,14 +63,16 @@ typedef struct wayland_interface_header {
 
 	vptr UserData;
 
-	struct wayland_event_queue *LinkedEventQueue;
-	struct wayland_event_queue	InternalEventQueue;
-} wayland_interface_header;
+	wayland_event_queue *LinkedEventQueue;
+	wayland_event_queue	InternalEventQueue;
+} wayland_object_header;
 
-typedef struct wayland_interface {
-	wayland_interface_header Header;
+typedef struct wayland_message {
+	u32 MessageSize;
+	u32 ControlSize;
 
-	void (*Events[])(struct wayland_interface *This, ...);
-} wayland_interface;
+	u32			*MessageData;
+	sys_cmsghdr *ControlData;
+} wayland_message;
 
-void Wayland_HandleRequest(wayland_interface *This, u16 Opcode, ...);
+void Wayland_HandleRequest(wayland_object *This, u16 Opcode, ...);

@@ -43,7 +43,7 @@ global util_state _G;
 global util_funcs _F;
 #endif
 
-#include <util/intrin.h>
+#include <util/intrin.c>
 #include <util/scalar.c>
 #include <util/vector.c>
 #include <util/memory.c>

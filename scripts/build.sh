@@ -44,12 +44,12 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -Werror -masm=intel -fverbose-asm -Winvalid-pch"
-CompilerSwitches="$CompilerSwitches -Wno-unused-function -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
+CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -Werror -masm=intel -flto -fverbose-asm -Winvalid-pch"
+CompilerSwitches="$CompilerSwitches -Wno-unused-function -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-error=unused-variable -Wno-error=unused-parameter -Wno-error=unused-but-set-parameter -Wno-error=unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
 CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_WORD_SIZE=64"
 
-LinkerSwitches="$LinkerSwitches -nostdlib"
+LinkerSwitches="$LinkerSwitches -flto -nostdlib"
 
 if [[ "$Platform" = "win32" ]]; then
 	echo "Building for win32"

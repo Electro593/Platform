@@ -9,6 +9,14 @@
 
 #pragma once
 
+// Constants
+
+#define WLI_MAX_METHODS 32
+#define WLI_MAX_ARGS	32
+
+#define WLI_THIS
+#define WLI_OBJECT ((WlObject, wayland_object, 0, 1))
+
 // Helpers
 
 #define WLI_SPACE(...)
@@ -322,11 +330,6 @@
 #define WLI_FILTER_ARGS(Condition, ...)                             \
 	WLI_REST(_WLI_IA(Condition, _WLI_IA_F, WLI_SPACE, __VA_ARGS__))
 
-// Constants
-
-#define WLI_THIS
-#define WLI_INTERFACE ((WaylandInterface, wayland_interface, 0, 1))
-
 // Dispatch Operators
 
 #define _WLI_METHOD_KIND_R(...) R
@@ -397,7 +400,7 @@
 #define _WLI_ARG_FORMAT_R(...)		  "r"
 #define _WLI_ARG_FORMAT_F(...)		  "f"
 #define _WLI_ARG_FORMAT_S(...)		  "s" _WLI_ARG_FORMAT_NULLABLE(__VA_ARGS__)
-#define _WLI_ARG_FORMAT_A(...)		  "a" _WLI_ARG_FORMAT_NULLABLE(__VA_ARGS__)
+#define _WLI_ARG_FORMAT_A(...)		  "a"
 #define _WLI_ARG_FORMAT_N(...)		  "n"
 #define _WLI_ARG_FORMAT_O(...)		  "o" _WLI_ARG_FORMAT_NULLABLE(__VA_ARGS__)
 #define _WLI_ARG_FORMAT_D(...)		  "d" _WLI_ARG_FORMAT_NULLABLE(__VA_ARGS__)
@@ -435,10 +438,10 @@
 #define WLI_ARG_NAME(Interface, Arg)                 \
 	WLI_ARG_DISPATCH(_WLI_ARG_NAME_, Arg, Interface)
 
-#define _WLI_ARG_TYPE_I(Interface, ...)                              \
-	WLI_IF(WLI_AT(1, __VA_ARGS__))(enum WLI_AT(1, __VA_ARGS__), s32)
-#define _WLI_ARG_TYPE_U(Interface, ...)                              \
-	WLI_IF(WLI_AT(1, __VA_ARGS__))(enum WLI_AT(1, __VA_ARGS__), u32)
+#define _WLI_ARG_TYPE_I(Interface, ...)                                      \
+	WLI_IF(WLI_AT(1, __VA_ARGS__))(enum WLI_AT(1, __VA_ARGS__), wayland_int)
+#define _WLI_ARG_TYPE_U(Interface, ...)                                       \
+	WLI_IF(WLI_AT(1, __VA_ARGS__))(enum WLI_AT(1, __VA_ARGS__), wayland_uint)
 #define _WLI_ARG_TYPE_R(...) wayland_fixed
 #define _WLI_ARG_TYPE_F(...) wayland_fd
 #define _WLI_ARG_TYPE_S(...) wayland_string
@@ -530,7 +533,7 @@
 
 #define WLI_REQUEST_HANDLER_CALL(Interface, Method, Index, ArgMapper)          \
 	Wayland_HandleRequest(                                                     \
-		(wayland_interface *)                                                  \
+		(struct wayland_object *)                                           \
 			ArgMapper(Interface, Method, WLI_HEAD(WLI_METHOD_ARGS(Method))),   \
 		Index WLI_WHEN(WLI_IS_LIST(WLI_METHOD_ARGS(Method)))(, ) WLI_MAP_ARGS( \
 			Interface,                                                         \
@@ -547,24 +550,26 @@
 #define WLI_SINGLE_CTOR_REQUEST_BODY_PARAM(Interface, Method, Arg) \
 	WLI_WHEN(WLI_ARG_IS_CTOR(Arg))(&) WLI_ARG_NAME(Interface, Arg)
 
-#define WLI_SINGLE_CTOR_REQUEST(Interface, Method, Index, Arg)     \
-	WLI_ARG_TYPE(Interface, Arg)                                   \
-	WLI_REQUEST_NAME(Interface, Method)(WLI_MAP_ARGS(              \
-		Interface,                                                 \
-		Method,                                                    \
-		WLI_SINGLE_CTOR_REQUEST_HEADER_PARAM,                      \
-		WLI_COMMA,                                                 \
-		WLI_METHOD_NON_CTORS(Method)                               \
-	))                                                             \
-	{                                                              \
-		WLI_ARG_TYPE(Interface, Arg) WLI_ARG_NAME(Interface, Arg); \
-		WLI_REQUEST_HANDLER_CALL(                                  \
-			Interface,                                             \
-			Method,                                                \
-			Index,                                                 \
-			WLI_SINGLE_CTOR_REQUEST_BODY_PARAM                     \
-		);                                                         \
-		return WLI_ARG_NAME(Interface, Arg);                       \
+#define WLI_SINGLE_CTOR_REQUEST_HEADER(Interface, Method, Index, Ctor) \
+	WLI_ARG_TYPE(Interface, Ctor)                                      \
+	WLI_REQUEST_NAME(Interface, Method)(WLI_MAP_ARGS(                  \
+		Interface,                                                     \
+		Method,                                                        \
+		WLI_SINGLE_CTOR_REQUEST_HEADER_PARAM,                          \
+		WLI_COMMA,                                                     \
+		WLI_METHOD_NON_CTORS(Method)                                   \
+	))
+
+#define WLI_SINGLE_CTOR_REQUEST_BODY(Interface, Method, Index, Ctor) \
+	{                                                                \
+		WLI_ARG_TYPE(Interface, Ctor) WLI_ARG_NAME(Interface, Ctor); \
+		WLI_REQUEST_HANDLER_CALL(                                    \
+			Interface,                                               \
+			Method,                                                  \
+			Index,                                                   \
+			WLI_SINGLE_CTOR_REQUEST_BODY_PARAM                       \
+		);                                                           \
+		return WLI_ARG_NAME(Interface, Ctor);                        \
 	}
 
 #define WLI_MULTI_CTOR_REQUEST_HEADER_PARAM(Interface, Method, Arg) \
@@ -574,13 +579,15 @@
 #define WLI_MULTI_CTOR_REQUEST_BODY_PARAM(Interface, Method, Arg) \
 	WLI_ARG_NAME(Interface, Arg)
 
-#define WLI_MULTI_CTOR_REQUEST(Interface, Method, Index)      \
-	void WLI_REQUEST_NAME(Interface, Method)(WLI_FOREACH_ARG( \
-		Interface,                                            \
-		Method,                                               \
-		WLI_MULTI_CTOR_REQUEST_HEADER_PARAM,                  \
-		WLI_COMMA                                             \
-	))                                                        \
+#define WLI_MULTI_CTOR_REQUEST_HEADER(Interface, Method, Index) \
+	void WLI_REQUEST_NAME(Interface, Method)(WLI_FOREACH_ARG(   \
+		Interface,                                              \
+		Method,                                                 \
+		WLI_MULTI_CTOR_REQUEST_HEADER_PARAM,                    \
+		WLI_COMMA                                               \
+	))
+
+#define WLI_MULTI_CTOR_REQUEST_BODY(Interface, Method, Index) \
 	{                                                         \
 		WLI_REQUEST_HANDLER_CALL(                             \
 			Interface,                                        \
@@ -638,12 +645,9 @@
 #define WLI_DECLARE_EVENTS(Interface)                          \
 	WLI_FOREACH_EVENT(Interface, WLI_DECLARE_EVENT, WLI_SPACE)
 
-#define WLI_DECLARE_STRUCT(Interface)                                 \
-	typedef struct WLI_TYPE_NAME(Interface) WLI_TYPE_NAME(Interface);
-
 #define WLI_DEFINE_STRUCT(Interface)            \
 	struct WLI_TYPE_NAME(Interface) {           \
-		struct wayland_interface_header Header; \
+		struct wayland_object_header Header; \
 		WLI_DECLARE_EVENTS(Interface)           \
 	};
 
@@ -654,23 +658,51 @@
 	struct wayland_prototype WLI_PROTO(Interface) = \
 		WLI_PROTO_LITERAL(Interface);
 
-#define WLI_DEFINE_REQUEST(Interface, Method, Index)                 \
-	static inline WLI_IF(WLI_METHOD_IS_SINGLE_CTOR_REQUEST(Method))( \
-		WLI_SINGLE_CTOR_REQUEST(                                     \
-			Interface,                                               \
-			Method,                                                  \
-			Index,                                                   \
-			WLI_METHOD_CTORS(Method)                                 \
-		),                                                           \
-		WLI_MULTI_CTOR_REQUEST(Interface, Method, Index)             \
+#define WLI_DECLARE_REQUEST(Interface, Method, Index)         \
+	WLI_IF(WLI_METHOD_IS_SINGLE_CTOR_REQUEST(Method))(        \
+		WLI_SINGLE_CTOR_REQUEST_HEADER(                       \
+			Interface,                                        \
+			Method,                                           \
+			Index,                                            \
+			WLI_METHOD_CTORS(Method)                          \
+		),                                                    \
+		WLI_MULTI_CTOR_REQUEST_HEADER(Interface, Method, Index) \
+	);
+
+#define WLI_DEFINE_SINGLE_CTOR_REQUEST(Interface, Method, Index, Ctor) \
+	WLI_SINGLE_CTOR_REQUEST_HEADER(Interface, Method, Index, Ctor)     \
+	WLI_SINGLE_CTOR_REQUEST_BODY(Interface, Method, Index, Ctor)
+
+#define WLI_DEFINE_MULTI_CTOR_REQUEST(Interface, Method, Index) \
+	WLI_MULTI_CTOR_REQUEST_HEADER(Interface, Method, Index)     \
+	WLI_MULTI_CTOR_REQUEST_BODY(Interface, Method, Index)
+
+#define WLI_DEFINE_REQUEST(Interface, Method, Index)     \
+	WLI_IF(WLI_METHOD_IS_SINGLE_CTOR_REQUEST(Method))(   \
+		WLI_SINGLE_CTOR_REQUEST(                         \
+			Interface,                                   \
+			Method,                                      \
+			Index,                                       \
+			WLI_METHOD_CTORS(Method)                     \
+		),                                               \
+		WLI_MULTI_CTOR_REQUEST(Interface, Method, Index) \
 	)
+
+#define WLI_DECLARE_REQUESTS(Interface)                            \
+	WLI_FOREACH_REQUEST(Interface, WLI_DECLARE_REQUEST, WLI_SPACE)
 
 #define WLI_DEFINE_REQUESTS(Interface)                            \
 	WLI_FOREACH_REQUEST(Interface, WLI_DEFINE_REQUEST, WLI_SPACE)
 
+// Everything Together
+
+#define WLI_DECLARE_STRUCT(Interface)                                 \
+	typedef struct WLI_TYPE_NAME(Interface) WLI_TYPE_NAME(Interface);
+
 #define WLI_DECLARE(Interface)       \
 	WLI_DEFINE_STRUCT(Interface)     \
 	WLI_DECLARE_PROTOTYPE(Interface) \
-	WLI_DEFINE_REQUESTS(Interface)
+	WLI_DECLARE_REQUESTS(Interface)
 
-#define WLI_DEFINE(Interface) WLI_DEFINE_PROTOTYPE(Interface)
+#define WLI_DEFINE(Interface)                                      \
+	WLI_DEFINE_PROTOTYPE(Interface) WLI_DEFINE_REQUESTS(Interface)

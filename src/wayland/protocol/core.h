@@ -9,14 +9,14 @@
 
 #pragma once
 
-#include "wli.h"
 #include "wire.h"
+#include "wli.h"
 
-#define WL_DISPLAY                                    \
-	((WlDisplay, wl_display, 1),                      \
-		R((Sync), N(WL_CALLBACK)),                    \
-		R((GetRegistry), N(WL_REGISTRY)),             \
-		E((Error), O(Object, WLI_INTERFACE), U(Code), S(Message)), \
+#define WL_DISPLAY                                                 \
+	((WlDisplay, wl_display, 1),                                   \
+		R((Sync), N(WL_CALLBACK)),                                 \
+		R((GetRegistry), N(WL_REGISTRY)),                          \
+		E((Error), O(Object, WLI_OBJECT), U(Code), S(Message)), \
 		E((DeleteId), U(Id)))
 
 typedef enum wl_display_error : u32 {

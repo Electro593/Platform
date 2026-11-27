@@ -10,11 +10,11 @@
 #ifndef _PlATFORM_WAYLAND_PCH_H
 #define _PlATFORM_WAYLAND_PCH_H
 
-#include "protocol/wire.h"
-#include "protocol/core.h"
-#include "protocol/external-drm.h"
-#include "protocol/stable-linux-dmabuf-v1.h"
-#include "protocol/stable-xdg-shell.h"
-#include "protocol/unstable-relative-pointer-v1.h"
+#include "wayland/protocol/wire.h"
+#include "wayland/protocol/core.h"
+#include "wayland/protocol/external-drm.h"
+#include "wayland/protocol/stable-linux-dmabuf-v1.h"
+#include "wayland/protocol/stable-xdg-shell.h"
+#include "wayland/protocol/unstable-relative-pointer-v1.h"
 
 #endif

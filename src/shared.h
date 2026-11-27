@@ -114,6 +114,9 @@ typedef u32	 c32;
 } while(0)
 
 #ifdef _DEBUG
+static inline void Platform_Assert(c08 *File, u32 Line, c08 *Expression, c08 *Message);
+static inline void Intrin_DebugBreak(void);
+static inline void Intrin_Nop(void);
 #define Assert(Expression, ...)                                               \
     (void)((Expression) || (                                                  \
 		Platform_Assert(__FILE__, __LINE__, #Expression, "" __VA_ARGS__),     \

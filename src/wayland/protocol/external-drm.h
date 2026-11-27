@@ -124,4 +124,6 @@ typedef enum wl_drm_capability {
 		E((Authenticated)),                          \
 		E((Capabilities), U(Value, wl_drm_capability)))
 
+WLI_DECLARE_STRUCT(WL_DRM)
+
 WLI_DECLARE(WL_DRM)
