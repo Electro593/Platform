@@ -7,7 +7,7 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include "core.h"
+#include "../pch.h"
 
 WLI_DEFINE(WL_DISPLAY)
 WLI_DEFINE(WL_REGISTRY)

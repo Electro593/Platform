@@ -1,4 +1,11 @@
 {
+	"[c]": {
+		"editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+	},
+	"editor.formatOnSave": true,
+	"editor.indentSize": "tabSize",
+	"editor.insertSpaces": false,
+    "editor.tabSize": 4,
     "files.associations": {
 		"*.h": "c",
 		"ostream": "c",
@@ -63,18 +70,6 @@
 		"variant": "c",
 		"*.mac": "c"
 	},
-    "C_Cpp.dimInactiveRegions": true,
-    "C_Cpp.errorSquiggles": "disabled",
-	"C_Cpp.default.compilerPath": "/usr/bin/gcc",
-	"C_Cpp.files.exclude": {
-		"**/*.i": true
-	},
-	"clice.inactiveRegions.opacity": 1,
-    "todo-tree.tree.showCountsInTree": false,
-    "todo-tree.tree.showBadges": false,
-    "editor.indentSize": "tabSize",
-    "editor.tabSize": 4,
-	"editor.insertSpaces": false,
 	"terminal.integrated.profiles.windows": {
 		"PowerShell": {
 			"source": "PowerShell",
@@ -102,5 +97,7 @@
 				"CHERE_INVOKING": "1"
 			}
 		}
-	}
+	},
+    "todo-tree.tree.showBadges": false,
+    "todo-tree.tree.showCountsInTree": false
 }

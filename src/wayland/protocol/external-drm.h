@@ -120,8 +120,8 @@ typedef enum wl_drm_capability {
 			I(Offset2),                              \
 			I(Stride2)),                             \
 		E((Device), S(Name)),                        \
-		E((Format), U(Format, drm_format)),          \
+		E((Format), U(Format, wl_drm_format)),          \
 		E((Authenticated)),                          \
-		E((Capabilities), U(Value, drm_capability)))
+		E((Capabilities), U(Value, wl_drm_capability)))
 
 WLI_DECLARE(WL_DRM)

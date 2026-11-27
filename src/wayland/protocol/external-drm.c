@@ -7,6 +7,6 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include "external-drm.h"
+#include "../pch.h"
 
 WLI_DEFINE(WL_DRM)

@@ -7,7 +7,7 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include "unstable-relative-pointer-v1.h"
+#include "../pch.h"
 
 WLI_DEFINE(ZWP_RELATIVE_POINTER_MANAGER_V1)
 WLI_DEFINE(ZWP_RELATIVE_POINTER_V1)

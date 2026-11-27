@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -Werror"
+CompilerSwitches="$CompilerSwitches -std=c23 -ffast-math -nostdinc -fno-builtin -Wall -Wextra -funsigned-char -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -Werror -masm=intel -fverbose-asm -Winvalid-pch"
 CompilerSwitches="$CompilerSwitches -Wno-unused-function -Wno-cast-function-type -Wno-comment -Wno-sign-compare -Wno-missing-braces -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-but-set-variable"
 CompilerSwitches="$CompilerSwitches -I src -I Platform/src"
 CompilerSwitches="$CompilerSwitches -U_WIN32 -D_GCC -D_WORD_SIZE=64"
@@ -101,11 +101,9 @@ fi
 DllCompilerSwitches="$DllCompilerSwitches $CompilerSwitches -fPIC"
 DllLinkerSwitches="$DllLinkerSwitches $LinkerSwitches -shared -Bsymbolic"
 
-if [[ -d build ]]; then rm -rf build > /dev/null; fi
-mkdir build > /dev/null
+mkdir -p build
 
 if [[ -e build/*.pdb ]]; then rm *.pdb > /dev/null 2> /dev/null; fi
-if [[ -e build/*.i ]]; then rm *.i > /dev/null; fi
 
 Result=0
 
@@ -146,6 +144,19 @@ build_module() {
 			echo Setting result after module $Module
 			Result=1
 		fi
+	elif [ -e "${Module}module.h" ]; then
+		echo Building $Module as a library with make
+		if ! make -f Platform/scripts/Makefile \
+			"build/$ModuleName$DllSuffix" \
+			"SRC_DIR=${Module%/}" \
+			"TMP_DIR=build/${ModuleName}" \
+			"OUT_DIR=build" \
+			"CFLAGS=$DllCompilerSwitches -D_MODULE_NAME=\"$ModuleName\" -D_${CapitalName}_MODULE" \
+			"LDFLAGS=$DllLinkerSwitches -rpath . -soname $ModuleName$DllSuffix" \
+		; then
+			echo Setting result after module $Module
+			Result=1
+		fi
 	else
 		echo Building $Module as a library
 		gcc $DllCompilerSwitches $DllLinkerSwitches -Wl,-rpath,.,-soname,$ModuleName$DllSuffix -E -D_MODULE_NAME="$ModuleName" -D_${CapitalName}_MODULE -o "build/$ModuleName.i" "${Module}main.c"
@@ -170,9 +181,6 @@ find_modules() {
 
 find_modules Platform/src
 find_modules src
-
-if [[ -e build/*.obj ]]; then rm build/*.obj > /dev/null; fi
-if [[ -e build/*.exp ]]; then rm build/*.exp > /dev/null; fi
 
 if [[ -e assets/ ]]; then cp -r assets build/assets; fi
 

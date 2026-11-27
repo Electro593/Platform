@@ -7,7 +7,7 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include "stable-xdg-shell.h"
+#include "../pch.h"
 
 WLI_DEFINE(XDG_WM_BASE)
 WLI_DEFINE(XDG_POSITIONER)

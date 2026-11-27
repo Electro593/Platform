@@ -87,7 +87,7 @@ typedef enum xdg_positioner_constraint_adjustment : u32 {
 		R((GetToplevel), N(XDG_TOPLEVEL)),                       \
 		R((GetPopup),                                            \
 			N(XDG_POPUP),                                        \
-			O(Parent, WLI_THIS, TRUE),                                   \
+			O(Parent, WLI_THIS, TRUE),                           \
 			O(Positioner, XDG_POSITIONER)),                      \
 		R((SetWindowGeometry), I(X), I(Y), I(Width), I(Height)), \
 		R((AckConfigure), U(Serial)),                            \
@@ -105,7 +105,7 @@ typedef enum xdg_surface_error : u32 {
 #define XDG_TOPLEVEL                                                  \
 	((XdgToplevel, xdg_toplevel, 7),                                  \
 		D((Destroy)),                                                 \
-		R((SetParent), O(Parent, WLI_THIS, TRUE)),                            \
+		R((SetParent), O(Parent, WLI_THIS, TRUE)),                    \
 		R((SetTitle), S(Title)),                                      \
 		R((SetAppId), S(AppId)),                                      \
 		R((ShowWindowMenu), O(Seat, WL_SEAT), U(Serial), I(X), I(Y)), \
@@ -180,8 +180,8 @@ typedef enum xdg_popup_error : u32 {
 	XDG_POPUP_ERROR_INVALID_GRAB = 0,
 } xdg_popup_error;
 
-WLI_DEFINE(XDG_WM_BASE)
-WLI_DEFINE(XDG_POSITIONER)
-WLI_DEFINE(XDG_SURFACE)
-WLI_DEFINE(XDG_TOPLEVEL)
-WLI_DEFINE(XDG_POPUP)
+WLI_DECLARE(XDG_WM_BASE)
+WLI_DECLARE(XDG_POSITIONER)
+WLI_DECLARE(XDG_SURFACE)
+WLI_DECLARE(XDG_TOPLEVEL)
+WLI_DECLARE(XDG_POPUP)

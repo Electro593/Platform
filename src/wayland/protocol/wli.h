@@ -15,9 +15,10 @@
 #define WLI_COMMA(...) ,
 
 // clang-format off
-#define _WLI_COUNT_(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, I, ...) I
-#define _WLI_COUNT(...) _WLI_COUNT_(__VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, )
-#define WLI_IS_LIST(...) _WLI_COUNT_(__VA_ARGS__, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, )
+#define _WLI_COUNT_(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, I, ...) I
+#define _WLI_COUNT(...) _WLI_COUNT_(__VA_ARGS__, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, )
+#define WLI_IS_LIST(...) _WLI_COUNT_(__VA_ARGS__, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, )
+#define WLI_PAD(...)   __VA_ARGS__, , , , , , , , , , , , , , , , , , , , , , , , , , , , , , ,
 // clang-format on
 
 #define _WLI_IS_EMPTY_CHECK_0001 ,
@@ -53,6 +54,22 @@
 #define _WLI_EQ_13_13			  ~, 1
 #define _WLI_EQ_14_14			  ~, 1
 #define _WLI_EQ_15_15			  ~, 1
+#define _WLI_EQ_16_16			  ~, 1
+#define _WLI_EQ_17_17			  ~, 1
+#define _WLI_EQ_18_18			  ~, 1
+#define _WLI_EQ_19_19			  ~, 1
+#define _WLI_EQ_20_20			  ~, 1
+#define _WLI_EQ_21_21			  ~, 1
+#define _WLI_EQ_22_22			  ~, 1
+#define _WLI_EQ_23_23			  ~, 1
+#define _WLI_EQ_24_24			  ~, 1
+#define _WLI_EQ_25_25			  ~, 1
+#define _WLI_EQ_26_26			  ~, 1
+#define _WLI_EQ_27_27			  ~, 1
+#define _WLI_EQ_28_28			  ~, 1
+#define _WLI_EQ_29_29			  ~, 1
+#define _WLI_EQ_30_30			  ~, 1
+#define _WLI_EQ_31_31			  ~, 1
 #define _WLI_EQ_(A, B)			  _WLI_EQ_##A##_##B
 #define _WLI_EQ_CHECK_(_, X, ...) X
 #define _WLI_EQ_CHECK(...)		  _WLI_EQ_CHECK_(__VA_ARGS__, 0, )
@@ -124,6 +141,22 @@
 #define _WLI_CAT_13(_0, _1, ...) _WLI_CAT12(_0##_1, __VA_ARGS__)
 #define _WLI_CAT_14(_0, _1, ...) _WLI_CAT13(_0##_1, __VA_ARGS__)
 #define _WLI_CAT_15(_0, _1, ...) _WLI_CAT14(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_16(_0, _1, ...) _WLI_CAT15(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_17(_0, _1, ...) _WLI_CAT16(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_18(_0, _1, ...) _WLI_CAT17(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_19(_0, _1, ...) _WLI_CAT18(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_20(_0, _1, ...) _WLI_CAT19(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_21(_0, _1, ...) _WLI_CAT20(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_22(_0, _1, ...) _WLI_CAT21(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_23(_0, _1, ...) _WLI_CAT22(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_24(_0, _1, ...) _WLI_CAT23(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_25(_0, _1, ...) _WLI_CAT24(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_26(_0, _1, ...) _WLI_CAT25(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_27(_0, _1, ...) _WLI_CAT26(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_28(_0, _1, ...) _WLI_CAT27(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_29(_0, _1, ...) _WLI_CAT28(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_30(_0, _1, ...) _WLI_CAT29(_0##_1, __VA_ARGS__)
+#define _WLI_CAT_31(_0, _1, ...) _WLI_CAT30(_0##_1, __VA_ARGS__)
 #define _WLI_CAT_(N, ...)		 _WLI_CAT_##N(__VA_ARGS__)
 #define _WLI_CAT(N, ...)		 _WLI_CAT_(N, __VA_ARGS__)
 #define WLI_CAT(...)			 _WLI_CAT(WLI_LEN(__VA_ARGS__), __VA_ARGS__)
@@ -144,6 +177,22 @@
 #define _WLI_INC_13 14
 #define _WLI_INC_14 15
 #define _WLI_INC_15 16
+#define _WLI_INC_16 17
+#define _WLI_INC_17 18
+#define _WLI_INC_18 19
+#define _WLI_INC_19 20
+#define _WLI_INC_20 21
+#define _WLI_INC_21 22
+#define _WLI_INC_22 23
+#define _WLI_INC_23 24
+#define _WLI_INC_24 25
+#define _WLI_INC_25 26
+#define _WLI_INC_26 27
+#define _WLI_INC_27 28
+#define _WLI_INC_28 29
+#define _WLI_INC_29 30
+#define _WLI_INC_30 31
+#define _WLI_INC_31 32
 #define WLI_INC(N)	WLI_CAT(_WLI_INC_, N)
 
 #define _WLI_SKIP_0(...)	  __VA_ARGS__
@@ -162,6 +211,22 @@
 #define _WLI_SKIP_13(_0, ...) _WLI_SKIP_12(__VA_ARGS__)
 #define _WLI_SKIP_14(_0, ...) _WLI_SKIP_13(__VA_ARGS__)
 #define _WLI_SKIP_15(_0, ...) _WLI_SKIP_14(__VA_ARGS__)
+#define _WLI_SKIP_16(_0, ...) _WLI_SKIP_15(__VA_ARGS__)
+#define _WLI_SKIP_17(_0, ...) _WLI_SKIP_16(__VA_ARGS__)
+#define _WLI_SKIP_18(_0, ...) _WLI_SKIP_17(__VA_ARGS__)
+#define _WLI_SKIP_19(_0, ...) _WLI_SKIP_18(__VA_ARGS__)
+#define _WLI_SKIP_20(_0, ...) _WLI_SKIP_19(__VA_ARGS__)
+#define _WLI_SKIP_21(_0, ...) _WLI_SKIP_20(__VA_ARGS__)
+#define _WLI_SKIP_22(_0, ...) _WLI_SKIP_21(__VA_ARGS__)
+#define _WLI_SKIP_23(_0, ...) _WLI_SKIP_22(__VA_ARGS__)
+#define _WLI_SKIP_24(_0, ...) _WLI_SKIP_23(__VA_ARGS__)
+#define _WLI_SKIP_25(_0, ...) _WLI_SKIP_24(__VA_ARGS__)
+#define _WLI_SKIP_26(_0, ...) _WLI_SKIP_25(__VA_ARGS__)
+#define _WLI_SKIP_27(_0, ...) _WLI_SKIP_26(__VA_ARGS__)
+#define _WLI_SKIP_28(_0, ...) _WLI_SKIP_27(__VA_ARGS__)
+#define _WLI_SKIP_29(_0, ...) _WLI_SKIP_28(__VA_ARGS__)
+#define _WLI_SKIP_30(_0, ...) _WLI_SKIP_29(__VA_ARGS__)
+#define _WLI_SKIP_31(_0, ...) _WLI_SKIP_30(__VA_ARGS__)
 #define WLI_SKIP(N, ...)	  WLI_CAT(_WLI_SKIP_, N)(__VA_ARGS__)
 
 #define _WLI_TAKE_0(...)
@@ -180,22 +245,37 @@
 #define _WLI_TAKE_13(_0, ...) _0, _WLI_TAKE_12(__VA_ARGS__)
 #define _WLI_TAKE_14(_0, ...) _0, _WLI_TAKE_13(__VA_ARGS__)
 #define _WLI_TAKE_15(_0, ...) _0, _WLI_TAKE_14(__VA_ARGS__)
+#define _WLI_TAKE_16(_0, ...) _0, _WLI_TAKE_15(__VA_ARGS__)
+#define _WLI_TAKE_17(_0, ...) _0, _WLI_TAKE_16(__VA_ARGS__)
+#define _WLI_TAKE_18(_0, ...) _0, _WLI_TAKE_17(__VA_ARGS__)
+#define _WLI_TAKE_19(_0, ...) _0, _WLI_TAKE_18(__VA_ARGS__)
+#define _WLI_TAKE_20(_0, ...) _0, _WLI_TAKE_19(__VA_ARGS__)
+#define _WLI_TAKE_21(_0, ...) _0, _WLI_TAKE_20(__VA_ARGS__)
+#define _WLI_TAKE_22(_0, ...) _0, _WLI_TAKE_21(__VA_ARGS__)
+#define _WLI_TAKE_23(_0, ...) _0, _WLI_TAKE_22(__VA_ARGS__)
+#define _WLI_TAKE_24(_0, ...) _0, _WLI_TAKE_23(__VA_ARGS__)
+#define _WLI_TAKE_25(_0, ...) _0, _WLI_TAKE_24(__VA_ARGS__)
+#define _WLI_TAKE_26(_0, ...) _0, _WLI_TAKE_25(__VA_ARGS__)
+#define _WLI_TAKE_27(_0, ...) _0, _WLI_TAKE_26(__VA_ARGS__)
+#define _WLI_TAKE_28(_0, ...) _0, _WLI_TAKE_27(__VA_ARGS__)
+#define _WLI_TAKE_29(_0, ...) _0, _WLI_TAKE_28(__VA_ARGS__)
+#define _WLI_TAKE_30(_0, ...) _0, _WLI_TAKE_29(__VA_ARGS__)
+#define _WLI_TAKE_31(_0, ...) _0, _WLI_TAKE_30(__VA_ARGS__)
 #define WLI_TAKE(N, ...)	  WLI_CAT(_WLI_TAKE_, N)(__VA_ARGS__)
 
-#define WLI_HEAD(...) WLI_TAKE(1, __VA_ARGS__)
-#define WLI_REST(...) WLI_SKIP(1, __VA_ARGS__)
-
-#define WLI_PAD(...)   __VA_ARGS__, , , , , , , , , , , , , ,
+#define WLI_HEAD(...)  WLI_TAKE(1, __VA_ARGS__)
+#define WLI_REST(...)  WLI_SKIP(1, __VA_ARGS__)
 #define WLI_AT(N, ...) WLI_HEAD(WLI_SKIP(N, WLI_PAD(__VA_ARGS__)))
 
 // Iterators
 
-#define _WLI_IM_P		()
-#define _WLI_IM_E0(...) __VA_ARGS__
-#define _WLI_IM_E1(...) _WLI_IM_E0(_WLI_IM_E0(_WLI_IM_E0(__VA_ARGS__)))
-#define _WLI_IM_E2(...) _WLI_IM_E1(_WLI_IM_E1(_WLI_IM_E1(__VA_ARGS__)))
-#define _WLI_IM_E3(...) _WLI_IM_E2(_WLI_IM_E2(_WLI_IM_E2(__VA_ARGS__)))
-#define _WLI_IM_E(...)	_WLI_IM_E3(_WLI_IM_E3(_WLI_IM_E3(__VA_ARGS__)))
+#define _WLI_IM_P		 ()
+#define _WLI_IM_E0(...)	 __VA_ARGS__
+#define _WLI_IM_E2(...)	 _WLI_IM_E0(_WLI_IM_E0(__VA_ARGS__))
+#define _WLI_IM_E4(...)	 _WLI_IM_E2(_WLI_IM_E2(__VA_ARGS__))
+#define _WLI_IM_E8(...)	 _WLI_IM_E4(_WLI_IM_E4(__VA_ARGS__))
+#define _WLI_IM_E16(...) _WLI_IM_E8(_WLI_IM_E8(__VA_ARGS__))
+#define _WLI_IM_E(...)	 _WLI_IM_E16(_WLI_IM_E16(__VA_ARGS__))
 #define _WLI_IM_4(...)
 #define _WLI_IM_3() _WLI_IM_1
 #define _WLI_IM_2(C, F, S, I, ...)                            \
@@ -214,12 +294,13 @@
 #define WLI_FILTER_METHODS(Condition, ...)                          \
 	WLI_REST(_WLI_IM(Condition, _WLI_IM_F, WLI_SPACE, __VA_ARGS__))
 
-#define _WLI_IA_P		()
-#define _WLI_IA_E0(...) __VA_ARGS__
-#define _WLI_IA_E1(...) _WLI_IA_E0(_WLI_IA_E0(_WLI_IA_E0(__VA_ARGS__)))
-#define _WLI_IA_E2(...) _WLI_IA_E1(_WLI_IA_E1(_WLI_IA_E1(__VA_ARGS__)))
-#define _WLI_IA_E3(...) _WLI_IA_E2(_WLI_IA_E2(_WLI_IA_E2(__VA_ARGS__)))
-#define _WLI_IA_E(...)	_WLI_IA_E3(_WLI_IA_E3(_WLI_IA_E3(__VA_ARGS__)))
+#define _WLI_IA_P		 ()
+#define _WLI_IA_E0(...)	 __VA_ARGS__
+#define _WLI_IA_E2(...)	 _WLI_IA_E0(_WLI_IA_E0(__VA_ARGS__))
+#define _WLI_IA_E4(...)	 _WLI_IA_E2(_WLI_IA_E2(__VA_ARGS__))
+#define _WLI_IA_E8(...)	 _WLI_IA_E4(_WLI_IA_E4(__VA_ARGS__))
+#define _WLI_IA_E16(...) _WLI_IA_E8(_WLI_IA_E8(__VA_ARGS__))
+#define _WLI_IA_E(...)	 _WLI_IA_E16(_WLI_IA_E16(__VA_ARGS__))
 #define _WLI_IA_4(...)
 #define _WLI_IA_3() _WLI_IA_1
 #define _WLI_IA_2(C, F, S, I, ...)                            \
@@ -244,7 +325,7 @@
 // Constants
 
 #define WLI_THIS
-#define WLI_INTERFACE ((WlInterface, wl_interface, 0, 1))
+#define WLI_INTERFACE ((WaylandInterface, wayland_interface, 0, 1))
 
 // Dispatch Operators
 
@@ -360,7 +441,7 @@
 	WLI_IF(WLI_AT(1, __VA_ARGS__))(enum WLI_AT(1, __VA_ARGS__), u32)
 #define _WLI_ARG_TYPE_R(...) wayland_fixed
 #define _WLI_ARG_TYPE_F(...) wayland_fd
-#define _WLI_ARG_TYPE_S(...) string
+#define _WLI_ARG_TYPE_S(...) wayland_string
 #define _WLI_ARG_TYPE_A(...) wayland_array
 #define _WLI_ARG_TYPE_N(...) WLI_TYPE(_WLI_ARG_INTERFACE_N(__VA_ARGS__))
 #define _WLI_ARG_TYPE_O(...) WLI_TYPE(_WLI_ARG_INTERFACE_O(__VA_ARGS__))
@@ -411,8 +492,9 @@
 #define WLI_METHOD_SINCE(Method) WLI_ELSE(WLI_METHOD_GET_SINCE(Method))(1)
 #define WLI_METHOD_UNTIL(Interface, Method)                            \
 	WLI_ELSE(WLI_METHOD_GET_UNTIL(Method))(WLI_MAX_VERSION(Interface))
-#define WLI_METHOD_ARGS(Method)                          \
-	WLI_METHOD_THIS(Method), WLI_METHOD_GET_ARGS(Method)
+#define WLI_METHOD_ARGS(Method)                                           \
+	WLI_METHOD_THIS(Method)                                               \
+	WLI_WHEN(WLI_METHOD_GET_ARGS(Method))(, ) WLI_METHOD_GET_ARGS(Method)
 #define WLI_METHOD_CTORS(Method)                              \
 	WLI_FILTER_ARGS(WLI_ARG_IS_CTOR, WLI_METHOD_ARGS(Method))
 #define WLI_METHOD_NON_CTORS(Method)                              \
@@ -443,9 +525,13 @@
 		WLI_COMMA                                     \
 	))
 
+#define WLI_REQUEST_NAME(Interface, Method)               \
+	WLI_CAT(WLI_NAME(Interface), WLI_METHOD_NAME(Method))
+
 #define WLI_REQUEST_HANDLER_CALL(Interface, Method, Index, ArgMapper)          \
 	Wayland_HandleRequest(                                                     \
-		ArgMapper(Interface, Method, WLI_HEAD(WLI_METHOD_ARGS(Method))),       \
+		(wayland_interface *)                                                  \
+			ArgMapper(Interface, Method, WLI_HEAD(WLI_METHOD_ARGS(Method))),   \
 		Index WLI_WHEN(WLI_IS_LIST(WLI_METHOD_ARGS(Method)))(, ) WLI_MAP_ARGS( \
 			Interface,                                                         \
 			Method,                                                            \
@@ -463,7 +549,7 @@
 
 #define WLI_SINGLE_CTOR_REQUEST(Interface, Method, Index, Arg)     \
 	WLI_ARG_TYPE(Interface, Arg)                                   \
-	WLI_METHOD_NAME(Method)(WLI_MAP_ARGS(                          \
+	WLI_REQUEST_NAME(Interface, Method)(WLI_MAP_ARGS(              \
 		Interface,                                                 \
 		Method,                                                    \
 		WLI_SINGLE_CTOR_REQUEST_HEADER_PARAM,                      \
@@ -488,20 +574,20 @@
 #define WLI_MULTI_CTOR_REQUEST_BODY_PARAM(Interface, Method, Arg) \
 	WLI_ARG_NAME(Interface, Arg)
 
-#define WLI_MULTI_CTOR_REQUEST(Interface, Method, Index) \
-	void WLI_METHOD_NAME(Method)(WLI_FOREACH_ARG(        \
-		Interface,                                       \
-		Method,                                          \
-		WLI_MULTI_CTOR_REQUEST_HEADER_PARAM,             \
-		WLI_COMMA                                        \
-	))                                                   \
-	{                                                    \
-		WLI_REQUEST_HANDLER_CALL(                        \
-			Interface,                                   \
-			Method,                                      \
-			Index,                                       \
-			WLI_MULTI_CTOR_REQUEST_BODY_PARAM            \
-		);                                               \
+#define WLI_MULTI_CTOR_REQUEST(Interface, Method, Index)      \
+	void WLI_REQUEST_NAME(Interface, Method)(WLI_FOREACH_ARG( \
+		Interface,                                            \
+		Method,                                               \
+		WLI_MULTI_CTOR_REQUEST_HEADER_PARAM,                  \
+		WLI_COMMA                                             \
+	))                                                        \
+	{                                                         \
+		WLI_REQUEST_HANDLER_CALL(                             \
+			Interface,                                        \
+			Method,                                           \
+			Index,                                            \
+			WLI_MULTI_CTOR_REQUEST_BODY_PARAM                 \
+		);                                                    \
 	}
 
 #define WLI_ARG_PROTO_PTR(Interface, Method, Arg) \
@@ -552,11 +638,14 @@
 #define WLI_DECLARE_EVENTS(Interface)                          \
 	WLI_FOREACH_EVENT(Interface, WLI_DECLARE_EVENT, WLI_SPACE)
 
+#define WLI_DECLARE_STRUCT(Interface)                                 \
+	typedef struct WLI_TYPE_NAME(Interface) WLI_TYPE_NAME(Interface);
+
 #define WLI_DEFINE_STRUCT(Interface)            \
-	typedef struct WLI_TYPE_NAME(Interface) {   \
+	struct WLI_TYPE_NAME(Interface) {           \
 		struct wayland_interface_header Header; \
 		WLI_DECLARE_EVENTS(Interface)           \
-	} WLI_TYPE_NAME(Interface);
+	};
 
 #define WLI_DECLARE_PROTOTYPE(Interface)                  \
 	extern struct wayland_prototype WLI_PROTO(Interface);

@@ -7,7 +7,7 @@
 *                                                                             *
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include "stable-linux-dmabuf-v1.h"
+#include "../pch.h"
 
 WLI_DEFINE(ZWP_LINUX_DMABUF_V1)
 WLI_DEFINE(ZWP_LINUX_BUFFER_PARAMS_V1)
